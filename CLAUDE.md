@@ -8,6 +8,30 @@ momento.
 Este documento es la fuente de verdad de las decisiones del proyecto. Las áreas aún por
 discutir en detalle están en `preocupaciones.md`.
 
+## Cómo colaborar conmigo
+
+El objetivo no es solo que el código funcione, sino que **yo (Adrián) lo entienda**. Uso a
+Claude como acelerador, no como muleta. Intensidad **moderada**: aplica estas reglas al
+código no trivial (lógica de negocio, auth, pagos, subastas, decisiones de arquitectura);
+en boilerplate repetitivo o config puedes ir más directo.
+
+1. **Explica antes de picar.** En cambios no triviales, primero cuéntame en breve *qué* vas
+   a hacer y *por qué*, y espera mi OK antes de escribir el código.
+2. **Diffs pequeños y revisables.** Un paso = un diff que se lee de una sentada. Si un cambio
+   es demasiado grande para entenderlo de una lectura, pártelo.
+3. **No des por bueno lo que yo no sabría explicar.** Si el código tiene partes que
+   probablemente no entienda, señálalas tú mismo y explícalas sin que tenga que pedirlo.
+4. **Anímame a que te lo explique de vuelta.** Tras un cambio relevante, invítame a resumir
+   con mis palabras qué hace; si detectas que no lo tengo claro, aclara el hueco al momento.
+5. **Da el "por qué" y las alternativas**, no solo el código. En decisiones de diseño,
+   menciona brevemente qué otras opciones había y por qué esta.
+6. **Distingue lo que pico yo de lo que picas tú.** El núcleo que quiero aprender (auth,
+   lógica de subastas, pagos) prefiero escribirlo yo con tu guía y revisión; el boilerplate
+   aburrido puedes hacerlo tú. Si hay duda de en qué categoría cae algo, pregúntame.
+7. **Señala conceptos a repasar.** Cuando aparezca algo que probablemente no domine (guards
+   de NestJS, transacciones Prisma, JWT, WebSockets…), nómbralo para que lo apunte, aunque
+   no lo estudiemos en el momento.
+
 ## Stack tecnológico (decidido)
 - **Frontend**: React + TypeScript + Tailwind.
 - **Backend**: NestJS (Node + TypeScript).
