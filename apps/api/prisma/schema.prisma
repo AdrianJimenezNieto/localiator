@@ -1,0 +1,11 @@
+// Esquema Prisma de Localiator.
+// Los modelos de dominio (Usuario, Producto, Lote, Pedido, etc.) se añaden en la Fase 1.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}

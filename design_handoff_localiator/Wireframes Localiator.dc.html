@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics="">
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&amp;display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#efece6;font-family:system-ui,-apple-system,sans-serif;color:#1a1a1a}
+  a{color:#2a6fdb}
+  a:hover{color:#1b4fa8}
+  /* ---- canvas chrome ---- */
+  .dv-turn{padding:44px 48px 40px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}
+  .dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 8px}
+  .dv-tid{font:700 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}
+  .dv-tname{font:600 14px/1.2 system-ui,sans-serif;color:#1a1a1a}
+  .dv-intro{max-width:760px;margin:0 0 26px;font:15px/1.6 'Kalam',cursive;color:#3a3a3a}
+  .dv-intro b{color:#1a1a1a}
+  .dv-opts{display:flex;flex-wrap:wrap;gap:34px;align-items:flex-start}
+  .dv-opt{flex:none;display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px}
+  .dv-olabel{display:flex;align-items:baseline;gap:8px;font:600 13px/1.3 system-ui,sans-serif;color:#1a1a1a}
+  .dv-olabel .sub{font-weight:400;color:rgba(0,0,0,.5)}
+  .dv-oid{font:700 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.09);color:#1a1a1a;border-radius:5px;text-decoration:none}
+  .dv-opt:target .dv-oid{background:#2a6fdb;color:#fff}
+  .dv-next{margin:26px 0 0;font:13px/1.6 'Kalam',cursive;color:rgba(0,0,0,.6)}
+  .dv-card{background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.06);padding:22px}
+  .row{display:flex;gap:30px;align-items:flex-start;flex-wrap:wrap}
+  .col{display:flex;flex-direction:column;gap:9px}
+  .devlab{font:700 10px ui-monospace,monospace;letter-spacing:.08em;color:#999;text-transform:uppercase}
+  .note{font:14px/1.35 'Kalam',cursive;color:#2a6fdb;max-width:240px}
+  .note.amber{color:#c47d00}
+  /* ---- device frames ---- */
+  .ph{width:266px;flex:none;background:#fff;border:2.5px solid #1a1a1a;border-radius:28px;padding:7px;box-shadow:4px 4px 0 rgba(0,0,0,.1)}
+  .ph-scr{border:1px solid #e2ded6;border-radius:20px;overflow:hidden;background:#fff}
+  .dt{width:560px;flex:none;background:#fff;border:2.5px solid #1a1a1a;border-radius:10px;box-shadow:4px 4px 0 rgba(0,0,0,.1);overflow:hidden}
+  .dt-bar{height:26px;display:flex;align-items:center;gap:6px;padding:0 10px;background:#f2efe9;border-bottom:2px solid #1a1a1a}
+  .dt-dot{width:9px;height:9px;border-radius:50%;border:1.5px solid #1a1a1a}
+  .dt-url{flex:1;height:13px;margin-left:6px;background:#fff;border:1px solid #cfcabf;border-radius:7px}
+  /* ---- wireframe primitives ---- */
+  .p{padding:10px}
+  .stat{height:16px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;font:600 9px system-ui;color:#999}
+  .topbar{display:flex;align-items:center;gap:8px;padding:9px 10px;border-bottom:1px solid #e2ded6}
+  .logo{font:700 12px 'Kalam',cursive;color:#1a1a1a}
+  .ico{width:22px;height:22px;border:1.5px solid #555;border-radius:6px;flex:none;display:flex;align-items:center;justify-content:center;font:11px system-ui;color:#555}
+  .ico.r{border-radius:50%}
+  .bar{height:11px;background:#e9e5dd;border-radius:3px}
+  .bar.dk{background:#d7d2c8}
+  .bar.w70{width:70%}.bar.w50{width:50%}.bar.w40{width:40%}.bar.w30{width:30%}.bar.w85{width:85%}.bar.w60{width:60%}
+  .imgp{background:repeating-linear-gradient(45deg,#eeeae2,#eeeae2 7px,#f7f5f0 7px,#f7f5f0 14px);border:1px solid #d5d0c6;display:flex;align-items:center;justify-content:center;color:#a09a8c;font:9px ui-monospace,monospace;text-align:center;border-radius:6px}
+  .btn{border:1.5px solid #1a1a1a;border-radius:7px;text-align:center;font:600 10px system-ui;padding:8px 6px;background:#fff}
+  .btn.cta{background:#ffb703;border-color:#1a1a1a}
+  .btn.gh{border-style:dashed;color:#666}
+  .btn.sm{padding:5px;font-size:9px}
+  .chip{border:1.4px solid #b7b1a5;border-radius:13px;font:9px system-ui;padding:4px 9px;color:#555;background:#fff;white-space:nowrap}
+  .chip.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
+  .pill{background:#ffb703;color:#1a1a1a;font:700 8px system-ui;padding:2px 6px;border-radius:4px;text-transform:uppercase;letter-spacing:.03em}
+  .pill.g{background:#e9e5dd;color:#666}
+  .tabbar{display:flex;border-top:1px solid #e2ded6;background:#faf8f4}
+  .tabbar>div{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 0;font:8px system-ui;color:#888}
+  .tabbar .tb-ic{width:18px;height:18px;border:1.5px solid #999;border-radius:5px}
+  .tabbar>div.act{color:#1a1a1a}
+  .tabbar>div.act .tb-ic{border-color:#1a1a1a;background:#ffb703}
+  .card{border:1px solid #e2ded6;border-radius:8px;overflow:hidden}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .flabel{font:600 9px system-ui;color:#888;text-transform:uppercase;letter-spacing:.04em}
+  .field{height:26px;border:1.4px solid #cfcabf;border-radius:6px;background:#fdfcfa}
+  .sec-h{font:700 10px system-ui;color:#1a1a1a}
+  .divider{height:1px;background:#e2ded6}
+  .drawer{border:1.5px dashed #b7b1a5;border-radius:8px;background:#faf8f4}
+  /* sitemap */
+  .sm-wrap{display:flex;flex-direction:column;gap:18px;align-items:center}
+  .sm-row{display:flex;gap:14px;flex-wrap:wrap;justify-content:center}
+  .sm-node{border:1.6px solid #1a1a1a;border-radius:8px;padding:9px 13px;background:#fff;font:600 11px system-ui;text-align:center;min-width:82px}
+  .sm-node.hub{background:#1a1a1a;color:#fff}
+  .sm-node.cta{background:#ffb703}
+  .sm-node.aux{border-style:dashed;color:#555;font-weight:500}
+  .sm-cap{font:400 8.5px system-ui;color:#999;display:block;margin-top:3px}
+  .sm-conn{width:2px;height:14px;background:#b7b1a5}
+  .sm-flow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:center}
+  .sm-arrow{color:#b7b1a5;font:700 15px system-ui}
+</style>
+</helmet>
+
+<section class="dv-turn" id="t2">
+  <div class="dv-thd"><a class="dv-tid" href="#t2">2</a><span class="dv-tname">Arquitectura consolidada — selección bloqueada + mapa para React 19 + TS</span></div>
+  <p class="dv-intro">Flujo elegido: nav <a class="dv-oid" href="#1b">1b</a> · home <a class="dv-oid" href="#1d">1d</a> · catálogo <a class="dv-oid" href="#1f">1f</a> · detalle <a class="dv-oid" href="#1h">1h</a> · carrito <a class="dv-oid" href="#1j">1j</a> · checkout <a class="dv-oid" href="#1l">1l</a> · login <a class="dv-oid" href="#1m">1m</a> · cuenta <a class="dv-oid" href="#1n">1n</a> · confirmación <a class="dv-oid" href="#1o">1o</a>. Abajo, el mapa de rutas, componentes compartidos y estado global para implementar.</p>
+
+  <div class="dv-opts">
+
+    <!-- 2a Flujo bloqueado -->
+    
+
+    <!-- 2b Rutas -->
+    <div class="dv-opt" id="2a" style="width: 886px; height: 455px">
+      <div class="dv-olabel"><a class="dv-oid" href="#2a">2a</a>Flujo bloqueado <span class="sub">orden de pantallas + transiciones</span></div>
+      <div class="dv-card" style="width: 813px; height: 319px">
+        
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font: 600 11px system-ui; width: 810px; height: 209px">
+          <span class="sm-node" style="min-width:0;padding:8px 12px">🏠 Home <span class="sm-cap">1d</span></span><span class="sm-node" style="min-width:0;padding:8px 12px">🔍 Catálogo/Buscar <span class="sm-cap">1f</span></span><a href="#1f" style="text-decoration: none; color: inherit; width: 222px; height: 27px"><span class="sm-node" style="min-width:0;padding:8px 12px">🛒 Carrito <span class="sm-cap">1j</span></span></a><a href="#1d" style="text-decoration: none; color: inherit; width: 244px; height: 45px"></a>
+          <span class="sm-arrow">→</span>
+          
+          <span class="sm-arrow">→</span>
+          <a href="#1h" style="text-decoration:none;color:inherit"><span class="sm-node" style="min-width:0;padding:8px 12px">📦 Detalle <span class="sm-cap">1h</span></span></a>
+          <span class="sm-arrow">→</span>
+          <a href="#1j" style="text-decoration:none;color:inherit"></a>
+          <span class="sm-arrow">→</span>
+          <a href="#1m" style="text-decoration:none;color:inherit"><span class="sm-node aux" style="min-width:0;padding:8px 12px">🔐 Login/invitado <span class="sm-cap">1m</span></span></a>
+          <span class="sm-arrow">→</span>
+          <a href="#1l" style="text-decoration:none;color:inherit"><span class="sm-node" style="min-width:0;padding:8px 12px;border-color:#c47d00">🧾 Checkout <span class="sm-cap" style="color:#c47d00">1l · recogida+pago</span></span></a>
+          <span class="sm-arrow">→</span>
+          <a href="#1o" style="text-decoration:none;color:inherit"><span class="sm-node cta" style="min-width:0;padding:8px 12px">✓ Confirmación <span class="sm-cap">1o</span></span></a>
+        </div><div class="divider" style="margin:14px 0"></div>
+        <div style="display:flex;gap:8px;align-items:center;font:11px system-ui;color:#666">
+          <span class="tag" style="font:700 10px ui-monospace;color:#999">SIEMPRE ACCESIBLE (tab bar 1b):</span>
+          <a href="#1d" style="text-decoration:none;color:inherit"><span class="chip">Inicio</span></a>
+          <a href="#1f" style="text-decoration:none;color:inherit"><span class="chip">Buscar</span></a>
+          <span class="chip">Favoritos</span>
+          <a href="#1n" style="text-decoration:none;color:inherit"><span class="chip">Cuenta 1n</span></a>
+          <span style="color:#999">· carrito 🛒 fijo arriba dcha.</span>
+        </div>
+      </div>
+      <div class="note">Login no bloquea: se puede comprar como invitado y pedir email antes de confirmar la recogida.</div>
+    </div><div class="dv-opt" id="2b">
+      <div class="dv-olabel"><a class="dv-oid" href="#2b">2b</a>Rutas <span class="sub">React Router · <code style="font:11px ui-monospace">AppLayout</code> con TopBar + TabBar + Outlet</span></div>
+      <div class="dv-card" style="width:400px;font:12px/1.7 ui-monospace,Menlo,monospace;color:#333">
+        <div style="color:#999;font:700 10px ui-monospace;letter-spacing:.06em;margin-bottom:8px">RUTA → COMPONENTE (pantalla)</div>
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:2px 12px">
+          <span style="color:#2a6fdb">/</span><span>Home <span style="color:#c47d00">1d</span></span>
+          <span style="color:#2a6fdb">/buscar</span><span>SearchResults <span style="color:#c47d00">1f</span></span>
+          <span style="color:#2a6fdb">/categoria/:slug</span><span>Catalog <span style="color:#c47d00">1f</span></span>
+          <span style="color:#2a6fdb">/producto/:id</span><span>ProductDetail <span style="color:#c47d00">1h</span></span>
+          <span style="color:#2a6fdb">/favoritos</span><span>Favorites</span>
+          <span style="color:#2a6fdb">/carrito</span><span>Cart <span style="color:#c47d00">1j</span></span>
+          <span style="color:#2a6fdb">/checkout</span><span>Checkout <span style="color:#c47d00">1l</span></span>
+          <span style="color:#2a6fdb">/pedido/:id</span><span>OrderConfirmation <span style="color:#c47d00">1o</span></span>
+          <span style="color:#2a6fdb">/login</span><span>Auth <span style="color:#c47d00">1m</span></span>
+          <span style="color:#2a6fdb">/cuenta</span><span>Account <span style="color:#c47d00">1n</span></span>
+          <span style="color:#2a6fdb;padding-left:14px">├ pedidos</span><span>Orders</span>
+          <span style="color:#2a6fdb;padding-left:14px">├ favoritos</span><span>Favorites</span>
+          <span style="color:#2a6fdb;padding-left:14px">├ cupones</span><span>Coupons</span>
+          <span style="color:#2a6fdb;padding-left:14px">└ datos</span><span>Profile</span>
+        </div>
+      </div>
+      <div class="note">Checkout como ruta única (1l) con pasos internos (identificación → recogida → pago) sin cambiar de URL.</div>
+    </div>
+
+    <!-- 2c Componentes compartidos -->
+    <div class="dv-opt" id="2c">
+      <div class="dv-olabel"><a class="dv-oid" href="#2c">2c</a>Componentes compartidos</div>
+      <div class="dv-card" style="width:330px;font:11.5px/1.6 ui-monospace,Menlo,monospace;color:#333">
+        <div style="color:#999;font:700 10px ui-monospace;letter-spacing:.06em;margin-bottom:8px">LAYOUT</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px"><span class="chip">TopBar</span><span class="chip">TabBar</span><span class="chip">SearchBar</span><span class="chip">WarehouseBanner</span></div>
+        <div style="color:#999;font:700 10px ui-monospace;letter-spacing:.06em;margin-bottom:8px">PRODUCTO</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px"><span class="chip">ProductCard</span><span class="chip">LotBadge</span><span class="chip">ConditionTag</span><span class="chip">Gallery</span><span class="chip">LotContents</span><span class="chip">FavButton</span></div>
+        <div style="color:#999;font:700 10px ui-monospace;letter-spacing:.06em;margin-bottom:8px">CATÁLOGO</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px"><span class="chip">FilterDrawer</span><span class="chip">FilterSidebar</span><span class="chip">FilterChip</span><span class="chip">PriceRange</span><span class="chip">SortMenu</span></div>
+        <div style="color:#999;font:700 10px ui-monospace;letter-spacing:.06em;margin-bottom:8px">COMPRA</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px"><span class="chip">QtyStepper</span><span class="chip">CouponInput</span><span class="chip">OrderSummary</span><span class="chip">WarehousePicker</span><span class="chip">PickupSlotPicker</span><span class="chip">StickyBuyBar</span></div>
+      </div>
+      <div class="note amber">Piezas propias del negocio: <b>LotBadge / ConditionTag / LotContents</b> (lote vs. unidad) y <b>WarehousePicker + PickupSlotPicker</b> (recogida en vez de envío).</div>
+    </div>
+
+    <!-- 2d Estado global -->
+    <div class="dv-opt" id="2d">
+      <div class="dv-olabel"><a class="dv-oid" href="#2d">2d</a>Estado global + tipos <span class="sub">Context o Zustand</span></div>
+      <div class="dv-card" style="width:400px;font:11.5px/1.65 ui-monospace,Menlo,monospace;color:#333">
+        <div style="color:#999;font:700 10px ui-monospace;letter-spacing:.06em;margin-bottom:8px">STORES</div>
+        <div class="col" style="gap:7px;margin-bottom:14px">
+          <div><b style="color:#c47d00">useCart</b> — items, add/remove, setQty, subtotal, coupon</div>
+          <div><b style="color:#c47d00">useFavorites</b> — ids, toggle</div>
+          <div><b style="color:#c47d00">usePickup</b> — warehouse, slot</div>
+          <div><b style="color:#c47d00">useAuth</b> — user | guest, login, logout</div>
+        </div>
+        <div style="color:#999;font:700 10px ui-monospace;letter-spacing:.06em;margin-bottom:8px">TIPOS CLAVE (TS)</div>
+        <div style="background:#faf8f4;border:1px solid #e2ded6;border-radius:6px;padding:10px;white-space:pre-wrap;font-size:11px;color:#444">type Product = Lot | Unit;
+Lot  = { kind:'lot'; items:LotItem[];
+         condition:Condition }
+Unit = { kind:'unit'; stock:number }
+Condition = 'nuevo'|'usado'|'devolucion'
+Order = { pickup:{warehouse; slot};
+          code:string /* LC-4821 */ }</div>
+      </div>
+      <div class="note">Sin <code style="font:11px ui-monospace">shipping</code>: el pedido guarda <code style="font:11px ui-monospace">pickup</code> (almacén + franja) y un <code style="font:11px ui-monospace">code</code>/QR de recogida.</div>
+    </div>
+
+  </div>
+
+  <p class="dv-next">Prueba a decir: "genera el esqueleto de rutas y componentes en React 19 + TS" · "sube <a class="dv-oid" href="#1d">1d</a> y <a class="dv-oid" href="#1h">1h</a> a diseño de alta fidelidad" · "añade pantalla de estado de recogida en <a class="dv-oid" href="#1n">1n</a>".</p>
+</section>
+
+<section class="dv-turn" id="t1">
+  <div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Localiator — arquitectura + wireframes low-fi (mobile-first)</span></div>
+  <p class="dv-intro">Wireframes de estructura, no de estilo. Particularidades reflejadas: <b>recogida en almacén</b> (sin envío → el checkout elige almacén + franja horaria, no dirección), productos que pueden ser <b>lote</b> (varios artículos, estado) o <b>unidad</b> con stock frecuente de 1, y <b>favoritos + cupones + recogida local</b>. Escritorio junto a móvil en las pantallas clave. Cajas rayadas = imagen a colocar.</p>
+
+  <div class="dv-opts">
+
+    <!-- ============ 1a SITEMAP ============ -->
+    <div class="dv-opt" id="1a">
+      <div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Mapa del sitio <span class="sub">arquitectura de la información + flujo de compra</span></div>
+      <div class="dv-card" style="width:640px">
+        <div class="sm-wrap">
+          <div class="sm-node hub" style="min-width:120px">Inicio<span class="sm-cap" style="color:#bbb">home</span></div>
+          <div class="sm-conn"></div>
+          <div class="sm-row">
+            <div class="sm-node">Buscar<span class="sm-cap">filtros + resultados</span></div>
+            <div class="sm-node">Catálogo<span class="sm-cap">categorías / lotes</span></div>
+            <div class="sm-node aux">Favoritos<span class="sm-cap">wishlist</span></div>
+            <div class="sm-node aux">Cuenta<span class="sm-cap">perfil / pedidos</span></div>
+          </div>
+          <div class="sm-conn"></div>
+          <div class="sm-node" style="min-width:150px">Detalle de producto<span class="sm-cap">lote o unidad · almacén</span></div>
+          <div class="sm-conn"></div>
+          <div class="divider" style="width:80%"></div>
+          <div class="devlab" style="margin-top:2px">Flujo de compra (recogida, sin envío)</div>
+          <div class="sm-flow">
+            <div class="sm-node">Carrito</div>
+            <span class="sm-arrow">→</span>
+            <div class="sm-node aux">Identificación<span class="sm-cap">login / invitado</span></div>
+            <span class="sm-arrow">→</span>
+            <div class="sm-node" style="border-color:#c47d00">Recogida<span class="sm-cap" style="color:#c47d00">almacén + franja</span></div>
+            <span class="sm-arrow">→</span>
+            <div class="sm-node">Pago<span class="sm-cap">+ cupón</span></div>
+            <span class="sm-arrow">→</span>
+            <div class="sm-node cta">Confirmación</div>
+          </div>
+        </div>
+      </div>
+      <div class="note">La barra de búsqueda es el motor principal: catálogo tan heterogéneo → buscar/filtrar pesa más que navegar categorías.</div>
+    </div>
+
+    <!-- ============ 1b NAV A: tab bar ============ -->
+    <div class="dv-opt" id="1b">
+      <div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Navegación móvil · A <span class="sub">bottom tab bar + hamburguesa</span></div>
+      <div class="ph">
+        <div class="ph-scr">
+          <div class="stat"><span>9:41</span><span>▮▮▮</span></div>
+          <div class="topbar">
+            <div class="ico">☰</div>
+            <div class="logo" style="flex:1;text-align:center">localiator</div>
+            <div class="ico">♡</div>
+            <div class="ico">🛒</div>
+          </div>
+          <div class="p col">
+            <div class="field" style="height:30px;display:flex;align-items:center;padding:0 10px;color:#aaa;font:11px system-ui">🔍 Buscar lotes, marcas…</div>
+            <div class="bar w60" style="height:8px"></div>
+            <div class="grid2"><div class="imgp" style="height:70px">img</div><div class="imgp" style="height:70px">img</div></div>
+            <div class="grid2"><div class="imgp" style="height:70px">img</div><div class="imgp" style="height:70px">img</div></div>
+          </div>
+          <div class="tabbar">
+            <div class="act"><div class="tb-ic"></div>Inicio</div>
+            <div><div class="tb-ic"></div>Buscar</div>
+            <div><div class="tb-ic"></div>Favoritos</div>
+            <div><div class="tb-ic"></div>Cuenta</div>
+          </div>
+        </div>
+      </div>
+      <div class="note amber">Recomendada. 4 destinos siempre al alcance del pulgar; carrito fijo arriba a la derecha. La ☰ abre el árbol completo de categorías.</div>
+    </div>
+
+    <!-- ============ 1c NAV B: hamburguesa ============ -->
+    <div class="dv-opt" id="1c">
+      <div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>Navegación móvil · B <span class="sub">solo hamburguesa + drawer</span></div>
+      <div class="row" style="gap:14px">
+        <div class="ph">
+          <div class="ph-scr">
+            <div class="stat"><span>9:41</span><span>▮▮▮</span></div>
+            <div class="topbar">
+              <div class="ico">☰</div>
+              <div class="logo" style="flex:1;text-align:center">localiator</div>
+              <div class="ico">🛒</div>
+            </div>
+            <div class="p col">
+              <div class="field" style="height:30px;display:flex;align-items:center;padding:0 10px;color:#aaa;font:11px system-ui">🔍 Buscar…</div>
+              <div class="imgp" style="height:96px">hero / lote destacado</div>
+              <div class="grid2"><div class="imgp" style="height:64px">img</div><div class="imgp" style="height:64px">img</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="ph">
+          <div class="ph-scr">
+            <div class="stat"><span>9:41</span><span>▮▮▮</span></div>
+            <div class="topbar" style="background:#1a1a1a">
+              <div class="ico" style="border-color:#fff;color:#fff">✕</div>
+              <div class="logo" style="flex:1;color:#fff">Menú</div>
+            </div>
+            <div class="p col" style="gap:12px">
+              <div class="col" style="gap:9px">
+                <div class="bar w70 dk" style="height:13px"></div>
+                <div class="bar w60" style="height:11px"></div>
+                <div class="bar w50" style="height:11px"></div>
+                <div class="bar w60" style="height:11px"></div>
+                <div class="divider"></div>
+                <div class="bar w40" style="height:11px"></div>
+                <div class="bar w40" style="height:11px"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="note">Más limpio pero esconde acciones clave (favoritos, cuenta) tras 2 taps. Válido si priorizas contenido; peor descubribilidad.</div>
+    </div>
+
+    <!-- ============ 1d HOME A ============ -->
+    <div class="dv-opt" id="1d">
+      <div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>Home · A <span class="sub">buscador + categorías + carruseles</span></div>
+      <div class="dv-card" style="width:850px">
+        <div class="row">
+          <div class="col">
+            <div class="devlab">Móvil</div>
+            <div class="ph">
+              <div class="ph-scr">
+                <div class="stat"><span>9:41</span><span>▮▮▮</span></div>
+                <div class="topbar"><div class="ico">☰</div><div class="logo" style="flex:1;text-align:center">localiator</div><div class="ico">♡</div><div class="ico">🛒</div></div>
+                <div class="p col" style="gap:11px">
+                  <div class="field" style="height:32px;display:flex;align-items:center;padding:0 10px;color:#aaa;font:11px system-ui">🔍 Buscar lotes, categorías…</div>
+                  <div style="display:flex;gap:6px;overflow:hidden"><span class="chip on">Todo</span><span class="chip">Electrónica</span><span class="chip">Hogar</span><span class="chip">Moda</span></div>
+                  <div class="imgp" style="height:100px">banner — lotes de subasta / rebajas</div>
+                  <div style="display:flex;justify-content:space-between;align-items:center"><div class="sec-h">Novedades</div><div class="bar w30" style="height:8px"></div></div>
+                  <div style="display:flex;gap:8px;overflow:hidden">
+                    <div class="card" style="width:96px;flex:none"><div class="imgp" style="height:70px">img</div><div class="p col" style="gap:4px;padding:6px"><span class="pill">Lote ×8</span><div class="bar w85" style="height:7px"></div><div class="bar w40 dk" style="height:9px"></div></div></div>
+                    <div class="card" style="width:96px;flex:none"><div class="imgp" style="height:70px">img</div><div class="p col" style="gap:4px;padding:6px"><span class="pill g">Unidad</span><div class="bar w70" style="height:7px"></div><div class="bar w40 dk" style="height:9px"></div></div></div>
+                  </div>
+                  <div class="sec-h">Categorías</div>
+                  <div class="grid4"><div class="imgp" style="height:48px">cat</div><div class="imgp" style="height:48px">cat</div><div class="imgp" style="height:48px">cat</div><div class="imgp" style="height:48px">cat</div></div>
+                </div>
+                <div class="tabbar"><div class="act"><div class="tb-ic"></div>Inicio</div><div><div class="tb-ic"></div>Buscar</div><div><div class="tb-ic"></div>Favoritos</div><div><div class="tb-ic"></div>Cuenta</div></div>
+              </div>
+            </div>
+          </div>
+          <div class="col">
+            <div class="devlab">Escritorio</div>
+            <div class="dt">
+              <div class="dt-bar"><span class="dt-dot"></span><span class="dt-dot"></span><span class="dt-dot"></span><span class="dt-url"></span></div>
+              <div class="topbar" style="padding:12px 16px"><div class="logo" style="font-size:15px">localiator</div><div class="field" style="flex:1;height:30px;max-width:280px;display:flex;align-items:center;padding:0 10px;color:#aaa;font:11px system-ui">🔍 Buscar…</div><div style="display:flex;gap:8px;margin-left:auto"><div class="ico">♡</div><div class="ico r">👤</div><div class="ico">🛒</div></div></div>
+              <div style="display:flex;gap:16px;padding:8px 16px;border-bottom:1px solid #e2ded6;font:600 10px system-ui;color:#555"><span>Todas las categorías</span><span>Electrónica</span><span>Hogar</span><span>Moda</span><span>Ocio</span><span style="color:#c47d00">Lotes</span></div>
+              <div class="p" style="padding:16px">
+                <div class="imgp" style="height:150px;margin-bottom:14px">hero — banner lotes destacados</div>
+                <div class="sec-h" style="margin-bottom:8px">Novedades</div>
+                <div class="grid4">
+                  <div class="card"><div class="imgp" style="height:80px">img</div><div class="p col" style="gap:4px;padding:8px"><span class="pill">Lote ×8</span><div class="bar w85" style="height:8px"></div><div class="bar w40 dk" style="height:11px"></div></div></div>
+                  <div class="card"><div class="imgp" style="height:80px">img</div><div class="p col" style="gap:4px;padding:8px"><span class="pill g">Unidad</span><div class="bar w70" style="height:8px"></div><div class="bar w40 dk" style="height:11px"></div></div></div>
+                  <div class="card"><div class="imgp" style="height:80px">img</div><div class="p col" style="gap:4px;padding:8px"><span class="pill">Lote ×3</span><div class="bar w85" style="height:8px"></div><div class="bar w40 dk" style="height:11px"></div></div></div>
+                  <div class="card"><div class="imgp" style="height:80px">img</div><div class="p col" style="gap:4px;padding:8px"><span class="pill g">Unidad</span><div class="bar w60" style="height:8px"></div><div class="bar w40 dk" style="height:11px"></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 1e HOME B ============ -->
+    <div class="dv-opt" id="1e">
+      <div class="dv-olabel"><a class="dv-oid" href="#1e">1e</a>Home · B <span class="sub">feed único tipo "descubrir" + banner recogida</span></div>
+      <div class="dv-card" style="width:850px">
+        <div class="row">
+          <div class="col">
+            <div class="devlab">Móvil</div>
+            <div class="ph">
+              <div class="ph-scr">
+                <div class="stat"><span>9:41</span><span>▮▮▮</span></div>
+                <div class="topbar"><div class="logo" style="flex:1">localiator</div><div class="ico">🔍</div><div class="ico">🛒</div></div>
+                <div style="background:#fff7e6;border-bottom:1px solid #f0e2c0;padding:7px 10px;font:600 9px system-ui;color:#c47d00;display:flex;align-items:center;gap:6px">📍 Recoge en Almacén Centro · elige otro</div>
+                <div class="p col" style="gap:10px">
+                  <div class="sec-h">Para ti</div>
+                  <div class="card"><div class="imgp" style="height:130px">img grande</div><div class="p col" style="gap:5px;padding:8px"><div style="display:flex;gap:5px"><span class="pill">Lote ×12</span><span class="chip">Estado: nuevo</span></div><div class="bar w85" style="height:9px"></div><div style="display:flex;justify-content:space-between;align-items:center"><div class="bar w30 dk" style="height:12px"></div><div class="ico">♡</div></div></div></div>
+                  <div class="card"><div class="imgp" style="height:130px">img grande</div><div class="p col" style="gap:5px;padding:8px"><span class="pill g">Unidad · 1 disp.</span><div class="bar w70" style="height:9px"></div></div></div>
+                </div>
+                <div class="tabbar"><div class="act"><div class="tb-ic"></div>Inicio</div><div><div class="tb-ic"></div>Buscar</div><div><div class="tb-ic"></div>Favoritos</div><div><div class="tb-ic"></div>Cuenta</div></div>
+              </div>
+            </div>
+          </div>
+          <div class="col">
+            <div class="devlab">Escritorio</div>
+            <div class="dt">
+              <div class="dt-bar"><span class="dt-dot"></span><span class="dt-dot"></span><span class="dt-dot"></span><span class="dt-url"></span></div>
+              <div style="background:#fff7e6;padding:6px 16px;font:600 10px system-ui;color:#c47d00">📍 Recoges en Almacén Centro · <span style="text-decoration:underline">cambiar</span></div>
+              <div class="topbar" style="padding:12px 16px"><div class="logo" style="font-size:15px">localiator</div><div class="field" style="flex:1;height:30px;max-width:320px;display:flex;align-items:center;padding:0 10px;color:#aaa;font:11px system-ui">🔍 Buscar…</div><div style="display:flex;gap:8px;margin-left:auto"><div class="ico">♡</div><div class="ico r">👤</div><div class="ico">🛒</div></div></div>
+              <div class="p" style="padding:16px">
+                <div class="sec-h" style="margin-bottom:10px">Descubrir · para ti</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;grid-auto-rows:10px;gap:10px">
+                  <div class="card" style="grid-row:span 16"><div class="imgp" style="height:150px">img</div><div class="p col" style="gap:5px;padding:8px"><span class="pill">Lote ×12</span><div class="bar w85" style="height:9px"></div></div></div>
+                  <div class="card" style="grid-row:span 11"><div class="imgp" style="height:90px">img</div><div class="p col" style="gap:4px;padding:8px"><span class="pill g">Unidad</span><div class="bar w70" style="height:8px"></div></div></div>
+                  <div class="card" style="grid-row:span 13"><div class="imgp" style="height:110px">img</div><div class="p col" style="gap:4px;padding:8px"><span class="pill">Lote ×5</span><div class="bar w60" style="height:8px"></div></div></div>
+                  <div class="card" style="grid-row:span 12"><div class="imgp" style="height:100px">img</div><div class="p" style="padding:8px"><div class="bar w70" style="height:8px"></div></div></div>
+                  <div class="card" style="grid-row:span 15"><div class="imgp" style="height:130px">img</div><div class="p" style="padding:8px"><div class="bar w85" style="height:8px"></div></div></div>
+                  <div class="card" style="grid-row:span 11"><div class="imgp" style="height:90px">img</div><div class="p" style="padding:8px"><div class="bar w60" style="height:8px"></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="note">Banner de almacén fijo arriba: en recogida-only, saber "dónde recojo" desde el minuto 0 evita sorpresas en checkout. Feed masonry premia el descubrimiento de lotes únicos.</div>
+    </div>
+
+    <!-- ============ 1f CATÁLOGO A ============ -->
+    <div class="dv-opt" id="1f">
+      <div class="dv-olabel"><a class="dv-oid" href="#1f">1f</a>Catálogo · A <span class="sub">filtros en drawer/lateral + orden</span></div>
+      <div class="dv-card" style="width:850px">
+        <div class="row">
+          <div class="col">
+            <div class="devlab">Móvil — resultados</div>
+            <div class="ph">
+              <div class="ph-scr">
+                <div class="stat"><span>9:41</span><span>▮▮▮</span></div>
+                <div class="topbar"><div class="ico">←</div><div class="bar w60" style="height:11px;flex:1"></div><div class="ico">🔍</div></div>
+                <div style="display:flex;gap:8px;padding:8px 10px;border-bottom:1px solid #e2ded6"><div class="btn sm" style="flex:1">⚙ Filtros</div><div class="btn sm gh" style="flex:1">↕ Ordenar</div></div>
+                <div class="p" style="padding:10px">
+                  <div class="grid2" style="gap:8px">
+                    <div class="card"><div class="imgp" style="height:78px">img</div><div class="p col" style="gap:4px;padding:6px"><span class="pill">Lote ×8</span><div class="bar w85" style="height:7px"></div><div class="bar w40 dk" style="height:10px"></div></div></div>
+                    <div class="card"><div class="imgp" style="height:78px">img</div><div class="p col" style="gap:4px;padding:6px"><span class="pill g">Unidad</span><div class="bar w70" style="height:7px"></div><div class="bar w40 dk" style="height:10px"></div></div></div>
+                    <div class="card"><div class="imgp" style="height:78px">img</div><div class="p col" style="gap:4px;padding:6px"><span class="pill">Lote ×3</span><div class="bar w60" style="height:7px"></div><div class="bar w40 dk" style="height:10px"></div></div></div>
+                    <div class="card"><div class="imgp" style="height:78px">img</div><div class="p col" style="gap:4px;padding:6px"><span class="pill g">Unidad</span><div class="bar w85" style="height:7px"></div><div class="bar w40 dk" style="height:10px"></div></div></div>
+                  </div>
+                </div>
+                <div class="tabbar"><div><div class="tb-ic"></div>Inicio</div><div class="act"><div class="tb-ic"></div>Buscar</div><div><div class="tb-ic"></div>Favoritos</div><div><div class="tb-ic"></div>Cuenta</div></div>
+              </div>
+            </div>
+          </div>
+          <div class="col">
+            <div class="devlab">Móvil — filtros (drawer)</div>
+            <div class="ph">
+              <div class="ph-scr">
+                <div class="stat"><span>9:41</span><span>▮▮▮</span></div>
+                <div class="topbar"><div class="logo" style="flex:1">Filtros</div><div class="ico">✕</div></div>
+                <div class="p col" style="gap:12px">
+                  <div class="col" style="gap:6px"><span class="flabel">Categoría</span><div class="grid2"><span class="chip on">Todo</span><span class="chip">Electrónica</span><span class="chip">Hogar</span><span class="chip">Moda</span></div></div>
+                  <div class="col" style="gap:6px"><span class="flabel">Tipo</span><div style="display:flex;gap:6px"><span class="chip on">Lote</span><span class="chip">Unidad</span></div></div>
+                  <div class="col" style="gap:6px"><span class="flabel">Estado</span><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="chip">Nuevo</span><span class="chip">Usado</span><span class="chip">Devolución</span></div></div>
+                  <div class="col" style="gap:6px"><span class="flabel">Precio</span><div class="field" style="height:20px;position:relative"><div style="position:absolute;top:8px;left:15%;right:35%;height:4px;background:#ffb703;border-radius:2px"></div></div></div>
+                  <div class="col" style="gap:6px"><span class="flabel">Almacén de recogida</span><div class="field"></div></div>
+                </div>
+                <div class="p" style="border-top:1px solid #e2ded6"><div class="btn cta">Ver 128 resultados</div></div>
+              </div>
+            </div>
+          </div>
+          <div class="col">
+            <div class="devlab">Escritorio — lateral fijo</div>
+            <div class="dt" style="width:440px">
+              <div class="dt-bar"><span class="dt-dot"></span><span class="dt-dot"></span><span class="dt-dot"></span><span class="dt-url"></span></div>
+              <div class="topbar" style="padding:10px 14px"><div class="logo">localiator</div><div class="field" style="flex:1;height:26px;margin:0 10px"></div><div class="ico">🛒</div></div>
+              <div style="display:flex">
+                <div class="drawer" style="width:130px;margin:0;border-radius:0;border:none;border-right:1px solid #e2ded6;padding:10px">
+                  <div class="col" style="gap:12px">
+                    <div class="col" style="gap:5px"><span class="flabel">Categoría</span><div class="bar w85" style="height:8px"></div><div class="bar w70" style="height:8px"></div><div class="bar w60" style="height:8px"></div></div>
+                    <div class="col" style="gap:5px"><span class="flabel">Tipo</span><div style="display:flex;gap:4px"><span class="chip on">Lote</span><span class="chip">Ud.</span></div></div>
+                    <div class="col" style="gap:5px"><span class="flabel">Estado</span><div class="bar w70" style="height:8px"></div><div class="bar w60" style="height:8px"></div></div>
+                    <div class="col" style="gap:5px"><span class="flabel">Precio</span><div class="field" style="height:14px"></div></div>
+                  </div>
+                </div>
+                <div class="p" style="flex:1;padding:12px">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="bar w40" style="height:9px"></div><div class="btn sm gh" style="width:80px">↕ Ordenar</div></div>
+                  <div class="grid3">
+                    <div class="card"><div class="imgp" style="height:60px">img</div><div class="p col" style="gap:3px;padding:6px"><span class="pill">Lote</span><div class="bar w85" style="height:6px"></div></div></div>
+                    <div class="card"><div class="imgp" style="height:60px">img</div><div class="p col" style="gap:3px;padding:6px"><span class="pill g">Ud.</span><div class="bar w70" style="height:6px"></div></div></div>
+                    <div class="card"><div class="imgp" style="height:60px">img</div><div class="p col" style="gap:3px;padding:6px"><span class="pill">Lote</span><div class="bar w60" style="height:6px"></div></div></div>
+                    <div class="card"><div class="imgp" style="height:60px">img</div><div class="p col" style="gap:3px;padding:6px"><span class="pill g">Ud.</span><div class="bar w85" style="height:6px"></div></div></div>
+                    <div class="card"><div class="imgp" style="height:60px">img</div><div class="p col" style="gap:3px;padding:6px"><span class="pill">Lote</span><div class="bar w70" style="height:6px"></div></div></div>
+                    <div class="card"><div class="imgp" style="height:60px">img</div><div class="p col" style="gap:3px;padding:6px"><span class="pill g">Ud.</span><div class="bar w60" style="height:6px"></div></div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="note amber">Filtro clave y propio del negocio: <b>tipo (lote/unidad)</b>, <b>estado</b> (nuevo/usado/devolución) y <b>almacén de recogida</b>. En escritorio el panel va fijo a la izquierda; en móvil, drawer a pantalla completa.</div>
+    </div>
+
+    <!-- ============ 1g CATÁLOGO B ============ -->
+    <div class="dv-opt" id="1g">
+      <div class="dv-olabel"><a class="dv-oid" href="#1g">1g</a>Catálogo · B <span class="sub">chips de filtro rápido siempre visibles</span></div>
+      <div class="ph">
+        <div class="ph-scr">
+          <div class="stat"><span>9:41</span><span>▮▮▮</span></div>
+          <div class="topbar"><div class="ico">←</div><div class="field" style="flex:1;height:24px"></div></div>
+          <div style="display:flex;gap:6px;padding:8px 10px;overflow:hidden;border-bottom:1px solid #e2ded6"><span class="chip on">Lote</span><span class="chip">Nuevo</span><span class="chip">&lt;50€</span><span class="chip">Almacén ▾</span></div>
+          <div style="display:flex;justify-content:space-between;padding:6px 10px;font:9px system-ui;color:#888"><span>128 resultados</span><span>Ordenar ↕</span></div>
+          <div class="p" style="padding:10px">
+            <div class="col" style="gap:8px">
+              <div class="card" style="display:flex"><div class="imgp" style="width:78px;height:78px;flex:none">img</div><div class="p col" style="gap:4px;padding:7px;flex:1"><div style="display:flex;gap:4px"><span class="pill">Lote ×8</span><span class="chip">nuevo</span></div><div class="bar w85" style="height:7px"></div><div class="bar w60" style="height:7px"></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:auto"><div class="bar w30 dk" style="height:11px"></div><div class="ico" style="width:18px;height:18px">♡</div></div></div></div>
+              <div class="card" style="display:flex"><div class="imgp" style="width:78px;height:78px;flex:none">img</div><div class="p col" style="gap:4px;padding:7px;flex:1"><span class="pill g">Unidad · 1 disp.</span><div class="bar w70" style="height:7px"></div><div class="bar w50" style="height:7px"></div><div class="bar w30 dk" style="height:11px;margin-top:auto"></div></div></div>
+              <div class="card" style="display:flex"><div class="imgp" style="width:78px;height:78px;flex:none">img</div><div class="p col" style="gap:4px;padding:7px;flex:1"><span class="pill">Lote ×3</span><div class="bar w85" style="height:7px"></div><div class="bar w30 dk" style="height:11px;margin-top:auto"></div></div></div>
+            </div>
+          </div>
+          <div class="tabbar"><div><div class="tb-ic"></div>Inicio</div><div class="act"><div class="tb-ic"></div>Buscar</div><div><div class="tb-ic"></div>Favoritos</div><div><div class="tb-ic"></div>Cuenta</div></div>
+        </div>
+      </div>
+      <div class="note">Chips de filtro rápido sin abrir drawer + lista en 1 columna (más info por ítem: estado, favorito inline). Bueno para escanear lotes heterogéneos.</div>
+    </div>
+
+    <!-- ============ 1h DETALLE A ============ -->
+    <div class="dv-opt" id="1h">
+      <div class="dv-olabel"><a class="dv-oid" href="#1h">1h</a>Detalle de producto · A <span class="sub">galería + ficha + barra de compra fija</span></div>
+      <div class="dv-card" style="width:850px">
+        <div class="row">
+          <div class="col">
+            <div class="devlab">Móvil</div>
+            <div class="ph">
+              <div class="ph-scr">
+                <div class="stat"><span>9:41</span><span>▮▮▮</span></div>
+                <div class="topbar"><div class="ico">←</div><div style="flex:1"></div><div class="ico">♡</div><div class="ico">⤴</div></div>
+                <div style="position:relative"><div class="imgp" style="height:150px;border-radius:0">galería (swipe)</div><div style="position:absolute;top:8px;left:8px" class="pill">Lote ×8</div><div style="position:absolute;bottom:6px;left:0;right:0;display:flex;gap:4px;justify-content:center"><span style="width:5px;height:5px;border-radius:50%;background:#1a1a1a"></span><span style="width:5px;height:5px;border-radius:50%;background:#ccc"></span><span style="width:5px;height:5px;border-radius:50%;background:#ccc"></span></div></div>
+                <div class="p col" style="gap:9px">
+                  <div class="bar w85" style="height:13px"></div>
+                  <div style="display:flex;gap:6px"><span class="chip">Estado: nuevo</span><span class="chip">1 disponible</span></div>
+                  <div style="display:flex;align-items:baseline;gap:8px"><div class="bar w30 dk" style="height:18px"></div><div class="bar w30" style="height:9px"></div></div>
+                  <div style="background:#fff7e6;border:1px solid #f0e2c0;border-radius:6px;padding:8px;font:9px system-ui;color:#c47d00">📍 Recogida en <b>Almacén Centro</b> · disponible mañana</div>
+                  <div class="divider"></div>
+                  <span class="flabel">Contenido del lote (8 artículos)</span>
+                  <div class="col" style="gap:5px"><div class="bar w85" style="height:8px"></div><div class="bar w70" style="height:8px"></div><div class="bar w60" style="height:8px"></div></div>
+                  <div class="divider"></div>
+                  <span class="flabel">Descripción</span>
+                  <div class="col" style="gap:4px"><div class="bar" style="height:7px"></div><div class="bar w85" style="height:7px"></div><div class="bar w60" style="height:7px"></div></div>
+                </div>
+                <div style="position:sticky;bottom:0;display:flex;gap:8px;padding:9px 10px;border-top:1px solid #e2ded6;background:#fff"><div class="ico" style="width:38px;height:38px">♡</div><div class="btn cta" style="flex:1;padding:11px">Añadir al carrito</div></div>
+              </div>
+            </div>
+          </div>
+          <div class="col">
+            <div class="devlab">Escritorio</div>
+            <div class="dt">
+              <div class="dt-bar"><span class="dt-dot"></span><span class="dt-dot"></span><span class="dt-dot"></span><span class="dt-url"></span></div>
+              <div class="topbar" style="padding:10px 16px"><div class="logo">localiator</div><div class="field" style="flex:1;height:26px;max-width:240px;margin:0 12px"></div><div style="margin-left:auto;display:flex;gap:8px"><div class="ico">♡</div><div class="ico">🛒</div></div></div>
+              <div style="padding:8px 16px;font:9px system-ui;color:#999">Inicio › Electrónica › Lote</div>
+              <div style="display:flex;gap:16px;padding:0 16px 16px">
+                <div style="width:60px;display:flex;flex-direction:column;gap:6px"><div class="imgp" style="height:52px">1</div><div class="imgp" style="height:52px">2</div><div class="imgp" style="height:52px">3</div></div>
+                <div class="imgp" style="flex:1;height:230px">imagen principal</div>
+                <div class="col" style="width:180px;gap:10px">
+                  <span class="pill">Lote ×8</span>
+                  <div class="bar w85" style="height:14px"></div>
+                  <div class="bar w60" style="height:10px"></div>
+                  <div class="bar w40 dk" style="height:22px"></div>
+                  <div style="display:flex;gap:5px"><span class="chip">Nuevo</span><span class="chip">1 disp.</span></div>
+                  <div style="background:#fff7e6;border:1px solid #f0e2c0;border-radius:6px;padding:8px;font:9px system-ui;color:#c47d00">📍 Recogida Almacén Centro</div>
+                  <div class="btn cta" style="padding:11px">Añadir al carrito</div>
+                  <div class="btn gh">♡ Guardar en favoritos</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="note amber">Ficha resuelve las 3 dudas del modelo: <b>qué incluye el lote</b>, <b>en qué estado</b> y <b>dónde/cuándo recojo</b>. Barra de compra fija abajo en móvil.</div>
+    </div>
+
+    <!-- ============ 1i DETALLE B ============ -->
+    <div class="dv-opt" id="1i">
+      <div class="dv-olabel"><a class="dv-oid" href="#1i">1i</a>Detalle de producto · B <span class="sub">pestañas + tabla de contenido del lote</span></div>
+      <div class="ph">
+        <div class="ph-scr">
+          <div class="stat"><span>9:41</span><span>▮▮▮</span></div>
+          <div class="topbar"><div class="ico">←</div><div style="flex:1"></div><div class="ico">♡</div></div>
+          <div class="imgp" style="height:140px;border-radius:0">imagen</div>
+          <div class="p col" style="gap:8px">
+            <span class="pill">Lote ×12 · devolución</span>
+            <div class="bar w85" style="height:12px"></div>
+            <div class="bar w30 dk" style="height:16px"></div>
+          </div>
+          <div style="display:flex;border-top:1px solid #e2ded6;border-bottom:1px solid #e2ded6;font:600 9px system-ui"><div style="flex:1;text-align:center;padding:8px;border-bottom:2px solid #1a1a1a">Contenido</div><div style="flex:1;text-align:center;padding:8px;color:#999">Detalles</div><div style="flex:1;text-align:center;padding:8px;color:#999">Recogida</div></div>
+          <div class="p col" style="gap:0;padding:0">
+            <div style="display:flex;justify-content:space-between;padding:8px 10px;border-bottom:1px solid #eee;font:10px system-ui"><span>1× artículo A</span><span style="color:#999">nuevo</span></div>
+            <div style="display:flex;justify-content:space-between;padding:8px 10px;border-bottom:1px solid #eee;font:10px system-ui"><span>3× artículo B</span><span style="color:#999">usado</span></div>
+            <div style="display:flex;justify-content:space-between;padding:8px 10px;border-bottom:1px solid #eee;font:10px system-ui"><span>8× artículo C</span><span style="color:#999">nuevo</span></div>
+          </div>
+          <div style="position:sticky;bottom:0;display:flex;gap:8px;padding:9px 10px;border-top:1px solid #e2ded6;background:#fff"><div class="btn cta" style="flex:1;padding:11px">Añadir · 45€</div></div>
+        </div>
+      </div>
+      <div class="note">Para lotes con muchos artículos, una tabla desglosada (cantidad + estado por ítem) genera confianza. Pestañas separan contenido / detalles / recogida.</div>
+    </div>
+
+    <!-- ============ 1j CARRITO ============ -->
+    <div class="dv-opt" id="1j">
+      <div class="dv-olabel"><a class="dv-oid" href="#1j">1j</a>Carrito</div>
+      <div class="ph">
+        <div class="ph-scr">
+          <div class="stat"><span>9:41</span><span>▮▮▮</span></div>
+          <div class="topbar"><div class="ico">←</div><div class="logo" style="flex:1;text-align:center">Carrito (3)</div></div>
+          <div class="p col" style="gap:10px">
+            <div style="background:#fff7e6;border:1px solid #f0e2c0;border-radius:6px;padding:8px;font:9px system-ui;color:#c47d00">📍 Recoges en <b>Almacén Centro</b></div>
+            <div class="card" style="display:flex;gap:8px;padding:7px"><div class="imgp" style="width:56px;height:56px;flex:none">img</div><div class="col" style="gap:4px;flex:1"><span class="pill">Lote ×8</span><div class="bar w85" style="height:7px"></div><div style="display:flex;justify-content:space-between;align-items:center"><div class="bar w30 dk" style="height:10px"></div><div style="display:flex;gap:5px;align-items:center"><span class="ico" style="width:18px;height:18px">−</span><span style="font:10px system-ui">1</span><span class="ico" style="width:18px;height:18px">+</span></div></div></div></div>
+            <div class="card" style="display:flex;gap:8px;padding:7px"><div class="imgp" style="width:56px;height:56px;flex:none">img</div><div class="col" style="gap:4px;flex:1"><span class="pill g">Unidad</span><div class="bar w70" style="height:7px"></div><div class="bar w30 dk" style="height:10px"></div></div></div>
+            <div class="field" style="display:flex;align-items:center;padding:0 10px;gap:6px;color:#888;font:10px system-ui">🏷 Código de cupón <span style="margin-left:auto" class="btn sm">Aplicar</span></div>
+            <div class="divider"></div>
+            <div style="display:flex;justify-content:space-between;font:11px system-ui"><span>Subtotal</span><div class="bar w30 dk" style="height:10px"></div></div>
+            <div style="display:flex;justify-content:space-between;font:11px system-ui;color:#1b8a4c"><span>Cupón −10%</span><div class="bar w30" style="height:10px"></div></div>
+            <div style="display:flex;justify-content:space-between;font:9px system-ui;color:#999"><span>Envío</span><span>Sin envío · recogida gratuita</span></div>
+          </div>
+          <div class="p" style="border-top:1px solid #e2ded6"><div class="btn cta" style="padding:12px">Tramitar recogida →</div></div>
+        </div>
+      </div>
+      <div class="note">Cupón se aplica aquí (visible antes del pago). "Envío" se sustituye por "recogida gratuita" para no confundir.</div>
+    </div>
+
+    <!-- ============ 1k CHECKOUT A ============ -->
+    <div class="dv-opt" id="1k">
+      <div class="dv-olabel"><a class="dv-oid" href="#1k">1k</a>Checkout · A <span class="sub">multi-paso con progreso</span></div>
+      <div class="row" style="gap:14px">
+        <div class="ph">
+          <div class="ph-scr">
+            <div class="stat"><span>9:41</span><span>▮▮▮</span></div>
+            <div class="topbar"><div class="ico">←</div><div class="logo" style="flex:1;text-align:center">Recogida</div></div>
+            <div style="display:flex;gap:4px;padding:10px;align-items:center;font:8px system-ui;color:#999"><span style="color:#1a1a1a">1 Identif.</span>—<span style="color:#1a1a1a;font-weight:700">2 Recogida</span>—<span>3 Pago</span></div>
+            <div class="p col" style="gap:10px">
+              <span class="flabel">Elige almacén</span>
+              <div class="card" style="padding:8px;border-color:#c47d00;border-width:1.5px"><div style="display:flex;justify-content:space-between"><div class="bar w50 dk" style="height:9px"></div><span style="color:#c47d00">●</span></div><div class="bar w70" style="height:6px;margin-top:6px"></div><div class="bar w40" style="height:6px;margin-top:4px"></div></div>
+              <div class="card" style="padding:8px"><div class="bar w50 dk" style="height:9px"></div><div class="bar w70" style="height:6px;margin-top:6px"></div></div>
+              <span class="flabel">Franja de recogida</span>
+              <div class="grid2"><span class="chip">Mañana AM</span><span class="chip on">Mañana PM</span><span class="chip">Sáb AM</span><span class="chip">Sáb PM</span></div>
+            </div>
+            <div class="p" style="border-top:1px solid #e2ded6"><div class="btn cta" style="padding:11px">Continuar al pago</div></div>
+          </div>
+        </div>
+        <div class="ph">
+          <div class="ph-scr">
+            <div class="stat"><span>9:41</span><span>▮▮▮</span></div>
+            <div class="topbar"><div class="ico">←</div><div class="logo" style="flex:1;text-align:center">Pago</div></div>
+            <div style="display:flex;gap:4px;padding:10px;align-items:center;font:8px system-ui;color:#999"><span style="color:#1a1a1a">1 Identif.</span>—<span style="color:#1a1a1a">2 Recogida</span>—<span style="color:#1a1a1a;font-weight:700">3 Pago</span></div>
+            <div class="p col" style="gap:10px">
+              <span class="flabel">Método de pago</span>
+              <div style="display:flex;gap:6px"><span class="chip on">Tarjeta</span><span class="chip">PayPal</span><span class="chip">Bizum</span></div>
+              <div class="col" style="gap:6px"><span class="flabel">Nº tarjeta</span><div class="field"></div></div>
+              <div class="row" style="gap:6px"><div class="col" style="flex:1;gap:6px"><span class="flabel">Cad.</span><div class="field"></div></div><div class="col" style="flex:1;gap:6px"><span class="flabel">CVC</span><div class="field"></div></div></div>
+              <div class="divider"></div>
+              <div style="display:flex;justify-content:space-between;font:11px system-ui;font-weight:700"><span>Total</span><div class="bar w30 dk" style="height:12px"></div></div>
+              <div style="font:8px system-ui;color:#999">Recogida: Almacén Centro · Sáb PM</div>
+            </div>
+            <div class="p" style="border-top:1px solid #e2ded6"><div class="btn cta" style="padding:12px">Pagar y reservar</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="note amber">Sin dirección de envío. El paso "Recogida" (almacén + franja) reemplaza al envío. Progreso 1-2-3 reduce abandono en móvil.</div>
+    </div>
+
+    <!-- ============ 1l CHECKOUT B ============ -->
+    <div class="dv-opt" id="1l">
+      <div class="dv-olabel"><a class="dv-oid" href="#1l">1l</a>Checkout · B <span class="sub">una sola página (acordeón) + resumen</span></div>
+      <div class="dt" style="width:520px">
+        <div class="dt-bar"><span class="dt-dot"></span><span class="dt-dot"></span><span class="dt-dot"></span><span class="dt-url"></span></div>
+        <div style="display:flex;gap:16px;padding:16px">
+          <div class="col" style="flex:1;gap:10px">
+            <div class="card" style="padding:10px"><div style="display:flex;justify-content:space-between"><span class="sec-h">1 · Identificación ✓</span><span style="font:9px system-ui;color:#2a6fdb">editar</span></div></div>
+            <div class="card" style="padding:10px;border-color:#c47d00">
+              <span class="sec-h">2 · Recogida</span>
+              <div class="col" style="gap:8px;margin-top:8px">
+                <div class="field" style="display:flex;align-items:center;padding:0 10px;font:9px system-ui;color:#666">📍 Almacén Centro ▾</div>
+                <div style="display:flex;gap:6px"><span class="chip">Mañana</span><span class="chip on">Sábado PM</span><span class="chip">Lunes</span></div>
+              </div>
+            </div>
+            <div class="card" style="padding:10px"><span class="sec-h" style="color:#999">3 · Pago</span></div>
+          </div>
+          <div class="col" style="width:150px;gap:8px">
+            <div class="card p" style="padding:10px">
+              <span class="flabel">Resumen</span>
+              <div class="col" style="gap:6px;margin-top:8px">
+                <div style="display:flex;justify-content:space-between;font:9px system-ui"><span>2 artículos</span><div class="bar w40 dk" style="height:8px"></div></div>
+                <div style="display:flex;justify-content:space-between;font:9px system-ui;color:#1b8a4c"><span>Cupón</span><div class="bar w40" style="height:8px"></div></div>
+                <div style="display:flex;justify-content:space-between;font:9px system-ui;color:#999"><span>Recogida</span><span>Gratis</span></div>
+                <div class="divider"></div>
+                <div style="display:flex;justify-content:space-between;font:11px system-ui;font-weight:700"><span>Total</span><div class="bar w40 dk" style="height:11px"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="note">Todo en una vista con resumen fijo (mejor en escritorio). En móvil el resumen colapsa arriba. Acordeón evita saltos de página.</div>
+    </div>
+
+    <!-- ============ 1m LOGIN ============ -->
+    <div class="dv-opt" id="1m">
+      <div class="dv-olabel"><a class="dv-oid" href="#1m">1m</a>Login / registro <span class="sub">con opción de compra como invitado</span></div>
+      <div class="ph">
+        <div class="ph-scr">
+          <div class="stat"><span>9:41</span><span>▮▮▮</span></div>
+          <div class="topbar"><div class="ico">✕</div><div class="logo" style="flex:1;text-align:center">localiator</div></div>
+          <div class="p col" style="gap:12px;padding:16px">
+            <div style="display:flex;gap:6px"><span class="chip on" style="flex:1;text-align:center;padding:7px">Entrar</span><span class="chip" style="flex:1;text-align:center;padding:7px">Registrarme</span></div>
+            <div class="col" style="gap:6px"><span class="flabel">Email</span><div class="field"></div></div>
+            <div class="col" style="gap:6px"><span class="flabel">Contraseña</span><div class="field"></div></div>
+            <div class="btn cta" style="padding:11px">Entrar</div>
+            <div style="text-align:center;font:9px system-ui;color:#999">— o —</div>
+            <div class="btn gh">Continuar con Google</div>
+            <div class="btn gh">Continuar como invitado</div>
+            <div style="text-align:center;font:9px system-ui;color:#2a6fdb">¿Olvidaste la contraseña?</div>
+          </div>
+        </div>
+      </div>
+      <div class="note">Invitado permitido para no perder ventas; se le pide email al final para avisos de recogida.</div>
+    </div>
+
+    <!-- ============ 1n CUENTA ============ -->
+    <div class="dv-opt" id="1n">
+      <div class="dv-olabel"><a class="dv-oid" href="#1n">1n</a>Cuenta / perfil</div>
+      <div class="ph">
+        <div class="ph-scr">
+          <div class="stat"><span>9:41</span><span>▮▮▮</span></div>
+          <div class="topbar"><div class="logo" style="flex:1;text-align:center">Mi cuenta</div><div class="ico">⚙</div></div>
+          <div class="p col" style="gap:10px">
+            <div style="display:flex;gap:10px;align-items:center"><div class="ico r" style="width:44px;height:44px">👤</div><div class="col" style="gap:5px;flex:1"><div class="bar w50 dk" style="height:11px"></div><div class="bar w70" style="height:8px"></div></div></div>
+            <div class="divider"></div>
+            <div class="col" style="gap:0">
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 4px;border-bottom:1px solid #eee;font:11px system-ui">📦 Mis pedidos y recogidas<span style="color:#ccc">›</span></div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 4px;border-bottom:1px solid #eee;font:11px system-ui">♡ Favoritos<span style="color:#ccc">›</span></div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 4px;border-bottom:1px solid #eee;font:11px system-ui">🏷 Mis cupones<span style="color:#ccc">›</span></div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 4px;border-bottom:1px solid #eee;font:11px system-ui">📍 Almacén preferido<span style="color:#ccc">›</span></div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 4px;border-bottom:1px solid #eee;font:11px system-ui">👤 Datos personales<span style="color:#ccc">›</span></div>
+              <div style="padding:11px 4px;font:11px system-ui;color:#c0392b">Cerrar sesión</div>
+            </div>
+          </div>
+          <div class="tabbar"><div><div class="tb-ic"></div>Inicio</div><div><div class="tb-ic"></div>Buscar</div><div><div class="tb-ic"></div>Favoritos</div><div class="act"><div class="tb-ic"></div>Cuenta</div></div>
+        </div>
+      </div>
+      <div class="note">"Pedidos y recogidas" es el centro: estado de cada reserva (pendiente de recoger / recogido). Cupones y almacén preferido viven aquí.</div>
+    </div>
+
+    <!-- ============ 1o CONFIRMACIÓN ============ -->
+    <div class="dv-opt" id="1o">
+      <div class="dv-olabel"><a class="dv-oid" href="#1o">1o</a>Confirmación de pedido <span class="sub">enfocada en la recogida</span></div>
+      <div class="ph">
+        <div class="ph-scr">
+          <div class="stat"><span>9:41</span><span>▮▮▮</span></div>
+          <div class="p col" style="gap:12px;padding:16px;align-items:center;text-align:center">
+            <div style="width:52px;height:52px;border-radius:50%;background:#1b8a4c;color:#fff;display:flex;align-items:center;justify-content:center;font:24px system-ui">✓</div>
+            <div class="bar w70 dk" style="height:13px"></div>
+            <div class="bar w50" style="height:9px"></div>
+            <div class="card" style="width:100%;padding:12px;text-align:left;border-color:#c47d00">
+              <span class="flabel" style="color:#c47d00">Tu recogida</span>
+              <div class="col" style="gap:6px;margin-top:8px">
+                <div style="font:11px system-ui;font-weight:600">📍 Almacén Centro</div>
+                <div class="bar w70" style="height:7px"></div>
+                <div style="font:10px system-ui;color:#666">🗓 Sábado, franja PM (16:00–20:00)</div>
+                <div style="font:10px system-ui;color:#666">🔖 Código de recogida: <b>LC-4821</b></div>
+              </div>
+              <div style="height:56px;margin-top:10px;border:1px dashed #ccc;border-radius:6px;display:flex;align-items:center;justify-content:center;font:9px ui-monospace;color:#aaa">QR de recogida</div>
+            </div>
+            <div class="btn" style="width:100%">Ver pedido</div>
+            <div class="btn cta" style="width:100%">Seguir comprando</div>
+          </div>
+        </div>
+      </div>
+      <div class="note amber">La confirmación NO habla de envío: muestra almacén, franja y un <b>código/QR de recogida</b> que el usuario enseña en el mostrador.</div>
+    </div>
+
+  </div>
+
+  <p class="dv-next">Prueba a decir: "quédate con la nav de <a class="dv-oid" href="#1b">1b</a> y el checkout de <a class="dv-oid" href="#1k">1k</a>" · "más detalle en el flujo de <a class="dv-oid" href="#1a">1a</a>" · "añade pantalla de estado de recogida" · "sube la fidelidad de <a class="dv-oid" href="#1d">1d</a> a diseño real".</p>
+</section>
+
+</x-dc>
+</body>
+</html>
