@@ -4,7 +4,7 @@ Documento de tracking del proyecto. **Se lee al inicio de cada sesión** para sa
 estamos y qué toca. Marcar `[x]` lo completado. Las decisiones cerradas están en
 `CLAUDE.md`; las áreas por discutir en `preocupaciones.md`.
 
-Decisión clave de alcance: **las subastas propias van en la Fase 2**, no en el MVP. Son la
+Decisión clave de alcance: **las subastas propias van en la Fase 6**, no en el MVP. Son la
 parte más compleja (tiempo real, concurrencia, antisniping, bans) y no bloquean la venta
 directa. El MVP es una tienda de venta directa con recogida en almacén.
 
@@ -48,9 +48,29 @@ Objetivo: repos, entornos y tooling listos para desarrollar con seguridad desde 
 - [x] Linter + formatter (ESLint + Prettier + oxlint) y convenciones de código
 - [x] Configuración de tests (unit + e2e) y primer test humo
 - [x] CI: lint + build + tests automáticos en cada push/PR (GitHub Actions)
-- [~] Separación de entornos definida (dev listo; staging/producción se cierran en Fase 4)
+- [~] Separación de entornos definida (dev listo; staging/producción se cierran en Fase 5)
 
-## Fase 1 — Modelo de datos y autenticación
+## Fase 1 — Estructura de frontend (wireframes)
+Objetivo: montar el esqueleto de React a partir del handoff de diseño, con rutas, tipos,
+stores y las 9 pantallas del flujo como wireframes funcionales (layout + navegación +
+estado con datos mock), listo para aplicar estilo real más adelante.
+
+- [ ] Dependencias: React Router y Zustand
+- [ ] Tipos de dominio (`Product`/`Lot`, `Warehouse`, `PickupSlot`, `Coupon`, `Order`)
+      alineados con los enums de `packages/shared`
+- [ ] Datos mock (productos/lotes, almacenes, franjas, cupones)
+- [ ] Stores: `useCart`, `useFavorites`, `usePickup`, `useAuth`
+- [ ] Componentes de layout (`AppLayout`, `TopBar`, `TabBar`) y navegación
+- [ ] Componentes de producto (`ProductCard`, `LotBadge`, `ConditionTag`, `Gallery`,
+      `LotContents`, `FavButton`)
+- [ ] Componentes de catálogo (`FilterDrawer`, `FilterSidebar`, `FilterChip`,
+      `PriceRange`, `SortMenu`)
+- [ ] Componentes de compra (`QtyStepper`, `CouponInput`, `OrderSummary`,
+      `WarehousePicker`, `PickupSlotPicker`, `StickyBuyBar`)
+- [ ] Rutas y páginas: Home, Catálogo/Buscar, Detalle, Favoritos, Carrito, Checkout,
+      Confirmación, Login/registro, Cuenta (pedidos, favoritos, cupones, datos)
+
+## Fase 2 — Modelo de datos y autenticación
 Objetivo: usuarios, roles y sesión seguros + esquema base de catálogo.
 
 - [ ] Esquema Prisma: Usuario + roles (invitado / comprador / administrador)
@@ -68,7 +88,7 @@ Objetivo: usuarios, roles y sesión seguros + esquema base de catálogo.
 - [ ] Rate limiting global + endpoints sensibles (login, registro, recuperación)
 - [ ] Cloudflare Turnstile (CAPTCHA invisible) + honeypot en formularios de auth
 
-## Fase 2 — Catálogo y backoffice de admin
+## Fase 3 — Catálogo y backoffice de admin
 Objetivo: dar de alta productos/lotes y que se vean/filtren en la web.
 
 - [ ] CRUD de productos y lotes (solo admin)
@@ -81,7 +101,7 @@ Objetivo: dar de alta productos/lotes y que se vean/filtren en la web.
 - [ ] Diseño responsive del catálogo y ficha
 - [ ] Panel de administración (backoffice) básico
 
-## Fase 3 — Carrito, pedidos y pagos (MVP de venta)
+## Fase 4 — Carrito, pedidos y pagos (MVP de venta)
 Objetivo: comprar de verdad. Cierre del MVP funcional.
 
 - [ ] Esquema Prisma: Pedido + líneas de pedido + estados (pendiente / pagado / listo para
@@ -96,7 +116,7 @@ Objetivo: comprar de verdad. Cierre del MVP funcional.
 - [ ] Emails transaccionales de pedido (confirmación, cambios de estado)
 - [ ] Flujo de recogida en almacén (sin envíos)
 
-## Fase 4 — Legal, cumplimiento y lanzamiento
+## Fase 5 — Legal, cumplimiento y lanzamiento
 Objetivo: poder abrir al público de forma legal y segura.
 
 - [ ] Aviso legal y condiciones de venta
@@ -112,7 +132,7 @@ Objetivo: poder abrir al público de forma legal y segura.
 - [ ] Escaneo automático de vulnerabilidades en dependencias
 - [ ] **Lanzamiento del MVP** 🚀
 
-## Fase 5 — Subastas propias (post-MVP)
+## Fase 6 — Subastas propias (post-MVP)
 Objetivo: pujas en tiempo real sobre productos/lotes.
 
 - [ ] Esquema Prisma: Subasta, Puja, historial y ganador
