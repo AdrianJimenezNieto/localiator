@@ -9,6 +9,7 @@ interface CartState {
   setQty: (itemId: string, qty: number) => void
   applyCoupon: (coupon: Coupon) => void
   clearCoupon: () => void
+  clear: () => void
 }
 
 export const useCart = create<CartState>((set) => ({
@@ -37,4 +38,5 @@ export const useCart = create<CartState>((set) => ({
     })),
   applyCoupon: (coupon) => set({ appliedCoupon: coupon }),
   clearCoupon: () => set({ appliedCoupon: undefined }),
+  clear: () => set({ items: [], appliedCoupon: undefined }),
 }))

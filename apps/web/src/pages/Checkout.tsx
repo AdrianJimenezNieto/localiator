@@ -21,6 +21,7 @@ export function Checkout() {
   const { warehouse, slot, setWarehouse, setSlot } = usePickup()
   const cartItems = useCart((state) => state.items)
   const coupon = useCart((state) => state.appliedCoupon)
+  const clearCart = useCart((state) => state.clear)
 
   const [step, setStep] = useState<Step>(1)
   const [email, setEmail] = useState(user?.email ?? '')
@@ -38,6 +39,7 @@ export function Checkout() {
       code: generatePickupCode(),
       status: 'pending',
     }
+    clearCart()
     navigate(`/pedido/${order.id}`, { state: order })
   }
 
