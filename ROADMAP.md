@@ -55,19 +55,19 @@ Objetivo: montar el esqueleto de React a partir del handoff de diseño, con ruta
 stores y las 9 pantallas del flujo como wireframes funcionales (layout + navegación +
 estado con datos mock), listo para aplicar estilo real más adelante.
 
-- [ ] Dependencias: React Router y Zustand
-- [ ] Tipos de dominio (`Product`/`Lot`, `Warehouse`, `PickupSlot`, `Coupon`, `Order`)
+- [x] Dependencias: React Router y Zustand
+- [x] Tipos de dominio (`Product`/`Lot`, `Warehouse`, `PickupSlot`, `Coupon`, `Order`)
       alineados con los enums de `packages/shared`
-- [ ] Datos mock (productos/lotes, almacenes, franjas, cupones)
-- [ ] Stores: `useCart`, `useFavorites`, `usePickup`, `useAuth`
-- [ ] Componentes de layout (`AppLayout`, `TopBar`, `TabBar`) y navegación
-- [ ] Componentes de producto (`ProductCard`, `LotBadge`, `ConditionTag`, `Gallery`,
+- [x] Datos mock (productos/lotes, almacenes, franjas, cupones)
+- [x] Stores: `useCart`, `useFavorites`, `usePickup`, `useAuth`
+- [x] Componentes de layout (`AppLayout`, `TopBar`, `TabBar`) y navegación
+- [x] Componentes de producto (`ProductCard`, `LotBadge`, `ConditionTag`, `Gallery`,
       `LotContents`, `FavButton`)
-- [ ] Componentes de catálogo (`FilterDrawer`, `FilterSidebar`, `FilterChip`,
+- [x] Componentes de catálogo (`FilterDrawer`, `FilterSidebar`, `FilterChip`,
       `PriceRange`, `SortMenu`)
-- [ ] Componentes de compra (`QtyStepper`, `CouponInput`, `OrderSummary`,
+- [x] Componentes de compra (`QtyStepper`, `CouponInput`, `OrderSummary`,
       `WarehousePicker`, `PickupSlotPicker`, `StickyBuyBar`)
-- [ ] Rutas y páginas: Home, Catálogo/Buscar, Detalle, Favoritos, Carrito, Checkout,
+- [x] Rutas y páginas: Home, Catálogo/Buscar, Detalle, Favoritos, Carrito, Checkout,
       Confirmación, Login/registro, Cuenta (pedidos, favoritos, cupones, datos)
 
 ## Fase 2 — Modelo de datos y autenticación
