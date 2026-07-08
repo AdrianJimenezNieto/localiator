@@ -48,3 +48,9 @@ sesión va en `09-sesion-tokens.md`.
 - No se puede distinguir "email no existe" de "contraseña incorrecta" (ni por mensaje ni por
   tiempo de respuesta).
 - El registro guarda `passwordHash` con el mismo servicio.
+
+## Al terminar (automatización)
+Cuando esta tarea cumpla todos los criterios de «Hecho cuando»:
+1. Marcar `[x]` el checkbox correspondiente en `ROADMAP.md`.
+2. Hacer commit con mensaje semántico (Conventional Commits), incluyendo el cambio
+   de `ROADMAP.md` en el **mismo commit** (regla 6 del repo).

@@ -50,3 +50,9 @@ de prueba para desarrollo.
 - Existe la carpeta de migración y la BD local tiene todas las tablas.
 - `pnpm --filter api db:seed` puebla datos y es re-ejecutable sin duplicar.
 - El flujo (`migrate dev` + `db:seed`) está documentado para el resto del equipo.
+
+## Al terminar (automatización)
+Cuando esta tarea cumpla todos los criterios de «Hecho cuando»:
+1. Marcar `[x]` el checkbox correspondiente en `ROADMAP.md`.
+2. Hacer commit con mensaje semántico (Conventional Commits), incluyendo el cambio
+   de `ROADMAP.md` en el **mismo commit** (regla 6 del repo).

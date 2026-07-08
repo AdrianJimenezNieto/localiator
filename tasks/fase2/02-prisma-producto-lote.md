@@ -51,3 +51,9 @@ pero son tablas distintas. Ver decisión de modelado en `CLAUDE.md`.
 ## Hecho cuando
 - `prisma validate` pasa con `Product`, `Lot` y el enum `ItemCondition`.
 - Ningún vínculo de contención entre `Lot` y `Product` en el esquema.
+
+## Al terminar (automatización)
+Cuando esta tarea cumpla todos los criterios de «Hecho cuando»:
+1. Marcar `[x]` el checkbox correspondiente en `ROADMAP.md`.
+2. Hacer commit con mensaje semántico (Conventional Commits), incluyendo el cambio
+   de `ROADMAP.md` en el **mismo commit** (regla 6 del repo).

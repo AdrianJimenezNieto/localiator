@@ -59,3 +59,9 @@ en `10-sliding-expiration.md`; aquí se monta la mecánica base de tokens.
 - Login emite access (body) + refresh (cookie HttpOnly/Secure/SameSite).
 - `/auth/refresh` rota el refresh y renueva el access; `/auth/logout` revoca.
 - Rutas protegidas por el guard JWT exponen el usuario autenticado.
+
+## Al terminar (automatización)
+Cuando esta tarea cumpla todos los criterios de «Hecho cuando»:
+1. Marcar `[x]` el checkbox correspondiente en `ROADMAP.md`.
+2. Hacer commit con mensaje semántico (Conventional Commits), incluyendo el cambio
+   de `ROADMAP.md` en el **mismo commit** (regla 6 del repo).

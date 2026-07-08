@@ -47,3 +47,9 @@ registro (`06`) y el hashing de `07`.
 - "Olvidé mi contraseña" envía enlace (si la cuenta existe) sin revelar existencia.
 - El enlace permite fijar nueva contraseña, es de un solo uso y caduca.
 - Tras el reseteo se revocan las sesiones activas (según decisión).
+
+## Al terminar (automatización)
+Cuando esta tarea cumpla todos los criterios de «Hecho cuando»:
+1. Marcar `[x]` el checkbox correspondiente en `ROADMAP.md`.
+2. Hacer commit con mensaje semántico (Conventional Commits), incluyendo el cambio
+   de `ROADMAP.md` en el **mismo commit** (regla 6 del repo).

@@ -47,3 +47,9 @@ mecánica de tokens del `09-sesion-tokens.md`.
 - Cada renovación reinicia la caducidad del refresh a ~15 días.
 - Tras 15 días sin actividad, el refresh caduca y la sesión se cierra sola.
 - Hay una estrategia decidida (cron u oportunista) para limpiar tokens expirados.
+
+## Al terminar (automatización)
+Cuando esta tarea cumpla todos los criterios de «Hecho cuando»:
+1. Marcar `[x]` el checkbox correspondiente en `ROADMAP.md`.
+2. Hacer commit con mensaje semántico (Conventional Commits), incluyendo el cambio
+   de `ROADMAP.md` en el **mismo commit** (regla 6 del repo).

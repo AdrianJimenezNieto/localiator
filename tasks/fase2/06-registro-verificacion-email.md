@@ -48,3 +48,9 @@ en `CLAUDE.md`).
 - Registro crea usuario no verificado y envía email vía Resend.
 - El enlace verifica la cuenta, es de un solo uso y caduca.
 - La entrada está validada/saneada y no se filtra la existencia de cuentas.
+
+## Al terminar (automatización)
+Cuando esta tarea cumpla todos los criterios de «Hecho cuando»:
+1. Marcar `[x]` el checkbox correspondiente en `ROADMAP.md`.
+2. Hacer commit con mensaje semántico (Conventional Commits), incluyendo el cambio
+   de `ROADMAP.md` en el **mismo commit** (regla 6 del repo).

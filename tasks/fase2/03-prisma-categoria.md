@@ -43,3 +43,9 @@ sobreingeniería para el MVP.
 ## Hecho cuando
 - `prisma validate` pasa con `Category` y sus relaciones con `Product` y `Lot`.
 - Está decidida y anotada la obligatoriedad de categoría en los artículos.
+
+## Al terminar (automatización)
+Cuando esta tarea cumpla todos los criterios de «Hecho cuando»:
+1. Marcar `[x]` el checkbox correspondiente en `ROADMAP.md`.
+2. Hacer commit con mensaje semántico (Conventional Commits), incluyendo el cambio
+   de `ROADMAP.md` en el **mismo commit** (regla 6 del repo).

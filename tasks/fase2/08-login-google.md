@@ -57,3 +57,9 @@ Permitir registro e inicio de sesión con la cuenta de Google, reutilizando el m
 - El modelo de vinculación (`OAuthAccount`) admite añadir otro proveedor sin migración
   disruptiva.
 - Secrets de Google fuera del repo, en `.env`.
+
+## Al terminar (automatización)
+Cuando esta tarea cumpla todos los criterios de «Hecho cuando»:
+1. Marcar `[x]` el checkbox correspondiente en `ROADMAP.md`.
+2. Hacer commit con mensaje semántico (Conventional Commits), incluyendo el cambio
+   de `ROADMAP.md` en el **mismo commit** (regla 6 del repo).

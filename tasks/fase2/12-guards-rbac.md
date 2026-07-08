@@ -50,3 +50,9 @@ al usuario) y añade la capa de autorización por rol.
 - Existe `@Roles()` + `RolesGuard` y las rutas admin devuelven `403` a un comprador.
 - Las rutas públicas están marcadas explícitamente; el resto exige autenticación.
 - Hay tests de acceso permitido, `401` y `403`.
+
+## Al terminar (automatización)
+Cuando esta tarea cumpla todos los criterios de «Hecho cuando»:
+1. Marcar `[x]` el checkbox correspondiente en `ROADMAP.md`.
+2. Hacer commit con mensaje semántico (Conventional Commits), incluyendo el cambio
+   de `ROADMAP.md` en el **mismo commit** (regla 6 del repo).

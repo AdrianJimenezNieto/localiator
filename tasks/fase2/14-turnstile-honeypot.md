@@ -54,3 +54,9 @@ recuperación): **Cloudflare Turnstile** (CAPTCHA invisible, decidido en `CLAUDE
 - Registro, login y recuperación exigen un token de Turnstile verificado en backend.
 - El honeypot descarta envíos automáticos antes de tocar la BD.
 - Site key en frontend y secret key en `.env`, fuera del repo.
+
+## Al terminar (automatización)
+Cuando esta tarea cumpla todos los criterios de «Hecho cuando»:
+1. Marcar `[x]` el checkbox correspondiente en `ROADMAP.md`.
+2. Hacer commit con mensaje semántico (Conventional Commits), incluyendo el cambio
+   de `ROADMAP.md` en el **mismo commit** (regla 6 del repo).

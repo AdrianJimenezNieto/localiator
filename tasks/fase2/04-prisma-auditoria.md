@@ -44,3 +44,9 @@ funcionalidad de negocio (eso está descartado) — es una traza de auditoría.
 ## Hecho cuando
 - `prisma validate` pasa con `AuditLog` y sus enums.
 - Está anotado explícitamente que la inserción de auditoría se hará transaccional en Fase 3.
+
+## Al terminar (automatización)
+Cuando esta tarea cumpla todos los criterios de «Hecho cuando»:
+1. Marcar `[x]` el checkbox correspondiente en `ROADMAP.md`.
+2. Hacer commit con mensaje semántico (Conventional Commits), incluyendo el cambio
+   de `ROADMAP.md` en el **mismo commit** (regla 6 del repo).

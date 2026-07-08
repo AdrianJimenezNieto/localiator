@@ -47,3 +47,9 @@ autenticación (registro, login, verificación de email, refresh tokens). El rol
 - El `schema.prisma` valida (`prisma validate`) con el modelo `User` y el enum `Role`.
 - Los valores de rol de `packages/shared` y del enum de Prisma están alineados y
   comentada la diferencia del rol `guest`.
+
+## Al terminar (automatización)
+Cuando esta tarea cumpla todos los criterios de «Hecho cuando»:
+1. Marcar `[x]` el checkbox correspondiente en `ROADMAP.md`.
+2. Hacer commit con mensaje semántico (Conventional Commits), incluyendo el cambio
+   de `ROADMAP.md` en el **mismo commit** (regla 6 del repo).
