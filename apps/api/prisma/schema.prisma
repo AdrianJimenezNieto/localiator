@@ -28,6 +28,8 @@ model User {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  auditLogs AuditLog[]
 }
 
 // Estado real del artículo. Muchos vienen de subastas con desperfectos, así que
@@ -113,4 +115,45 @@ model Lot {
   updatedAt DateTime @updatedAt
 
   @@index([categoryId])
+}
+
+// Auditoría de cambios sensibles (precio y stock), exigida por CLAUDE.md. No es
+// histórico de precios como funcionalidad de negocio (descartado) — es una traza
+// de quién cambió qué y cuándo.
+enum AuditEntity {
+  PRODUCT
+  LOT
+}
+
+enum AuditField {
+  PRICE
+  STOCK
+  DISCOUNT
+}
+
+// Tabla genérica en vez de una por entidad/atributo: más flexible a cambio de
+// perder integridad referencial fuerte en entityId (no es FK real, solo un id
+// lógico de Product o Lot según entityType).
+//
+// IMPORTANTE (Fase 3): la inserción de un AuditLog debe hacerse en la MISMA
+// transacción Prisma que el cambio de precio/stock que registra, para que
+// ambos se confirmen o fallen juntos (atomicidad).
+model AuditLog {
+  id String @id @default(cuid())
+
+  // Nullable: sobrevive al borrado del usuario (derecho al olvido RGPD) y permite
+  // cambios hechos por procesos automáticos sin actor humano.
+  actorId String?
+  actor   User?   @relation(fields: [actorId], references: [id])
+
+  entityType AuditEntity
+  entityId   String
+
+  field    AuditField
+  oldValue Int?
+  newValue Int?
+
+  createdAt DateTime @default(now())
+
+  @@index([entityType, entityId])
 }
