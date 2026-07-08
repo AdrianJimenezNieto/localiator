@@ -53,7 +53,7 @@ Objetivo: repos, entornos y tooling listos para desarrollar con seguridad desde 
 ## Fase 1 — Modelo de datos y autenticación
 Objetivo: usuarios, roles y sesión seguros + esquema base de catálogo.
 
-- [ ] Esquema Prisma: Usuario + roles (invitado / comprador / administrador)
+- [x] Esquema Prisma: Usuario + roles (invitado / comprador / administrador)
 - [ ] Esquema Prisma: Producto y Lote (entidades separadas, mismos atributos)
 - [ ] Esquema Prisma: Categoría
 - [ ] Esquema Prisma: tablas de auditoría (cambios de precio y stock)
