@@ -1,5 +1,8 @@
 // Tipos y constantes compartidos entre backend (NestJS) y frontend (React).
 
+// Fuente de verdad de los roles para el frontend. Ojo: `GUEST` no existe en la
+// BD (el enum `Role` de Prisma solo tiene BUYER y ADMIN); `guest` representa la
+// ausencia de usuario autenticado y solo vive aquí.
 export const UserRole = {
   GUEST: "guest",
   BUYER: "buyer",

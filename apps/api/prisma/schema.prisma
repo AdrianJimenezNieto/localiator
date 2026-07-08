@@ -9,3 +9,23 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+// Roles que SÍ se persisten en BD. Ojo con la asimetría: `packages/shared`
+// define además `guest`, pero `guest` no es una fila — es la ausencia de un
+// usuario autenticado. Por eso aquí solo existen BUYER y ADMIN.
+enum Role {
+  BUYER
+  ADMIN
+}
+
+model User {
+  id String @id @default(cuid()) // cuid: no revela el volumen de usuarios (a diferencia de un autoincremental) y es ordenable.
+
+  email           String    @unique
+  emailVerifiedAt DateTime? // null = email aún no verificado.
+  passwordHash    String? // nullable: un usuario de Google puede no tener contraseña local.
+  role            Role      @default(BUYER)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
