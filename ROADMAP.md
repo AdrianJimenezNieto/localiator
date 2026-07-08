@@ -57,7 +57,7 @@ Objetivo: usuarios, roles y sesión seguros + esquema base de catálogo.
 - [x] Esquema Prisma: Producto y Lote (entidades separadas, mismos atributos)
 - [x] Esquema Prisma: Categoría
 - [x] Esquema Prisma: tablas de auditoría (cambios de precio y stock)
-- [ ] Migraciones y seed de datos de prueba
+- [x] Migraciones y seed de datos de prueba
 - [ ] Registro con verificación de email (Resend)
 - [ ] Login con email/contraseña (hashing argon2/bcrypt)
 - [ ] Login social (Google + un segundo proveedor)

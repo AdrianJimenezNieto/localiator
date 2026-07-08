@@ -30,15 +30,28 @@ cp .env.example .env
 # 3. Levantar PostgreSQL
 docker compose up -d db
 
-# 4. Generar el cliente de Prisma
-pnpm --filter @localiator/api exec prisma generate
+# 4. Aplicar migraciones (crea las tablas y regenera el cliente de Prisma)
+pnpm --filter @localiator/api exec prisma migrate dev
 
-# 5. Arrancar backend + frontend en paralelo
+# 5. Poblar la BD con datos de prueba (idempotente, se puede repetir)
+pnpm --filter @localiator/api db:seed
+
+# 6. Arrancar backend + frontend en paralelo
 pnpm dev
 ```
 
 - API: http://localhost:3000 (health check en `/health`)
 - Web: http://localhost:5173
+
+## Base de datos (Prisma)
+- `prisma migrate dev` — uso en **desarrollo**: crea y aplica una nueva migración a
+  partir de los cambios en `schema.prisma`, y regenera el cliente. Pide confirmación
+  y puede resetear la BD si detecta drift.
+- `prisma migrate deploy` — uso en **CI/producción**: aplica las migraciones ya
+  existentes sin generar ninguna nueva ni pedir confirmación.
+- `pnpm --filter @localiator/api db:seed` — ejecuta `apps/api/prisma/seed.ts`. Usa
+  `upsert` en todos los modelos para ser **idempotente** (se puede correr varias
+  veces sin duplicar datos).
 
 ## Scripts (raíz)
 - `pnpm dev` — arranca api y web en paralelo
