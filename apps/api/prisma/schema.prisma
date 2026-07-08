@@ -29,3 +29,57 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+// Estado real del artículo. Muchos vienen de subastas con desperfectos, así que
+// la condición es un criterio de filtrado clave del catálogo (ver CLAUDE.md).
+enum ItemCondition {
+  NEW
+  LIKE_NEW
+  GOOD
+  FAIR
+  DAMAGED
+}
+
+// Producto individual y Lote son entidades SEPARADAS e independientes: comparten
+// forma (mismos atributos) pero NO hay relación de contención (un lote no contiene
+// productos). Se duplica el esquema a propósito para que puedan diverger en el
+// futuro sin una migración dolorosa. La categoría se añade en la tarea 03.
+
+model Product {
+  id String @id @default(cuid())
+
+  name        String
+  description String
+  condition   ItemCondition
+
+  // Dinero en céntimos (Int), nunca Float: la aritmética con enteros evita los
+  // errores de coma flotante al operar con euros.
+  priceCents    Int
+  discountCents Int @default(0)
+
+  stock Int @default(0)
+
+  // URLs de las fotos. La subida real es Fase 3; de momento un array escalar basta.
+  photos String[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Lot {
+  id String @id @default(cuid())
+
+  name        String
+  description String
+  condition   ItemCondition
+
+  priceCents    Int
+  discountCents Int @default(0)
+
+  stock Int @default(0)
+
+  photos String[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
