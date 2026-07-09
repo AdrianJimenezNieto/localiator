@@ -1,14 +1,23 @@
-import { UserRole } from '@localiator/shared'
+import { Link, Outlet } from 'react-router-dom'
 
+// Layout público común: cabecera + contenedor donde el router pinta cada página
+// (<Outlet/>). Es la base sobre la que cuelgan el catálogo, la ficha y (más
+// adelante) el backoffice.
 function App() {
-  console.log('hola mundo')
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center gap-2 bg-neutral-50 text-neutral-900">
-      <h1 className="text-3xl font-bold">Localiator</h1>
-      <p className="text-neutral-500">
-        Esqueleto listo. Roles disponibles: {Object.values(UserRole).join(', ')}
-      </p>
-    </main>
+    <div className="min-h-screen bg-neutral-50 text-neutral-900">
+      <header className="border-b border-neutral-200 bg-white">
+        <div className="mx-auto flex max-w-6xl items-center px-4 py-4">
+          <Link to="/" className="text-xl font-bold">
+            Localiator
+          </Link>
+        </div>
+      </header>
+
+      <main>
+        <Outlet />
+      </main>
+    </div>
   )
 }
 
