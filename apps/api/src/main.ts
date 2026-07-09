@@ -1,8 +1,10 @@
+import { resolve } from 'node:path';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
+import { StorageService } from './catalog/storage.service';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -24,6 +26,12 @@ async function bootstrap() {
   const origin =
     process.env.APP_URL ?? process.env.VITE_APP_URL ?? 'http://localhost:5173';
   app.enableCors({ origin, credentials: true });
+
+  // Sirve las fotos subidas como archivos estáticos bajo /uploads. Al ser
+  // middleware de Express (no pasa por los guards de Nest), las imágenes son
+  // públicas: cualquiera puede verlas, que es justo lo que necesita el catálogo.
+  const uploadDir = resolve(process.env.UPLOAD_DIR ?? 'uploads');
+  app.useStaticAssets(uploadDir, { prefix: StorageService.PUBLIC_PATH });
 
   await app.listen(process.env.API_PORT ?? 3000);
 }
