@@ -10,6 +10,7 @@ import { randomBytes } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { PasswordService } from './password.service';
+import { SessionService } from './session.service';
 import { generateToken, hashToken } from './crypto.util';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -30,6 +31,12 @@ const NEUTRAL_REGISTER_MESSAGE =
   'Si el email es válido, te hemos enviado un correo para verificar tu cuenta.';
 
 const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000; // 24 h
+const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000; // 1 h (ventana corta: más seguro)
+
+// Igual que en el registro: respuesta única, exista o no la cuenta, para no
+// revelar qué emails están registrados (anti-enumeración).
+const NEUTRAL_FORGOT_MESSAGE =
+  'Si el email corresponde a una cuenta, te hemos enviado un enlace para restablecer la contraseña.';
 
 // Mensaje ÚNICO ante cualquier fallo de login (email inexistente, contraseña
 // incorrecta, cuenta sin contraseña local): no revelar cuál de los tres falló
@@ -52,6 +59,7 @@ export class AuthService {
     private readonly password: PasswordService,
     private readonly mail: MailService,
     private readonly config: ConfigService,
+    private readonly session: SessionService,
   ) {
     this.dummyHash = this.password.hash(randomBytes(32).toString('hex'));
   }
@@ -195,6 +203,76 @@ export class AuthService {
     return {
       message: 'Email verificado correctamente. Ya puedes iniciar sesión.',
     };
+  }
+
+  // "Olvidé mi contraseña": SIEMPRE responde igual (exista o no la cuenta). Solo
+  // si el usuario existe se genera y envía el token de reseteo.
+  async forgotPassword(rawEmail: string): Promise<{ message: string }> {
+    const email = rawEmail.toLowerCase().trim();
+    const user = await this.prisma.user.findUnique({ where: { email } });
+
+    if (user) {
+      const { token, tokenHash } = generateToken();
+      await this.prisma.verificationToken.create({
+        data: {
+          userId: user.id,
+          type: VerificationTokenType.PASSWORD_RESET,
+          tokenHash,
+          expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS),
+        },
+      });
+
+      const appUrl =
+        this.config.get<string>('APP_URL') ?? 'http://localhost:5173';
+      const resetUrl = `${appUrl}/restablecer-password?token=${token}`;
+      await this.mail.sendPasswordReset(email, resetUrl);
+    }
+
+    return { message: NEUTRAL_FORGOT_MESSAGE };
+  }
+
+  // Restablece la contraseña con el token del email. Sirve también para que un
+  // usuario solo-Google (passwordHash null) ESTABLEZCA una contraseña local por
+  // primera vez (el flujo es idéntico).
+  async resetPassword(
+    rawToken: string,
+    newPassword: string,
+  ): Promise<{ message: string }> {
+    const tokenHash = hashToken(rawToken);
+    const record = await this.prisma.verificationToken.findUnique({
+      where: { tokenHash },
+    });
+
+    const invalid =
+      !record ||
+      record.type !== VerificationTokenType.PASSWORD_RESET ||
+      record.usedAt !== null ||
+      record.expiresAt < new Date();
+    if (invalid) {
+      throw new BadRequestException(
+        'El enlace de reseteo no es válido o ha caducado',
+      );
+    }
+
+    const passwordHash = await this.password.hash(newPassword);
+
+    // Actualizar la contraseña e invalidar el token, atómico.
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: record.userId },
+        data: { passwordHash },
+      }),
+      this.prisma.verificationToken.update({
+        where: { id: record.id },
+        data: { usedAt: new Date() },
+      }),
+    ]);
+
+    // Revocar TODAS las sesiones del usuario: si alguien había robado la cuenta,
+    // el cambio de contraseña lo expulsa. Decisión recomendada por el propio 11.
+    await this.session.revokeAllForUser(record.userId);
+
+    return { message: 'Contraseña actualizada. Vuelve a iniciar sesión.' };
   }
 
   // Genera un token, guarda SOLO su hash y envía el email con el token en claro

@@ -63,7 +63,7 @@ Objetivo: usuarios, roles y sesión seguros + esquema base de catálogo.
 - [x] Login social (Google + un segundo proveedor)
 - [x] Sesión con refresh token en cookie HttpOnly/Secure/SameSite + access token corto
 - [x] Sliding expiration ~15 días por inactividad
-- [ ] Recuperación de contraseña
+- [x] Recuperación de contraseña
 - [ ] Guards de rol en cada endpoint (RBAC)
 - [ ] Rate limiting global + endpoints sensibles (login, registro, recuperación)
 - [ ] Cloudflare Turnstile (CAPTCHA invisible) + honeypot en formularios de auth

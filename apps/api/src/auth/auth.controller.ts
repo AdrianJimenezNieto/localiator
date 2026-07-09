@@ -21,6 +21,8 @@ import type { RequestUser } from './jwt.strategy';
 import { RegisterDto } from './dto/register.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { LoginDto } from './dto/login.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 // Nombre de la cookie del refresh token. Path acotado a /auth: la cookie solo se
 // envía a los endpoints de sesión (refresh, logout), no a toda la API → menos
@@ -48,6 +50,19 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   verifyEmail(@Body() dto: VerifyEmailDto) {
     return this.authService.verifyEmail(dto.token);
+  }
+
+  // Respuesta neutra siempre (no revela si el email existe).
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto.email);
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto.token, dto.newPassword);
   }
 
   // Login local: confirma identidad, emite la sesión (cookie + access token) y

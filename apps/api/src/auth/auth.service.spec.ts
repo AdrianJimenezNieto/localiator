@@ -5,6 +5,7 @@ import { AuthService } from './auth.service';
 import { PasswordService } from './password.service';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { SessionService } from './session.service';
 import { ConfigService } from '@nestjs/config';
 
 // Mock de Prisma: solo los métodos que toca el servicio. Así los tests no
@@ -24,6 +25,7 @@ const mailMock = {
   sendPasswordReset: jest.fn(),
 };
 const passwordMock = { hash: jest.fn(), verify: jest.fn() };
+const sessionMock = { revokeAllForUser: jest.fn() };
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -36,6 +38,7 @@ describe('AuthService', () => {
         { provide: PrismaService, useValue: prismaMock },
         { provide: MailService, useValue: mailMock },
         { provide: PasswordService, useValue: passwordMock },
+        { provide: SessionService, useValue: sessionMock },
         {
           provide: ConfigService,
           useValue: { get: () => 'http://localhost:5173' },
@@ -277,6 +280,74 @@ describe('AuthService', () => {
       await expect(service.verifyEmail('x')).rejects.toBeInstanceOf(
         BadRequestException,
       );
+    });
+  });
+
+  describe('forgotPassword', () => {
+    it('genera token y envía email si el usuario existe', async () => {
+      prismaMock.user.findUnique.mockResolvedValue({ id: 'u1' });
+      prismaMock.verificationToken.create.mockResolvedValue({});
+
+      const res = await service.forgotPassword('A@B.com');
+
+      expect(prismaMock.verificationToken.create).toHaveBeenCalledTimes(1);
+      expect(mailMock.sendPasswordReset).toHaveBeenCalledTimes(1);
+      expect(res.message).toContain('Si el email');
+    });
+
+    it('respuesta neutra sin enviar nada si el usuario no existe', async () => {
+      prismaMock.user.findUnique.mockResolvedValue(null);
+
+      const res = await service.forgotPassword('nope@b.com');
+
+      expect(prismaMock.verificationToken.create).not.toHaveBeenCalled();
+      expect(mailMock.sendPasswordReset).not.toHaveBeenCalled();
+      // Mismo mensaje que si existiera: no se distingue.
+      expect(res.message).toContain('Si el email');
+    });
+  });
+
+  describe('resetPassword', () => {
+    const validToken = {
+      id: 't1',
+      userId: 'u1',
+      type: VerificationTokenType.PASSWORD_RESET,
+      usedAt: null,
+      expiresAt: new Date(Date.now() + 10000),
+    };
+
+    it('actualiza la contraseña, invalida el token y revoca sesiones', async () => {
+      prismaMock.verificationToken.findUnique.mockResolvedValue(validToken);
+      passwordMock.hash.mockResolvedValue('newhash');
+      prismaMock.$transaction.mockResolvedValue([]);
+
+      const res = await service.resetPassword('raw', 'newpassword1');
+
+      expect(passwordMock.hash).toHaveBeenCalledWith('newpassword1');
+      expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+      expect(sessionMock.revokeAllForUser).toHaveBeenCalledWith('u1');
+      expect(res.message).toContain('actualizada');
+    });
+
+    it('rechaza un token de tipo equivocado (p.ej. verificación de email)', async () => {
+      prismaMock.verificationToken.findUnique.mockResolvedValue({
+        ...validToken,
+        type: VerificationTokenType.EMAIL_VERIFICATION,
+      });
+      await expect(
+        service.resetPassword('raw', 'newpassword1'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(sessionMock.revokeAllForUser).not.toHaveBeenCalled();
+    });
+
+    it('rechaza un token caducado', async () => {
+      prismaMock.verificationToken.findUnique.mockResolvedValue({
+        ...validToken,
+        expiresAt: new Date(Date.now() - 1000),
+      });
+      await expect(
+        service.resetPassword('raw', 'newpassword1'),
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 });
