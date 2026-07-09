@@ -36,6 +36,11 @@ export const CONDITION_OPTIONS: { value: ItemCondition; label: string }[] = [
   ItemCondition.DAMAGED,
 ].map((value) => ({ value, label: CONDITION_LABELS[value] }));
 
+// Céntimos → euros como string editable (para prefijar formularios de edición).
+export function centsToEuros(cents: number): string {
+  return (cents / 100).toFixed(2);
+}
+
 // Euros (lo que teclea el usuario) → céntimos (lo que espera la API). Devuelve
 // undefined si el campo está vacío o no es un número válido.
 export function eurosToCents(euros: string): number | undefined {

@@ -1,34 +1,41 @@
 // Seed idempotente de datos de prueba (desarrollo). Usa `upsert` en todos los
 // modelos para poder re-ejecutarse sin duplicar filas.
 import { PrismaClient, ItemCondition, Role } from '@prisma/client';
+import * as argon2 from 'argon2';
 
 const prisma = new PrismaClient();
 
-// TODO(07-login-password): esto NO es un hash real. La tarea de login con
-// argon2/bcrypt aún no existe, así que nadie puede autenticarse con estos
-// usuarios todavía. Sustituir por un hash real cuando esa tarea se implemente
-// (regla del repo: nunca commitear contraseñas en claro).
-const TODO_HASH_PENDING = 'TODO_HASH_PENDING_ARGON2';
+// Contraseña de desarrollo para los usuarios del seed. Ya existe el login con
+// argon2 (Fase 1), así que guardamos un hash REAL (mismo algoritmo que
+// PasswordService: argon2id) y estos usuarios pueden autenticarse de verdad.
+// Es una credencial de DESARROLLO conocida, no un secreto: solo aplica a la BD
+// local sembrada con datos de prueba.
+const DEV_PASSWORD = 'Localiator123';
 
 async function main() {
+  const passwordHash = await argon2.hash(DEV_PASSWORD, {
+    type: argon2.argon2id,
+  });
+
   const admin = await prisma.user.upsert({
     where: { email: 'admin@localiator.dev' },
-    update: {},
+    // update también, para que re-sembrar arregle el hash de una BD antigua.
+    update: { passwordHash },
     create: {
       email: 'admin@localiator.dev',
       role: Role.ADMIN,
-      passwordHash: TODO_HASH_PENDING,
+      passwordHash,
       emailVerifiedAt: new Date(),
     },
   });
 
   const buyer = await prisma.user.upsert({
     where: { email: 'buyer@localiator.dev' },
-    update: {},
+    update: { passwordHash },
     create: {
       email: 'buyer@localiator.dev',
       role: Role.BUYER,
-      passwordHash: TODO_HASH_PENDING,
+      passwordHash,
       emailVerifiedAt: new Date(),
     },
   });

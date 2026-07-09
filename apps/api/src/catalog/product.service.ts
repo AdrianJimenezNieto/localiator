@@ -13,6 +13,16 @@ import { diffAuditableFields } from './audit.util';
 export class ProductService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // Listado de gestión (backoffice): TODOS los productos, incluidos los agotados
+  // (a diferencia del catálogo público, que solo muestra stock > 0). Incluye el
+  // nombre de la categoría para pintar la tabla sin una segunda consulta.
+  listAll() {
+    return this.prisma.product.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: { category: { select: { id: true, name: true } } },
+    });
+  }
+
   // Lectura por id, útil para poblar el formulario de edición del backoffice.
   async findOne(id: string) {
     const product = await this.prisma.product.findUnique({ where: { id } });
