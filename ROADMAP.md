@@ -66,7 +66,7 @@ Objetivo: usuarios, roles y sesión seguros + esquema base de catálogo.
 - [x] Recuperación de contraseña
 - [x] Guards de rol en cada endpoint (RBAC)
 - [x] Rate limiting global + endpoints sensibles (login, registro, recuperación)
-- [ ] Cloudflare Turnstile (CAPTCHA invisible) + honeypot en formularios de auth
+- [x] Cloudflare Turnstile (CAPTCHA invisible) + honeypot en formularios de auth
 
 ## Fase 2 — Catálogo y backoffice de admin
 Objetivo: dar de alta productos/lotes y que se vean/filtren en la web.

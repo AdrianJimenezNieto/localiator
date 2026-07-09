@@ -17,6 +17,7 @@ import type { CookieOptions, Request, Response } from 'express';
 import { AuthService, AuthenticatedUser } from './auth.service';
 import { SessionService, IssuedSession } from './session.service';
 import { Public } from './public.decorator';
+import { AntiBotGuard } from './anti-bot.guard';
 import { CurrentUser } from './current-user.decorator';
 import type { RequestUser } from './jwt.strategy';
 import { RegisterDto } from './dto/register.dto';
@@ -48,6 +49,7 @@ export class AuthController {
   // respuesta neutra que evita enumeración de usuarios.
   @Public()
   @Throttle(MODERATE_THROTTLE)
+  @UseGuards(AntiBotGuard)
   @Post('register')
   @HttpCode(HttpStatus.OK)
   register(@Body() dto: RegisterDto) {
@@ -65,6 +67,7 @@ export class AuthController {
   // Respuesta neutra siempre (no revela si el email existe).
   @Public()
   @Throttle(STRICT_THROTTLE)
+  @UseGuards(AntiBotGuard)
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
   forgotPassword(@Body() dto: ForgotPasswordDto) {
@@ -73,6 +76,7 @@ export class AuthController {
 
   @Public()
   @Throttle(STRICT_THROTTLE)
+  @UseGuards(AntiBotGuard)
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
   resetPassword(@Body() dto: ResetPasswordDto) {
@@ -83,6 +87,7 @@ export class AuthController {
   // devuelve el access token en el body para que el cliente lo guarde en memoria.
   @Public()
   @Throttle(STRICT_THROTTLE)
+  @UseGuards(AntiBotGuard)
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(

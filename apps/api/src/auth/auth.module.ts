@@ -10,6 +10,8 @@ import { GoogleStrategy } from './google.strategy';
 import { SessionService } from './session.service';
 import { SessionCleanupService } from './session-cleanup.service';
 import { JwtStrategy } from './jwt.strategy';
+import { TurnstileService } from './turnstile.service';
+import { AntiBotGuard } from './anti-bot.guard';
 
 // PrismaModule y ConfigModule son globales, por eso no hace falta importarlos.
 // MailModule → MailService; PassportModule → estrategias (Google/JWT); JwtModule
@@ -35,6 +37,8 @@ import { JwtStrategy } from './jwt.strategy';
     SessionService,
     SessionCleanupService,
     JwtStrategy,
+    TurnstileService,
+    AntiBotGuard,
   ],
   exports: [PasswordService, SessionService],
 })
