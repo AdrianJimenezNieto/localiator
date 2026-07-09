@@ -1,19 +1,52 @@
 import { useSearchParams } from 'react-router-dom';
-import type { CatalogItem, Paginated } from '@localiator/shared';
+import type { CatalogItem, ItemCondition, Paginated } from '@localiator/shared';
 import { toQuery } from '../lib/api';
 import { useApi } from '../lib/useApi';
+import { eurosToCents } from '../lib/format';
 import { ProductCard } from '../components/ProductCard';
 import { Pagination } from '../components/Pagination';
+import { FiltersPanel, type CatalogFilters } from '../components/FiltersPanel';
 
 const PAGE_SIZE = 12;
 
 export function CatalogPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  // La página vive en la URL (?page=N): recargar/compartir la conserva.
-  const page = Math.max(1, Number(searchParams.get('page') ?? '1') || 1);
 
-  const path = `/catalog/products${toQuery({ page, pageSize: PAGE_SIZE })}`;
-  const { data, error, loading } = useApi<Paginated<CatalogItem>>(path);
+  // La página y todos los filtros viven en la URL: compartir/recargar los conserva.
+  const page = Math.max(1, Number(searchParams.get('page') ?? '1') || 1);
+  const filters: CatalogFilters = {
+    q: searchParams.get('q') ?? '',
+    categoryId: searchParams.get('categoryId') ?? '',
+    minPrice: searchParams.get('minPrice') ?? '',
+    maxPrice: searchParams.get('maxPrice') ?? '',
+    conditions: searchParams.getAll('condition') as ItemCondition[],
+  };
+
+  // Un único flujo de datos: los filtros construyen el path, y useApi re-pide al
+  // cambiar. La conversión euros→céntimos ocurre aquí (la API trabaja en céntimos).
+  const query = toQuery({
+    page,
+    pageSize: PAGE_SIZE,
+    q: filters.q,
+    categoryId: filters.categoryId,
+    minPriceCents: eurosToCents(filters.minPrice),
+    maxPriceCents: eurosToCents(filters.maxPrice),
+    condition: filters.conditions,
+  });
+  const { data, error, loading } = useApi<Paginated<CatalogItem>>(
+    `/catalog/products${query}`,
+  );
+
+  // Escribe los filtros en la URL SIN page: cambiar un filtro resetea a la página 1.
+  function applyFilters(next: CatalogFilters) {
+    const params = new URLSearchParams();
+    if (next.q) params.set('q', next.q);
+    if (next.categoryId) params.set('categoryId', next.categoryId);
+    if (next.minPrice) params.set('minPrice', next.minPrice);
+    if (next.maxPrice) params.set('maxPrice', next.maxPrice);
+    for (const c of next.conditions) params.append('condition', c);
+    setSearchParams(params);
+  }
 
   function goToPage(next: number) {
     const params = new URLSearchParams(searchParams);
@@ -26,35 +59,48 @@ export function CatalogPage() {
     <div className="mx-auto max-w-6xl px-4 py-8">
       <h1 className="mb-6 text-2xl font-bold text-neutral-900">Catálogo</h1>
 
-      {loading && <CatalogSkeleton />}
-
-      {!loading && error && (
-        <p className="rounded-md bg-red-50 p-4 text-red-700" role="alert">
-          {error}
-        </p>
-      )}
-
-      {!loading && !error && data && data.items.length === 0 && (
-        <p className="py-16 text-center text-neutral-500">
-          No hay artículos en el catálogo todavía.
-        </p>
-      )}
-
-      {!loading && !error && data && data.items.length > 0 && (
-        <>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-            {data.items.map((item) => (
-              <ProductCard key={item.id} item={item} />
-            ))}
-          </div>
-          <Pagination
-            page={data.page}
-            pageSize={data.pageSize}
-            total={data.total}
-            onPageChange={goToPage}
+      <div className="grid gap-8 lg:grid-cols-[16rem_1fr]">
+        <aside className="lg:sticky lg:top-4 lg:self-start">
+          <FiltersPanel
+            filters={filters}
+            resultCount={data?.total ?? null}
+            onChange={(patch) => applyFilters({ ...filters, ...patch })}
+            onClear={() => setSearchParams(new URLSearchParams())}
           />
-        </>
-      )}
+        </aside>
+
+        <section>
+          {loading && <CatalogSkeleton />}
+
+          {!loading && error && (
+            <p className="rounded-md bg-red-50 p-4 text-red-700" role="alert">
+              {error}
+            </p>
+          )}
+
+          {!loading && !error && data && data.items.length === 0 && (
+            <p className="py-16 text-center text-neutral-500">
+              No hay artículos que coincidan con la búsqueda.
+            </p>
+          )}
+
+          {!loading && !error && data && data.items.length > 0 && (
+            <>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                {data.items.map((item) => (
+                  <ProductCard key={item.id} item={item} />
+                ))}
+              </div>
+              <Pagination
+                page={data.page}
+                pageSize={data.pageSize}
+                total={data.total}
+                onPageChange={goToPage}
+              />
+            </>
+          )}
+        </section>
+      </div>
     </div>
   );
 }
@@ -63,8 +109,8 @@ export function CatalogPage() {
 // en blanco mientras llega la respuesta.
 function CatalogSkeleton() {
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-      {Array.from({ length: PAGE_SIZE }).map((_, i) => (
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+      {Array.from({ length: 6 }).map((_, i) => (
         <div
           key={i}
           className="flex flex-col overflow-hidden rounded-lg border border-neutral-200"
