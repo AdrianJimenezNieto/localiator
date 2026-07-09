@@ -1,4 +1,4 @@
-# Verificación Fase 2 — Autenticación (tareas 06–14)
+# Verificación Fase 1 — Autenticación (tareas 06–14)
 
 Guía para **revisar y entender** el sistema de auth que se ha implementado, y para
 **verificar** que funciona. Léela de arriba abajo: primero el mapa mental (cómo
