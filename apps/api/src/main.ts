@@ -1,10 +1,17 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // trust proxy = 1: en producción la API va detrás de Nginx Proxy Manager. Sin
+  // esto, Express vería la IP del proxy en todas las peticiones y el rate limiting
+  // (por IP) sería inútil o bloquearía a todos. Con '1' confía en el primer proxy
+  // y usa la IP real de X-Forwarded-For.
+  app.set('trust proxy', 1);
 
   // Lee las cookies (req.cookies): necesario para el refresh token de sesión.
   app.use(cookieParser());

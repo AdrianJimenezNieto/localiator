@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -17,15 +18,21 @@ import { RolesGuard } from './auth/roles.guard';
     }),
     // Habilita las tareas @Cron (limpieza de sesiones caducadas, tarea 10).
     ScheduleModule.forRoot(),
+    // Rate limiting global: 100 peticiones por minuto y por IP. Los endpoints
+    // sensibles de auth aprietan más con @Throttle. Store en memoria (una sola
+    // instancia en el VPS); si se escalara a varias haría falta Redis.
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     PrismaModule,
     AuthModule,
   ],
   controllers: [AppController],
   providers: [
     AppService,
-    // Guards GLOBALES (denegar por defecto). Orden: primero autenticar
-    // (JwtAuthGuard pone req.user o deja pasar las @Public), luego autorizar por
-    // rol (RolesGuard). El orden de registro es el orden de ejecución.
+    // Guards GLOBALES. Orden = orden de ejecución:
+    //  1. ThrottlerGuard: frena por frecuencia ANTES de tocar auth/BD.
+    //  2. JwtAuthGuard: autentica (o deja pasar las @Public).
+    //  3. RolesGuard: autoriza por rol.
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
