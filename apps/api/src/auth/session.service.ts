@@ -154,6 +154,18 @@ export class SessionService {
     });
   }
 
+  // Borra los refresh tokens ya CADUCADOS (limpieza de la tarea 10). No borramos
+  // los revocados-pero-no-caducados: mientras siguen dentro de su ventana de
+  // validez, conservarlos permite detectar su reutilización (token robado). Una
+  // vez caducados ya no aportan nada y se eliminan para no engordar la tabla.
+  // Devuelve cuántos se borraron (para el log del cron).
+  async deleteExpired(now: Date = new Date()): Promise<number> {
+    const { count } = await this.prisma.refreshToken.deleteMany({
+      where: { expiresAt: { lt: now } },
+    });
+    return count;
+  }
+
   private signAccessToken(user: AuthenticatedUser): Promise<string> {
     const payload: AccessTokenPayload = {
       sub: user.id,
