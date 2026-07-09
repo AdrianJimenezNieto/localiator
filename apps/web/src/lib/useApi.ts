@@ -4,6 +4,9 @@ import { apiGet, ApiError } from './api';
 interface AsyncState<T> {
   data: T | null;
   error: string | null;
+  // Código HTTP del error (p. ej. 404), para que la UI distinga "no existe" de un
+  // fallo genérico. null si no hubo error o no fue un ApiError.
+  status: number | null;
   loading: boolean;
 }
 
@@ -17,6 +20,7 @@ export function useApi<T>(path: string): AsyncState<T> {
   const [state, setState] = useState<AsyncState<T>>({
     data: null,
     error: null,
+    status: null,
     loading: true,
   });
 
@@ -26,13 +30,15 @@ export function useApi<T>(path: string): AsyncState<T> {
 
     apiGet<T>(path)
       .then((data) => {
-        if (!cancelled) setState({ data, error: null, loading: false });
+        if (!cancelled)
+          setState({ data, error: null, status: null, loading: false });
       })
       .catch((err: unknown) => {
         if (cancelled) return;
         const message =
           err instanceof ApiError ? err.message : 'No se pudo cargar';
-        setState({ data: null, error: message, loading: false });
+        const status = err instanceof ApiError ? err.status : null;
+        setState({ data: null, error: message, status, loading: false });
       });
 
     return () => {

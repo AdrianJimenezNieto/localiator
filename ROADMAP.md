@@ -77,7 +77,7 @@ Objetivo: dar de alta productos/lotes y que se vean/filtren en la web.
 - [x] Registro de auditoría al cambiar precio/stock
 - [x] Listado público de catálogo con paginación
 - [x] Búsqueda y filtros (categoría, precio, estado)
-- [ ] Ficha de producto/lote (vista pública)
+- [x] Ficha de producto/lote (vista pública)
 - [ ] Diseño responsive del catálogo y ficha
 - [ ] Panel de administración (backoffice) básico
 
