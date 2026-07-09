@@ -11,6 +11,7 @@ const prismaMock = {
     findUnique: jest.fn(),
     update: jest.fn(),
     updateMany: jest.fn(),
+    deleteMany: jest.fn(),
   },
 };
 const jwtMock = { signAsync: jest.fn() };
@@ -115,5 +116,17 @@ describe('SessionService', () => {
     await expect(service.rotate('nope')).rejects.toBeInstanceOf(
       UnauthorizedException,
     );
+  });
+
+  it('deleteExpired borra solo los refresh caducados y devuelve el recuento', async () => {
+    prismaMock.refreshToken.deleteMany.mockResolvedValue({ count: 3 });
+    const now = new Date('2026-01-01T00:00:00Z');
+
+    const deleted = await service.deleteExpired(now);
+
+    expect(deleted).toBe(3);
+    expect(prismaMock.refreshToken.deleteMany).toHaveBeenCalledWith({
+      where: { expiresAt: { lt: now } },
+    });
   });
 });
