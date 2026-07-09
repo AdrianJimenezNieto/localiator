@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { AuditEntity } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -6,6 +7,7 @@ import {
   assertCategoryExists,
   assertDiscountNotAbovePrice,
 } from './catalog-support';
+import { diffAuditableFields } from './audit.util';
 
 @Injectable()
 export class ProductService {
@@ -37,7 +39,8 @@ export class ProductService {
     });
   }
 
-  async update(id: string, dto: UpdateProductDto) {
+  // `actorId` = id del admin autenticado (lo pasa el controller desde @CurrentUser).
+  async update(id: string, dto: UpdateProductDto, actorId: string) {
     const current = await this.findOne(id);
 
     if (dto.categoryId) {
@@ -50,20 +53,42 @@ export class ProductService {
     const nextDiscount = dto.discountCents ?? current.discountCents;
     assertDiscountNotAbovePrice(nextPrice, nextDiscount);
 
-    return this.prisma.product.update({
-      where: { id },
-      data: {
-        ...(dto.name !== undefined && { name: dto.name }),
-        ...(dto.description !== undefined && { description: dto.description }),
-        ...(dto.condition !== undefined && { condition: dto.condition }),
-        ...(dto.priceCents !== undefined && { priceCents: dto.priceCents }),
-        ...(dto.discountCents !== undefined && {
-          discountCents: dto.discountCents,
-        }),
-        ...(dto.stock !== undefined && { stock: dto.stock }),
-        ...(dto.categoryId !== undefined && { categoryId: dto.categoryId }),
-        ...(dto.photos !== undefined && { photos: dto.photos }),
-      },
+    const data = {
+      ...(dto.name !== undefined && { name: dto.name }),
+      ...(dto.description !== undefined && { description: dto.description }),
+      ...(dto.condition !== undefined && { condition: dto.condition }),
+      ...(dto.priceCents !== undefined && { priceCents: dto.priceCents }),
+      ...(dto.discountCents !== undefined && {
+        discountCents: dto.discountCents,
+      }),
+      ...(dto.stock !== undefined && { stock: dto.stock }),
+      ...(dto.categoryId !== undefined && { categoryId: dto.categoryId }),
+      ...(dto.photos !== undefined && { photos: dto.photos }),
+    };
+
+    // Transacción: el update de la entidad y las entradas de auditoría se confirman
+    // o fallan juntos. Así es imposible cambiar precio/stock sin dejar traza
+    // (requisito de CLAUDE.md). Releemos DENTRO de la transacción para comparar
+    // contra el valor exacto en el momento de escribir.
+    return this.prisma.$transaction(async (tx) => {
+      const before = await tx.product.findUniqueOrThrow({ where: { id } });
+      const updated = await tx.product.update({ where: { id }, data });
+
+      const changes = diffAuditableFields(before, updated);
+      if (changes.length > 0) {
+        await tx.auditLog.createMany({
+          data: changes.map((change) => ({
+            actorId,
+            entityType: AuditEntity.PRODUCT,
+            entityId: id,
+            field: change.field,
+            oldValue: change.oldValue,
+            newValue: change.newValue,
+          })),
+        });
+      }
+
+      return updated;
     });
   }
 

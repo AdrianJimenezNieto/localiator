@@ -8,12 +8,19 @@ import { PrismaService } from '../prisma/prisma.service';
 const prismaMock = {
   lot: {
     findUnique: jest.fn(),
+    findUniqueOrThrow: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
     delete: jest.fn(),
   },
   category: { findUnique: jest.fn() },
+  auditLog: { createMany: jest.fn() },
+  $transaction: jest.fn(),
 };
+
+// Ver la nota en product.service.spec: la implementación se fija en beforeEach
+// para no autorreferenciar el tipo del mock.
+type TxCallback = (tx: typeof prismaMock) => unknown;
 
 const baseDto = {
   name: 'Palé de electrónica',
@@ -30,6 +37,9 @@ describe('LotService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    prismaMock.$transaction.mockImplementation((cb: TxCallback) =>
+      cb(prismaMock),
+    );
     const moduleRef = await Test.createTestingModule({
       providers: [LotService, { provide: PrismaService, useValue: prismaMock }],
     }).compile();
@@ -73,9 +83,44 @@ describe('LotService', () => {
     });
 
     await expect(
-      service.update('l1', { discountCents: 25000 }),
+      service.update('l1', { discountCents: 25000 }, 'admin-1'),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(prismaMock.lot.update).not.toHaveBeenCalled();
+  });
+
+  it('registra un AuditLog al cambiar el precio del lote', async () => {
+    prismaMock.lot.findUnique.mockResolvedValue({
+      id: 'l1',
+      priceCents: 20000,
+      discountCents: 0,
+      stock: 1,
+    });
+    prismaMock.lot.findUniqueOrThrow.mockResolvedValue({
+      priceCents: 20000,
+      discountCents: 0,
+      stock: 1,
+    });
+    prismaMock.lot.update.mockResolvedValue({
+      id: 'l1',
+      priceCents: 18000,
+      discountCents: 0,
+      stock: 1,
+    });
+
+    await service.update('l1', { priceCents: 18000 }, 'admin-1');
+
+    expect(prismaMock.auditLog.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          actorId: 'admin-1',
+          entityType: 'LOT',
+          entityId: 'l1',
+          field: 'PRICE',
+          oldValue: 20000,
+          newValue: 18000,
+        },
+      ],
+    });
   });
 
   it('devuelve 404 si el lote no existe', async () => {

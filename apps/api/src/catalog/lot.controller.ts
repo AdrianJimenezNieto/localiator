@@ -9,6 +9,8 @@ import {
 } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { Roles } from '../auth/roles.decorator';
+import { CurrentUser } from '../auth/current-user.decorator';
+import type { RequestUser } from '../auth/jwt.strategy';
 import { LotService } from './lot.service';
 import { CreateLotDto } from './dto/create-lot.dto';
 import { UpdateLotDto } from './dto/update-lot.dto';
@@ -31,8 +33,12 @@ export class LotController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateLotDto) {
-    return this.lots.update(id, dto);
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateLotDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.lots.update(id, dto, user.userId);
   }
 
   @Delete(':id')
