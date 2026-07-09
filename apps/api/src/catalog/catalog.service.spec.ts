@@ -103,4 +103,56 @@ describe('CatalogService', () => {
     expect(result.items[0].kind).toBe('lot');
     expect(prismaMock.product.findMany).not.toHaveBeenCalled();
   });
+
+  describe('filtros (07)', () => {
+    function whereOfLastFindMany(): Record<string, unknown> {
+      const call = prismaMock.product.findMany.mock.calls.at(-1) as [
+        { where: Record<string, unknown> },
+      ];
+      return call[0].where;
+    }
+
+    beforeEach(() => {
+      prismaMock.product.findMany.mockResolvedValue([]);
+      prismaMock.product.count.mockResolvedValue(0);
+    });
+
+    it('busca por texto (case-insensitive) en nombre y descripción', async () => {
+      await service.listProducts({ q: 'taladro' });
+
+      expect(whereOfLastFindMany()).toEqual({
+        stock: { gt: 0 },
+        OR: [
+          { name: { contains: 'taladro', mode: 'insensitive' } },
+          { description: { contains: 'taladro', mode: 'insensitive' } },
+        ],
+      });
+    });
+
+    it('filtra por categoría', async () => {
+      await service.listProducts({ categoryId: 'c1' });
+      expect(whereOfLastFindMany()).toMatchObject({ categoryId: 'c1' });
+    });
+
+    it('filtra por rango de precio (gte/lte)', async () => {
+      await service.listProducts({ minPriceCents: 1000, maxPriceCents: 5000 });
+      expect(whereOfLastFindMany()).toMatchObject({
+        priceCents: { gte: 1000, lte: 5000 },
+      });
+    });
+
+    it('filtra por varios estados (in)', async () => {
+      await service.listProducts({
+        condition: [ItemCondition.NEW, ItemCondition.GOOD],
+      });
+      expect(whereOfLastFindMany()).toMatchObject({
+        condition: { in: [ItemCondition.NEW, ItemCondition.GOOD] },
+      });
+    });
+
+    it('sin filtros solo aplica la base de vendibles', async () => {
+      await service.listProducts({});
+      expect(whereOfLastFindMany()).toEqual({ stock: { gt: 0 } });
+    });
+  });
 });
