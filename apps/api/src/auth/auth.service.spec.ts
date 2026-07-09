@@ -16,6 +16,7 @@ const prismaMock = {
     create: jest.fn(),
     update: jest.fn(),
   },
+  oAuthAccount: { findUnique: jest.fn(), create: jest.fn() },
   $transaction: jest.fn(),
 };
 const mailMock = {
@@ -153,6 +154,78 @@ describe('AuthService', () => {
       await expect(
         service.login({ email: 'a@b.com', password: 'whatever12' }),
       ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+  });
+
+  describe('validateOAuthLogin (Google)', () => {
+    const input = {
+      provider: 'google',
+      providerAccountId: 'sub-123',
+      email: 'G@Mail.com',
+    };
+
+    it('hace login directo si el OAuthAccount ya existe', async () => {
+      prismaMock.oAuthAccount.findUnique.mockResolvedValue({
+        user: {
+          id: 'u1',
+          email: 'g@mail.com',
+          role: 'BUYER',
+          emailVerifiedAt: new Date(),
+        },
+      });
+
+      const res = await service.validateOAuthLogin(input);
+
+      expect(prismaMock.user.create).not.toHaveBeenCalled();
+      expect(prismaMock.oAuthAccount.create).not.toHaveBeenCalled();
+      expect(res.id).toBe('u1');
+    });
+
+    it('vincula al usuario existente por email (no duplica cuenta)', async () => {
+      prismaMock.oAuthAccount.findUnique.mockResolvedValue(null);
+      prismaMock.user.findUnique.mockResolvedValue({
+        id: 'u2',
+        email: 'g@mail.com',
+        role: 'BUYER',
+        emailVerifiedAt: new Date(),
+      });
+
+      const res = await service.validateOAuthLogin(input);
+
+      expect(prismaMock.oAuthAccount.create).toHaveBeenCalledWith({
+        data: {
+          provider: 'google',
+          providerAccountId: 'sub-123',
+          userId: 'u2',
+        },
+      });
+      expect(prismaMock.user.create).not.toHaveBeenCalled();
+      expect(res.id).toBe('u2');
+    });
+
+    it('crea usuario verificado y su OAuthAccount si no existe ninguno', async () => {
+      prismaMock.oAuthAccount.findUnique.mockResolvedValue(null);
+      prismaMock.user.findUnique.mockResolvedValue(null);
+      prismaMock.user.create.mockResolvedValue({
+        id: 'u3',
+        email: 'g@mail.com',
+        role: 'BUYER',
+        emailVerifiedAt: new Date(),
+      });
+
+      const res = await service.validateOAuthLogin(input);
+
+      expect(prismaMock.user.create).toHaveBeenCalledWith({
+        data: {
+          email: 'g@mail.com', // normalizado a minúsculas
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- expect.any es `any` por diseño
+          emailVerifiedAt: expect.any(Date), // Google ya lo verificó
+          oauthAccounts: {
+            create: { provider: 'google', providerAccountId: 'sub-123' },
+          },
+        },
+      });
+      expect(res.emailVerified).toBe(true);
     });
   });
 

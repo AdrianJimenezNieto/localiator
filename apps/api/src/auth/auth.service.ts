@@ -74,12 +74,7 @@ export class AuthService {
     // pero no podrá comprar/pujar hasta verificar el email. El flag viaja al
     // cliente para que la UI lo refleje; la restricción real se aplicará en los
     // endpoints de compra (Fase 3).
-    return {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      emailVerified: user.emailVerifiedAt !== null,
-    };
+    return this.toAuthenticatedUser(user);
   }
 
   async register(dto: RegisterDto): Promise<{ message: string }> {
@@ -102,6 +97,66 @@ export class AuthService {
 
     await this.issueEmailVerification(user.id, email);
     return { message: NEUTRAL_REGISTER_MESSAGE };
+  }
+
+  // Resuelve (o crea) el User local a partir de una identidad de Google. Se llama
+  // desde GoogleStrategy.validate tras el callback de OAuth.
+  //
+  // Estrategia de vinculación (account linking):
+  //  1. Si ya existe el OAuthAccount (provider, sub) → login directo.
+  //  2. Si no, pero hay un User con ese email → se VINCULA (creamos el
+  //     OAuthAccount) para no duplicar la cuenta de la misma persona. Es seguro
+  //     porque Google ya ha verificado ese email.
+  //  3. Si no existe ninguno → creamos User (emailVerifiedAt = now, Google ya lo
+  //     verificó) y su OAuthAccount en la misma operación.
+  async validateOAuthLogin(input: {
+    provider: string;
+    providerAccountId: string;
+    email: string;
+  }): Promise<AuthenticatedUser> {
+    const { provider, providerAccountId } = input;
+    const email = input.email.toLowerCase().trim();
+
+    const account = await this.prisma.oAuthAccount.findUnique({
+      where: { provider_providerAccountId: { provider, providerAccountId } },
+      include: { user: true },
+    });
+    if (account) {
+      return this.toAuthenticatedUser(account.user);
+    }
+
+    const linked = await this.prisma.user.findUnique({ where: { email } });
+    if (linked) {
+      await this.prisma.oAuthAccount.create({
+        data: { provider, providerAccountId, userId: linked.id },
+      });
+      return this.toAuthenticatedUser(linked);
+    }
+
+    // Usuario nuevo: sin contraseña local (passwordHash queda null); podrá
+    // establecer una más adelante vía "recuperación de contraseña" (tarea 11).
+    const created = await this.prisma.user.create({
+      data: {
+        email,
+        emailVerifiedAt: new Date(),
+        oauthAccounts: { create: { provider, providerAccountId } },
+      },
+    });
+    return this.toAuthenticatedUser(created);
+  }
+
+  private toAuthenticatedUser(user: {
+    id: string;
+    email: string;
+    role: string;
+    emailVerifiedAt: Date | null;
+  }): AuthenticatedUser {
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      emailVerified: user.emailVerifiedAt !== null,
+    };
   }
 
   async verifyEmail(rawToken: string): Promise<{ message: string }> {

@@ -31,6 +31,29 @@ model User {
 
   auditLogs          AuditLog[]
   verificationTokens VerificationToken[]
+  oauthAccounts      OAuthAccount[]
+}
+
+// Vincula una identidad de un proveedor externo (Google, y en el futuro otros) a
+// un User local. Tabla genérica en vez de columnas googleId/githubId en User: así
+// añadir un proveedor no toca el modelo User ni requiere una migración disruptiva
+// (deja la puerta abierta como pide CLAUDE.md).
+//
+// La unicidad (provider, providerAccountId) garantiza que una misma cuenta de
+// Google no se vincule a dos usuarios distintos.
+model OAuthAccount {
+  id String @id @default(cuid())
+
+  provider          String // "google" (minúscula, estable).
+  providerAccountId String // el `sub` de Google: id único e inmutable del usuario.
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
 }
 
 // Tokens de un solo uso para verificación de email (06) y, más adelante,
