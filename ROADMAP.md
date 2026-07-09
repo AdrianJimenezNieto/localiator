@@ -73,7 +73,7 @@ Objetivo: dar de alta productos/lotes y que se vean/filtren en la web.
 
 - [ ] CRUD de productos y lotes (solo admin)
 - [ ] Subida y gestión de fotos + estado real del artículo
-- [ ] Gestión de categorías
+- [x] Gestión de categorías
 - [ ] Registro de auditoría al cambiar precio/stock
 - [ ] Listado público de catálogo con paginación
 - [ ] Búsqueda y filtros (categoría, precio, estado)
