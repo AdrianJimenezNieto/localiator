@@ -21,3 +21,8 @@ services:
 
 volumes:
   pgdata:
+  # Fotos del catálogo subidas por el admin. En dev la API corre en local y escribe
+  # en ./apps/api/uploads (gitignored); este volumen queda declarado para cuando la
+  # API se contenedorice en Fase 4, montándolo en UPLOAD_DIR para que las fotos
+  # persistan al recrear el contenedor.
+  uploads:

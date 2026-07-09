@@ -72,7 +72,7 @@ Objetivo: usuarios, roles y sesión seguros + esquema base de catálogo.
 Objetivo: dar de alta productos/lotes y que se vean/filtren en la web.
 
 - [x] CRUD de productos y lotes (solo admin)
-- [ ] Subida y gestión de fotos + estado real del artículo
+- [x] Subida y gestión de fotos + estado real del artículo
 - [x] Gestión de categorías
 - [x] Registro de auditoría al cambiar precio/stock
 - [ ] Listado público de catálogo con paginación

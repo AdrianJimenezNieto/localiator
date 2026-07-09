@@ -28,3 +28,6 @@ coverage/
 
 # Prisma
 apps/api/prisma/*.db
+
+# Fotos subidas (se sirven desde disco; en producción es un volumen Docker)
+apps/api/uploads/
