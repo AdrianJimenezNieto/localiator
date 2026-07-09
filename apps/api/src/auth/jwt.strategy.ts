@@ -21,8 +21,10 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
+      // || (no ??): en .env el secreto puede venir como cadena VACÍA; passport
+      // exige un valor no vacío o no arranca. El fallback es solo para desarrollo.
       secretOrKey:
-        config.get<string>('JWT_ACCESS_SECRET') ?? 'dev-insecure-secret',
+        config.get<string>('JWT_ACCESS_SECRET') || 'dev-insecure-secret',
     });
   }
 

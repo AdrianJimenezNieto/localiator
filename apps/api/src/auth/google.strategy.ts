@@ -17,12 +17,16 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     private readonly authService: AuthService,
   ) {
     super({
+      // || (no ??): en .env estas claves suelen venir VACÍAS hasta que Adrián
+      // configure Google; passport exige valores no vacíos para instanciarse. Con
+      // los placeholders la app arranca, pero el login con Google no funcionará
+      // hasta poner credenciales reales.
       clientID:
-        config.get<string>('GOOGLE_CLIENT_ID') ?? 'placeholder-client-id',
+        config.get<string>('GOOGLE_CLIENT_ID') || 'placeholder-client-id',
       clientSecret:
-        config.get<string>('GOOGLE_CLIENT_SECRET') ?? 'placeholder-secret',
+        config.get<string>('GOOGLE_CLIENT_SECRET') || 'placeholder-secret',
       callbackURL:
-        config.get<string>('GOOGLE_CALLBACK_URL') ??
+        config.get<string>('GOOGLE_CALLBACK_URL') ||
         'http://localhost:3000/auth/google/callback',
       scope: ['email', 'profile'],
     });

@@ -15,7 +15,7 @@ import { ConfigService } from '@nestjs/config';
 import type { CookieOptions, Request, Response } from 'express';
 import { AuthService, AuthenticatedUser } from './auth.service';
 import { SessionService, IssuedSession } from './session.service';
-import { JwtAuthGuard } from './jwt-auth.guard';
+import { Public } from './public.decorator';
 import { CurrentUser } from './current-user.decorator';
 import type { RequestUser } from './jwt.strategy';
 import { RegisterDto } from './dto/register.dto';
@@ -40,12 +40,14 @@ export class AuthController {
 
   // 200 (no 201): no revelamos si se ha creado o no un recurso, coherente con la
   // respuesta neutra que evita enumeración de usuarios.
+  @Public()
   @Post('register')
   @HttpCode(HttpStatus.OK)
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
 
+  @Public()
   @Post('verify-email')
   @HttpCode(HttpStatus.OK)
   verifyEmail(@Body() dto: VerifyEmailDto) {
@@ -53,12 +55,14 @@ export class AuthController {
   }
 
   // Respuesta neutra siempre (no revela si el email existe).
+  @Public()
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto.email);
   }
 
+  @Public()
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
   resetPassword(@Body() dto: ResetPasswordDto) {
@@ -67,6 +71,7 @@ export class AuthController {
 
   // Login local: confirma identidad, emite la sesión (cookie + access token) y
   // devuelve el access token en el body para que el cliente lo guarde en memoria.
+  @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(
@@ -81,7 +86,9 @@ export class AuthController {
 
   // Renueva el access token usando el refresh de la cookie y ROTA el refresh
   // (emite uno nuevo, revoca el anterior). Ver detección de reutilización en
-  // SessionService.
+  // SessionService. Es @Public porque el cliente aún no tiene access token
+  // válido (por eso viene a renovar); la autenticación aquí es la cookie.
+  @Public()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refresh(
@@ -94,6 +101,8 @@ export class AuthController {
   }
 
   // Cierra la sesión: revoca el refresh en BD (logout real) y borra la cookie.
+  // @Public: funciona con la cookie aunque el access token ya haya caducado.
+  @Public()
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
@@ -105,16 +114,18 @@ export class AuthController {
     return { message: 'Sesión cerrada' };
   }
 
-  // Ruta protegida de ejemplo/utilidad: devuelve el usuario del access token.
-  // Sirve al frontend para saber quién está logueado y valida el JwtAuthGuard.
+  // Ruta protegida: NO lleva @Public, así que el JwtAuthGuard global exige un
+  // access token válido y devuelve el usuario. Sirve al frontend para saber quién
+  // está logueado.
   @Get('me')
-  @UseGuards(JwtAuthGuard)
   me(@CurrentUser() user: RequestUser) {
     return user;
   }
 
   // Inicia el flujo OAuth: el guard redirige a la pantalla de consentimiento de
-  // Google. No hay cuerpo de handler porque el guard hace la redirección.
+  // Google. @Public para saltar el JwtAuthGuard global; el AuthGuard('google')
+  // es quien maneja este endpoint.
+  @Public()
   @Get('google')
   @UseGuards(AuthGuard('google'))
   googleAuth() {
@@ -125,6 +136,7 @@ export class AuthController {
   // (req.user); emitimos la sesión, dejamos el refresh en la cookie y redirigimos
   // al frontend. El access token NO va en la URL (se filtraría en logs/historial):
   // el frontend lo pedirá con /auth/refresh usando la cookie recién puesta.
+  @Public()
   @Get('google/callback')
   @UseGuards(AuthGuard('google'))
   async googleCallback(@Req() req: Request, @Res() res: Response) {
