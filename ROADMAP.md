@@ -59,7 +59,7 @@ Objetivo: usuarios, roles y sesión seguros + esquema base de catálogo.
 - [x] Esquema Prisma: tablas de auditoría (cambios de precio y stock)
 - [x] Migraciones y seed de datos de prueba
 - [x] Registro con verificación de email (Resend)
-- [ ] Login con email/contraseña (hashing argon2/bcrypt)
+- [x] Login con email/contraseña (hashing argon2/bcrypt)
 - [ ] Login social (Google + un segundo proveedor)
 - [ ] Sesión con refresh token en cookie HttpOnly/Secure/SameSite + access token corto
 - [ ] Sliding expiration ~15 días por inactividad

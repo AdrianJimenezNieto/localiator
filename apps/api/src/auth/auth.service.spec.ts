@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { VerificationTokenType } from '@prisma/client';
 import { AuthService } from './auth.service';
@@ -81,6 +81,78 @@ describe('AuthService', () => {
       expect(mailMock.sendEmailVerification).not.toHaveBeenCalled();
       // Mismo mensaje que el caso "nuevo": no se distingue desde fuera.
       expect(res.message).toContain('Si el email');
+    });
+  });
+
+  describe('login', () => {
+    beforeEach(() => {
+      // El constructor calcula el hash señuelo con password.hash: le damos valor.
+      passwordMock.hash.mockResolvedValue('dummy');
+    });
+
+    it('devuelve el usuario autenticado con credenciales correctas', async () => {
+      prismaMock.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        email: 'a@b.com',
+        passwordHash: 'stored',
+        role: 'BUYER',
+        emailVerifiedAt: new Date(),
+      });
+      passwordMock.verify.mockResolvedValue(true);
+
+      const res = await service.login({
+        email: 'A@B.com',
+        password: 'password123',
+      });
+
+      expect(passwordMock.verify).toHaveBeenCalledWith('stored', 'password123');
+      expect(res).toEqual({
+        id: 'u1',
+        email: 'a@b.com',
+        role: 'BUYER',
+        emailVerified: true,
+      });
+    });
+
+    it('rechaza contraseña incorrecta con 401 genérico', async () => {
+      prismaMock.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        email: 'a@b.com',
+        passwordHash: 'stored',
+        role: 'BUYER',
+        emailVerifiedAt: null,
+      });
+      passwordMock.verify.mockResolvedValue(false);
+
+      await expect(
+        service.login({ email: 'a@b.com', password: 'bad' }),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+
+    it('verifica contra el hash señuelo cuando el email no existe (defensa de timing)', async () => {
+      prismaMock.user.findUnique.mockResolvedValue(null);
+      passwordMock.verify.mockResolvedValue(false);
+
+      await expect(
+        service.login({ email: 'x@y.com', password: 'whatever12' }),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      // Aunque no haya usuario, SIEMPRE se ejecuta un verify (contra el señuelo).
+      expect(passwordMock.verify).toHaveBeenCalledTimes(1);
+    });
+
+    it('rechaza a un usuario solo-Google (sin contraseña local)', async () => {
+      prismaMock.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        email: 'a@b.com',
+        passwordHash: null,
+        role: 'BUYER',
+        emailVerifiedAt: new Date(),
+      });
+      passwordMock.verify.mockResolvedValue(false);
+
+      await expect(
+        service.login({ email: 'a@b.com', password: 'whatever12' }),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
     });
   });
 
