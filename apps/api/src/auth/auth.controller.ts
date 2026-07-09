@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { Throttle } from '@nestjs/throttler';
 import { ConfigService } from '@nestjs/config';
 import type { CookieOptions, Request, Response } from 'express';
 import { AuthService, AuthenticatedUser } from './auth.service';
@@ -30,6 +31,11 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 const REFRESH_COOKIE = 'refresh_token';
 const REFRESH_COOKIE_PATH = '/auth';
 
+// Límites de rate limiting más estrictos que el global (100/min) en los puntos
+// típicos de fuerza bruta / spam. Van de la mano de Turnstile + honeypot (14).
+const STRICT_THROTTLE = { default: { limit: 5, ttl: 60_000 } }; // login, forgot, reset
+const MODERATE_THROTTLE = { default: { limit: 10, ttl: 60_000 } }; // register, verify
+
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -41,6 +47,7 @@ export class AuthController {
   // 200 (no 201): no revelamos si se ha creado o no un recurso, coherente con la
   // respuesta neutra que evita enumeración de usuarios.
   @Public()
+  @Throttle(MODERATE_THROTTLE)
   @Post('register')
   @HttpCode(HttpStatus.OK)
   register(@Body() dto: RegisterDto) {
@@ -48,6 +55,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle(MODERATE_THROTTLE)
   @Post('verify-email')
   @HttpCode(HttpStatus.OK)
   verifyEmail(@Body() dto: VerifyEmailDto) {
@@ -56,6 +64,7 @@ export class AuthController {
 
   // Respuesta neutra siempre (no revela si el email existe).
   @Public()
+  @Throttle(STRICT_THROTTLE)
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
   forgotPassword(@Body() dto: ForgotPasswordDto) {
@@ -63,6 +72,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle(STRICT_THROTTLE)
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
   resetPassword(@Body() dto: ResetPasswordDto) {
@@ -72,6 +82,7 @@ export class AuthController {
   // Login local: confirma identidad, emite la sesión (cookie + access token) y
   // devuelve el access token en el body para que el cliente lo guarde en memoria.
   @Public()
+  @Throttle(STRICT_THROTTLE)
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(
