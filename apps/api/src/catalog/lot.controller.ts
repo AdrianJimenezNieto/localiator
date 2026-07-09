@@ -22,6 +22,11 @@ import { UpdateLotDto } from './dto/update-lot.dto';
 export class LotController {
   constructor(private readonly lots: LotService) {}
 
+  @Get()
+  listAll() {
+    return this.lots.listAll();
+  }
+
   @Post()
   create(@Body() dto: CreateLotDto) {
     return this.lots.create(dto);

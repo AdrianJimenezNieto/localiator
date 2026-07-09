@@ -15,6 +15,14 @@ import { diffAuditableFields } from './audit.util';
 export class LotService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // Listado de gestión (backoffice): todos los lotes, incluidos los agotados.
+  listAll() {
+    return this.prisma.lot.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: { category: { select: { id: true, name: true } } },
+    });
+  }
+
   async findOne(id: string) {
     const lot = await this.prisma.lot.findUnique({ where: { id } });
     if (!lot) {

@@ -32,22 +32,71 @@ export function toQuery(
   return qs ? `?${qs}` : '';
 }
 
-export async function apiGet<T>(path: string): Promise<T> {
+// Lanza un ApiError con el mensaje legible de NestJS a partir de una respuesta
+// no-ok. Compartido por todas las llamadas.
+async function toApiError(res: Response): Promise<ApiError> {
+  const message = await res
+    .json()
+    .then((body: { message?: string | string[] }) =>
+      Array.isArray(body.message) ? body.message.join(', ') : body.message,
+    )
+    .catch(() => undefined);
+  return new ApiError(message ?? `Error ${res.status}`, res.status);
+}
+
+export async function apiGet<T>(path: string, token?: string): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     credentials: 'include',
-    headers: { Accept: 'application/json' },
+    headers: {
+      Accept: 'application/json',
+      ...(token && { Authorization: `Bearer ${token}` }),
+    },
   });
-
-  if (!res.ok) {
-    // Intentamos leer el mensaje de error legible que devuelve NestJS.
-    const message = await res
-      .json()
-      .then((body: { message?: string | string[] }) =>
-        Array.isArray(body.message) ? body.message.join(', ') : body.message,
-      )
-      .catch(() => undefined);
-    throw new ApiError(message ?? `Error ${res.status}`, res.status);
-  }
-
+  if (!res.ok) throw await toApiError(res);
   return res.json() as Promise<T>;
+}
+
+type Method = 'POST' | 'PATCH' | 'DELETE';
+
+// Llamada con cuerpo JSON y (opcional) token de acceso en la cabecera. Se usa en
+// el backoffice y en el login. Devuelve el JSON parseado, o null si la respuesta
+// no trae cuerpo (p. ej. algunos DELETE).
+export async function apiSend<T>(
+  method: Method,
+  path: string,
+  body?: unknown,
+  token?: string,
+): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method,
+    credentials: 'include',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      ...(token && { Authorization: `Bearer ${token}` }),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!res.ok) throw await toApiError(res);
+  const text = await res.text();
+  return (text ? JSON.parse(text) : null) as T;
+}
+
+// Subida de un archivo (multipart) al endpoint de fotos. No fijamos Content-Type:
+// el navegador pone el boundary del multipart automáticamente.
+export async function apiUpload(
+  path: string,
+  file: File,
+  token?: string,
+): Promise<{ url: string }> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { ...(token && { Authorization: `Bearer ${token}` }) },
+    body: form,
+  });
+  if (!res.ok) throw await toApiError(res);
+  return res.json() as Promise<{ url: string }>;
 }

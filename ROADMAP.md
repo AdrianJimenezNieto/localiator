@@ -79,7 +79,7 @@ Objetivo: dar de alta productos/lotes y que se vean/filtren en la web.
 - [x] Búsqueda y filtros (categoría, precio, estado)
 - [x] Ficha de producto/lote (vista pública)
 - [x] Diseño responsive del catálogo y ficha
-- [ ] Panel de administración (backoffice) básico
+- [x] Panel de administración (backoffice) básico
 
 ## Fase 3 — Carrito, pedidos y pagos (MVP de venta)
 Objetivo: comprar de verdad. Cierre del MVP funcional.
