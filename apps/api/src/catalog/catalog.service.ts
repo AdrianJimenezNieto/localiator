@@ -63,9 +63,7 @@ export class CatalogService {
     const pageSize = dto.pageSize ?? DEFAULT_PAGE_SIZE;
     const skip = (page - 1) * pageSize;
 
-    // Solo artículos vendibles: los agotados (stock 0) no se listan en el catálogo
-    // público. Criterio documentado; cuando en Fase 3 haya soft-delete se ampliará.
-    const where = { stock: { gt: 0 } };
+    const where = this.buildWhere(dto);
     // orderBy estable (createdAt desc): la paginación no baila entre páginas.
     const findManyArgs = {
       where,
@@ -96,5 +94,49 @@ export class CatalogService {
       page,
       pageSize,
     };
+  }
+
+  // Construye el `where` de Prisma a partir de los filtros. Cada filtro presente
+  // añade una condición; ausente, no filtra. La base común (solo vendibles: stock
+  // > 0) es la misma para producto y lote. Prisma parametriza las consultas, así
+  // que no hay riesgo de inyección; aun así el DTO valida y acota el shape (07).
+  private buildWhere(dto: ListCatalogDto) {
+    // Solo artículos vendibles: los agotados (stock 0) no se listan en el catálogo
+    // público. Criterio documentado; cuando en Fase 3 haya soft-delete se ampliará.
+    const where: {
+      stock: { gt: number };
+      categoryId?: string;
+      condition?: { in: ItemCondition[] };
+      priceCents?: { gte?: number; lte?: number };
+      OR?: Array<
+        | { name: { contains: string; mode: 'insensitive' } }
+        | { description: { contains: string; mode: 'insensitive' } }
+      >;
+    } = { stock: { gt: 0 } };
+
+    if (dto.q) {
+      // Búsqueda case-insensitive en nombre O descripción.
+      where.OR = [
+        { name: { contains: dto.q, mode: 'insensitive' } },
+        { description: { contains: dto.q, mode: 'insensitive' } },
+      ];
+    }
+
+    if (dto.categoryId) {
+      where.categoryId = dto.categoryId;
+    }
+
+    if (dto.condition && dto.condition.length > 0) {
+      where.condition = { in: dto.condition };
+    }
+
+    if (dto.minPriceCents !== undefined || dto.maxPriceCents !== undefined) {
+      where.priceCents = {
+        ...(dto.minPriceCents !== undefined && { gte: dto.minPriceCents }),
+        ...(dto.maxPriceCents !== undefined && { lte: dto.maxPriceCents }),
+      };
+    }
+
+    return where;
   }
 }
