@@ -78,7 +78,7 @@ Objetivo: dar de alta productos/lotes y que se vean/filtren en la web.
 - [x] Listado público de catálogo con paginación
 - [x] Búsqueda y filtros (categoría, precio, estado)
 - [x] Ficha de producto/lote (vista pública)
-- [ ] Diseño responsive del catálogo y ficha
+- [x] Diseño responsive del catálogo y ficha
 - [ ] Panel de administración (backoffice) básico
 
 ## Fase 3 — Carrito, pedidos y pagos (MVP de venta)

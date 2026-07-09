@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { CatalogItem, ItemCondition, Paginated } from '@localiator/shared';
 import { toQuery } from '../lib/api';
@@ -21,6 +22,15 @@ export function CatalogPage() {
     maxPrice: searchParams.get('maxPrice') ?? '',
     conditions: searchParams.getAll('condition') as ItemCondition[],
   };
+
+  // En móvil los filtros se pliegan tras un botón (drawer/acordeón) para no empujar
+  // el catálogo hacia abajo; en escritorio se muestran siempre en línea.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const activeFilterCount =
+    (filters.q ? 1 : 0) +
+    (filters.categoryId ? 1 : 0) +
+    (filters.minPrice || filters.maxPrice ? 1 : 0) +
+    filters.conditions.length;
 
   // Un único flujo de datos: los filtros construyen el path, y useApi re-pide al
   // cambiar. La conversión euros→céntimos ocurre aquí (la API trabaja en céntimos).
@@ -61,12 +71,33 @@ export function CatalogPage() {
 
       <div className="grid gap-8 lg:grid-cols-[16rem_1fr]">
         <aside className="lg:sticky lg:top-4 lg:self-start">
-          <FiltersPanel
-            filters={filters}
-            resultCount={data?.total ?? null}
-            onChange={(patch) => applyFilters({ ...filters, ...patch })}
-            onClear={() => setSearchParams(new URLSearchParams())}
-          />
+          {/* Botón que despliega los filtros SOLO en móvil (oculto en lg). */}
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((open) => !open)}
+            aria-expanded={filtersOpen}
+            className="mb-4 flex min-h-11 w-full items-center justify-between rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium lg:hidden"
+          >
+            <span>
+              Filtros
+              {activeFilterCount > 0 && (
+                <span className="ml-2 rounded-full bg-neutral-900 px-2 py-0.5 text-xs text-white">
+                  {activeFilterCount}
+                </span>
+              )}
+            </span>
+            <span aria-hidden>{filtersOpen ? '▲' : '▼'}</span>
+          </button>
+
+          {/* Oculto en móvil salvo que se abra; siempre visible en escritorio. */}
+          <div className={`${filtersOpen ? 'block' : 'hidden'} lg:block`}>
+            <FiltersPanel
+              filters={filters}
+              resultCount={data?.total ?? null}
+              onChange={(patch) => applyFilters({ ...filters, ...patch })}
+              onClear={() => setSearchParams(new URLSearchParams())}
+            />
+          </div>
         </aside>
 
         <section>
@@ -86,7 +117,7 @@ export function CatalogPage() {
 
           {!loading && !error && data && data.items.length > 0 && (
             <>
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
                 {data.items.map((item) => (
                   <ProductCard key={item.id} item={item} />
                 ))}
@@ -109,7 +140,7 @@ export function CatalogPage() {
 // en blanco mientras llega la respuesta.
 function CatalogSkeleton() {
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
       {Array.from({ length: 6 }).map((_, i) => (
         <div
           key={i}
