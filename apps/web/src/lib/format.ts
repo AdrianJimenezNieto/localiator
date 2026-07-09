@@ -26,3 +26,22 @@ const CONDITION_LABELS: Record<ItemCondition, string> = {
 export function conditionLabel(condition: ItemCondition): string {
   return CONDITION_LABELS[condition] ?? condition;
 }
+
+// Estados en orden de mejor a peor, para poblar el filtro de la web.
+export const CONDITION_OPTIONS: { value: ItemCondition; label: string }[] = [
+  ItemCondition.NEW,
+  ItemCondition.LIKE_NEW,
+  ItemCondition.GOOD,
+  ItemCondition.FAIR,
+  ItemCondition.DAMAGED,
+].map((value) => ({ value, label: CONDITION_LABELS[value] }));
+
+// Euros (lo que teclea el usuario) → céntimos (lo que espera la API). Devuelve
+// undefined si el campo está vacío o no es un número válido.
+export function eurosToCents(euros: string): number | undefined {
+  const trimmed = euros.trim();
+  if (trimmed === '') return undefined;
+  const value = Number(trimmed.replace(',', '.'));
+  if (!Number.isFinite(value) || value < 0) return undefined;
+  return Math.round(value * 100);
+}
