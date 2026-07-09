@@ -61,7 +61,7 @@ Objetivo: usuarios, roles y sesión seguros + esquema base de catálogo.
 - [x] Registro con verificación de email (Resend)
 - [x] Login con email/contraseña (hashing argon2/bcrypt)
 - [x] Login social (Google + un segundo proveedor)
-- [ ] Sesión con refresh token en cookie HttpOnly/Secure/SameSite + access token corto
+- [x] Sesión con refresh token en cookie HttpOnly/Secure/SameSite + access token corto
 - [ ] Sliding expiration ~15 días por inactividad
 - [ ] Recuperación de contraseña
 - [ ] Guards de rol en cada endpoint (RBAC)
