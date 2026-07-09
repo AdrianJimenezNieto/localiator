@@ -7,16 +7,26 @@ import { LotController } from './lot.controller';
 import { LotService } from './lot.service';
 import { UploadController } from './upload.controller';
 import { StorageService } from './storage.service';
+import { CatalogController } from './catalog.controller';
+import { CatalogService } from './catalog.service';
 
-// Módulo raíz del catálogo. Agrupa categorías, productos, lotes y la subida de
-// fotos: así el catálogo no se fragmenta en un módulo por entidad.
+// Módulo raíz del catálogo. Agrupa la gestión de admin (categorías, productos,
+// lotes, fotos) y el listado público (CatalogController): así el catálogo no se
+// fragmenta en un módulo por entidad.
 @Module({
   controllers: [
     CategoryController,
     ProductController,
     LotController,
     UploadController,
+    CatalogController,
   ],
-  providers: [CategoryService, ProductService, LotService, StorageService],
+  providers: [
+    CategoryService,
+    ProductService,
+    LotService,
+    StorageService,
+    CatalogService,
+  ],
 })
 export class CatalogModule {}

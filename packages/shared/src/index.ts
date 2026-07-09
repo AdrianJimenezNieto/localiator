@@ -28,3 +28,39 @@ export const ItemKind = {
 } as const;
 
 export type ItemKind = (typeof ItemKind)[keyof typeof ItemKind];
+
+// Estado real del artículo. Reflejo del enum `ItemCondition` de Prisma para que el
+// frontend tenga los valores sin depender del cliente de Prisma. Si divergen, CI
+// (build) lo detectaría al usarse en ambos lados.
+export const ItemCondition = {
+  NEW: "NEW",
+  LIKE_NEW: "LIKE_NEW",
+  GOOD: "GOOD",
+  FAIR: "FAIR",
+  DAMAGED: "DAMAGED",
+} as const;
+
+export type ItemCondition = (typeof ItemCondition)[keyof typeof ItemCondition];
+
+// Respuesta paginada genérica (offset pagination). La comparten backend y frontend
+// para no divergir en la forma de la paginación.
+export interface Paginated<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+// Lo justo que necesita una TARJETA del catálogo (no todo el registro). La ficha
+// completa (detalle) es un tipo aparte (CatalogDetail), definido en la tarea 08.
+export interface CatalogItem {
+  id: string;
+  kind: ItemKind;
+  name: string;
+  priceCents: number;
+  discountCents: number;
+  condition: ItemCondition;
+  // Primera foto (portada) o null si el artículo no tiene fotos aún.
+  photo: string | null;
+  category: { id: string; name: string };
+}
