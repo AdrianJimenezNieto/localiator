@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Param, Query } from '@nestjs/common';
 import { Public } from '../auth/public.decorator';
 import { CatalogService } from './catalog.service';
 import { ListCatalogDto } from './dto/list-catalog.dto';
@@ -19,5 +19,18 @@ export class CatalogController {
   @Get('lots')
   listLots(@Query() query: ListCatalogDto) {
     return this.catalog.listLots(query);
+  }
+
+  // Ficha por id (acceso por slug se pospone a la tarea de SEO en Fase 4). Rutas
+  // DESPUÉS de las de listado para que 'products'/'lots' no capturen /products/:id
+  // por accidente (aunque el path distinto ya las separa).
+  @Get('products/:id')
+  getProduct(@Param('id') id: string) {
+    return this.catalog.getProduct(id);
+  }
+
+  @Get('lots/:id')
+  getLot(@Param('id') id: string) {
+    return this.catalog.getLot(id);
   }
 }

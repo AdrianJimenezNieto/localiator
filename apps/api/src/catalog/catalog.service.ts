@@ -1,6 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { ItemCondition } from '@prisma/client';
-import type { CatalogItem, ItemKind, Paginated } from '@localiator/shared';
+import type {
+  CatalogDetail,
+  CatalogItem,
+  ItemKind,
+  Paginated,
+} from '@localiator/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { DEFAULT_PAGE_SIZE, ListCatalogDto } from './dto/list-catalog.dto';
 
@@ -27,6 +32,40 @@ interface CardRow {
   category: { id: string; name: string };
 }
 
+// Campos visibles de la FICHA (más que la tarjeta, pero sigue siendo un select
+// explícito: no se vuelca el registro entero ni campos internos).
+const DETAIL_SELECT = {
+  id: true,
+  name: true,
+  description: true,
+  condition: true,
+  priceCents: true,
+  discountCents: true,
+  stock: true,
+  photos: true,
+  category: { select: { id: true, name: true } },
+} as const;
+
+interface DetailRow extends CardRow {
+  description: string;
+  stock: number;
+}
+
+function toCatalogDetail(row: DetailRow, kind: ItemKind): CatalogDetail {
+  return {
+    id: row.id,
+    kind,
+    name: row.name,
+    description: row.description,
+    condition: row.condition,
+    priceCents: row.priceCents,
+    discountCents: row.discountCents,
+    available: row.stock > 0, // no exponemos el stock exacto, solo disponibilidad.
+    photos: row.photos,
+    category: row.category,
+  };
+}
+
 function toCatalogItem(row: CardRow, kind: ItemKind): CatalogItem {
   return {
     id: row.id,
@@ -50,6 +89,31 @@ export class CatalogService {
 
   listLots(dto: ListCatalogDto): Promise<Paginated<CatalogItem>> {
     return this.paginate('lot', dto);
+  }
+
+  async getProduct(id: string): Promise<CatalogDetail> {
+    // findFirst con el criterio de visibilidad (mismo que el listado: stock > 0):
+    // un artículo inexistente O agotado devuelve null → 404 limpio, no un error de
+    // Prisma ni una ficha de algo no vendible.
+    const row = await this.prisma.product.findFirst({
+      where: { id, stock: { gt: 0 } },
+      select: DETAIL_SELECT,
+    });
+    if (!row) {
+      throw new NotFoundException('Producto no encontrado');
+    }
+    return toCatalogDetail(row, 'product');
+  }
+
+  async getLot(id: string): Promise<CatalogDetail> {
+    const row = await this.prisma.lot.findFirst({
+      where: { id, stock: { gt: 0 } },
+      select: DETAIL_SELECT,
+    });
+    if (!row) {
+      throw new NotFoundException('Lote no encontrado');
+    }
+    return toCatalogDetail(row, 'lot');
   }
 
   // Núcleo compartido de la paginación. Producto y lote son tablas separadas, así

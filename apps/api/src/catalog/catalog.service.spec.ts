@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ItemCondition } from '@prisma/client';
 import { CatalogService } from './catalog.service';
@@ -5,8 +6,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { DEFAULT_PAGE_SIZE } from './dto/list-catalog.dto';
 
 const prismaMock = {
-  product: { findMany: jest.fn(), count: jest.fn() },
-  lot: { findMany: jest.fn(), count: jest.fn() },
+  product: { findMany: jest.fn(), count: jest.fn(), findFirst: jest.fn() },
+  lot: { findMany: jest.fn(), count: jest.fn(), findFirst: jest.fn() },
   // $transaction en forma de array resuelve el array de promesas que le pasamos.
   $transaction: jest.fn(),
 };
@@ -153,6 +154,55 @@ describe('CatalogService', () => {
     it('sin filtros solo aplica la base de vendibles', async () => {
       await service.listProducts({});
       expect(whereOfLastFindMany()).toEqual({ stock: { gt: 0 } });
+    });
+  });
+
+  describe('ficha (08)', () => {
+    it('devuelve el detalle y no expone el stock exacto (available)', async () => {
+      prismaMock.product.findFirst.mockResolvedValue({
+        id: 'p1',
+        name: 'Taladro',
+        description: 'Percutor',
+        condition: ItemCondition.GOOD,
+        priceCents: 5000,
+        discountCents: 500,
+        stock: 4,
+        photos: ['http://x/a.jpg'],
+        category: { id: 'c1', name: 'Herramientas' },
+      });
+
+      const detail = await service.getProduct('p1');
+
+      expect(detail).toEqual({
+        id: 'p1',
+        kind: 'product',
+        name: 'Taladro',
+        description: 'Percutor',
+        condition: ItemCondition.GOOD,
+        priceCents: 5000,
+        discountCents: 500,
+        available: true,
+        photos: ['http://x/a.jpg'],
+        category: { id: 'c1', name: 'Herramientas' },
+      });
+      // La consulta ya filtra por visibilidad (stock > 0).
+      expect(prismaMock.product.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'p1', stock: { gt: 0 } } }),
+      );
+    });
+
+    it('devuelve 404 si el producto no existe o no es visible (agotado)', async () => {
+      prismaMock.product.findFirst.mockResolvedValue(null);
+      await expect(service.getProduct('nope')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('devuelve 404 para un lote inexistente/no visible', async () => {
+      prismaMock.lot.findFirst.mockResolvedValue(null);
+      await expect(service.getLot('nope')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
   });
 });

@@ -52,7 +52,7 @@ export interface Paginated<T> {
 }
 
 // Lo justo que necesita una TARJETA del catálogo (no todo el registro). La ficha
-// completa (detalle) es un tipo aparte (CatalogDetail), definido en la tarea 08.
+// completa (detalle) es un tipo aparte (CatalogDetail).
 export interface CatalogItem {
   id: string;
   kind: ItemKind;
@@ -62,5 +62,21 @@ export interface CatalogItem {
   condition: ItemCondition;
   // Primera foto (portada) o null si el artículo no tiene fotos aún.
   photo: string | null;
+  category: { id: string; name: string };
+}
+
+// Detalle completo para la FICHA pública (todos los datos visibles al público).
+// No lleva `stock` exacto: exponer el inventario no aporta al comprador y filtra
+// un dato interno; basta `available`.
+export interface CatalogDetail {
+  id: string;
+  kind: ItemKind;
+  name: string;
+  description: string;
+  condition: ItemCondition;
+  priceCents: number;
+  discountCents: number;
+  available: boolean;
+  photos: string[];
   category: { id: string; name: string };
 }
