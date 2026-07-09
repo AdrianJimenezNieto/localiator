@@ -21,8 +21,9 @@ import { JwtStrategy } from './jwt.strategy';
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
+        // || (no ??) para cubrir también el caso de secreto vacío en .env.
         secret:
-          config.get<string>('JWT_ACCESS_SECRET') ?? 'dev-insecure-secret',
+          config.get<string>('JWT_ACCESS_SECRET') || 'dev-insecure-secret',
       }),
     }),
   ],
