@@ -32,6 +32,39 @@ model User {
   auditLogs          AuditLog[]
   verificationTokens VerificationToken[]
   oauthAccounts      OAuthAccount[]
+  refreshTokens      RefreshToken[]
+}
+
+// Sesión persistente (patrón decidido en CLAUDE.md): el access token (JWT corto)
+// vive en memoria en el cliente; este refresh token (opaco, de vida larga) viaja
+// en una cookie HttpOnly y se guarda AQUÍ para poder revocarlo.
+//
+// ¿Por qué opaco en BD y no un JWT autocontenido? Porque un JWT no se puede
+// invalidar antes de que caduque; guardarlo en BD permite logout real, ban y
+// detección de reutilización (rotación). Igual que los otros tokens, guardamos
+// SOLO el hash.
+model RefreshToken {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tokenHash String @unique // SHA-256 del token opaco.
+
+  // Rotación: al usar un refresh se revoca y se emite otro. Si más tarde llega un
+  // token ya revocado, es señal de robo → se corta toda la cadena de sesión.
+  revokedAt         DateTime?
+  replacedByTokenId String? // id del token que lo sustituyó (traza de la rotación).
+
+  expiresAt DateTime // sliding expiration (~15 días); se renueva en cada rotación (tarea 10).
+
+  // Metadatos opcionales para auditoría de sesiones.
+  userAgent String?
+  ip        String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 // Vincula una identidad de un proveedor externo (Google, y en el futuro otros) a
