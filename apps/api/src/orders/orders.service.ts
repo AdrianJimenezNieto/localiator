@@ -140,6 +140,47 @@ export class OrdersService {
     });
   }
 
+  // Carga un pedido que va a pagarse y valida que se puede: que es del usuario,
+  // que sigue PENDING y que su reserva no ha expirado. Lo usa el pago (tarea 04).
+  // Devuelve el pedido con sus líneas (para construir el line_items de Stripe).
+  async getPayableOrder(orderId: string, userId: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { lines: true, reservations: true },
+    });
+    // Un pedido ajeno se trata como inexistente: no revelamos que existe.
+    if (!order || order.userId !== userId) {
+      throw new NotFoundException('Pedido no encontrado');
+    }
+    if (order.status !== OrderStatus.PENDING) {
+      throw new ConflictException('El pedido ya no está pendiente de pago');
+    }
+    // La reserva expiró (aún sin barrer por el cron de la tarea 07): no se puede
+    // pagar; hay que rehacer el pedido para volver a reservar stock.
+    const now = Date.now();
+    const expired = order.reservations.some(
+      (r) => r.expiresAt.getTime() <= now,
+    );
+    if (expired || order.reservations.length === 0) {
+      throw new ConflictException(
+        'La reserva de stock ha expirado; vuelve a tramitar el pedido',
+      );
+    }
+    return order;
+  }
+
+  // Enlaza el pedido con su PaymentIntent de Stripe (idempotencia del webhook en
+  // la tarea 06 y base de la conciliación en la 08).
+  async setPaymentIntent(
+    orderId: string,
+    paymentIntentId: string,
+  ): Promise<void> {
+    await this.prisma.order.update({
+      where: { id: orderId },
+      data: { stripePaymentIntentId: paymentIntentId },
+    });
+  }
+
   // Solo puede comprar quien ha verificado su email (política de CLAUDE.md,
   // anotada por el auth de Fase 1). El JWT no lleva el flag, así que se comprueba
   // en BD en el momento de la compra.
