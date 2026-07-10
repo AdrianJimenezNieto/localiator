@@ -10,7 +10,10 @@ import { OrdersService } from '../orders/orders.service';
 const constructEvent = jest.fn();
 const stripeMock = { webhooks: { constructEvent } };
 
-const ordersMock = { confirmOrderPaid: jest.fn() };
+const ordersMock = {
+  confirmOrderPaid: jest.fn(),
+  releaseReservation: jest.fn(),
+};
 
 const configMock = {
   get: jest.fn((key: string) =>
@@ -69,6 +72,25 @@ describe('WebhookController', () => {
 
     expect(result).toEqual({ received: true });
     expect(ordersMock.confirmOrderPaid).toHaveBeenCalledWith({
+      paymentIntentId: 'pi_123',
+      orderId: 'o1',
+    });
+  });
+
+  it('libera la reserva en payment_intent.payment_failed', async () => {
+    constructEvent.mockReturnValue({
+      type: 'payment_intent.payment_failed',
+      data: { object: { id: 'pi_123', metadata: { orderId: 'o1' } } },
+    });
+    ordersMock.releaseReservation.mockResolvedValue({
+      released: true,
+      orderId: 'o1',
+    });
+
+    const result = await controller.handle(reqWith(Buffer.from('{}')), 'sig');
+
+    expect(result).toEqual({ received: true });
+    expect(ordersMock.releaseReservation).toHaveBeenCalledWith({
       paymentIntentId: 'pi_123',
       orderId: 'o1',
     });

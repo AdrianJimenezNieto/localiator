@@ -90,7 +90,7 @@ Objetivo: comprar de verdad. Cierre del MVP funcional.
 - [x] Reserva temporal de stock con expiración durante el checkout
 - [x] Integración de pago con Stripe (Checkout / Payment Intents)
 - [x] Webhook de Stripe: confirmar pedido al cobrar
-- [ ] Manejo de pago fallido / abandonado (liberar reserva de stock)
+- [x] Manejo de pago fallido / abandonado (liberar reserva de stock)
 - [ ] Conciliación pago recibido ↔ pedido registrado
 - [ ] Facturación automática con IVA tras el pago
 - [ ] Emails transaccionales de pedido (confirmación, cambios de estado)
