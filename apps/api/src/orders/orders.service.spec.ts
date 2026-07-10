@@ -12,9 +12,13 @@ const prismaMock = {
   user: { findUnique: jest.fn() },
   order: {
     findMany: jest.fn(),
+    findFirst: jest.fn(),
     updateMany: jest.fn(),
+    update: jest.fn(),
     create: jest.fn(),
   },
+  product: { update: jest.fn() },
+  lot: { update: jest.fn() },
   stockReservation: {
     aggregate: jest.fn(),
     deleteMany: jest.fn(),
@@ -176,6 +180,73 @@ describe('OrdersService', () => {
     expect(prismaMock.order.updateMany).toHaveBeenCalledWith({
       where: { id: { in: ['old1'] } },
       data: { status: 'CANCELLED' },
+    });
+  });
+
+  describe('confirmOrderPaid', () => {
+    it('descuenta stock, consume reservas y marca PAID un pedido PENDING', async () => {
+      prismaMock.order.findFirst.mockResolvedValue({
+        id: 'o1',
+        status: 'PENDING',
+        stripePaymentIntentId: 'pi_1',
+        lines: [
+          { itemType: 'PRODUCT', itemId: 'p1', quantity: 2 },
+          { itemType: 'LOT', itemId: 'l1', quantity: 1 },
+        ],
+      });
+
+      const result = await service.confirmOrderPaid({
+        paymentIntentId: 'pi_1',
+      });
+
+      expect(result.outcome).toBe('paid');
+      expect(prismaMock.product.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { stock: { decrement: 2 } },
+      });
+      expect(prismaMock.lot.update).toHaveBeenCalledWith({
+        where: { id: 'l1' },
+        data: { stock: { decrement: 1 } },
+      });
+      expect(prismaMock.stockReservation.deleteMany).toHaveBeenCalledWith({
+        where: { orderId: 'o1' },
+      });
+      const updateCalls = prismaMock.order.update.mock
+        .calls as unknown as Array<[{ data: { status: string } }]>;
+      expect(updateCalls[0][0].data.status).toBe('PAID');
+    });
+
+    it('es idempotente: un evento duplicado sobre un pedido ya PAID no descuenta stock', async () => {
+      prismaMock.order.findFirst.mockResolvedValue({
+        id: 'o1',
+        status: 'PAID',
+        stripePaymentIntentId: 'pi_1',
+        lines: [{ itemType: 'PRODUCT', itemId: 'p1', quantity: 2 }],
+      });
+
+      const result = await service.confirmOrderPaid({
+        paymentIntentId: 'pi_1',
+      });
+
+      expect(result.outcome).toBe('already_paid');
+      expect(prismaMock.product.update).not.toHaveBeenCalled();
+      expect(prismaMock.order.update).not.toHaveBeenCalled();
+    });
+
+    it('no descuenta stock si el pedido ya no es PENDING (carrera pago/expiración)', async () => {
+      prismaMock.order.findFirst.mockResolvedValue({
+        id: 'o1',
+        status: 'CANCELLED',
+        stripePaymentIntentId: 'pi_1',
+        lines: [{ itemType: 'PRODUCT', itemId: 'p1', quantity: 2 }],
+      });
+
+      const result = await service.confirmOrderPaid({
+        paymentIntentId: 'pi_1',
+      });
+
+      expect(result.outcome).toBe('not_payable');
+      expect(prismaMock.product.update).not.toHaveBeenCalled();
     });
   });
 });

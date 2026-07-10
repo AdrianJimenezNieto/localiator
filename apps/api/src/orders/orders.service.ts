@@ -169,6 +169,78 @@ export class OrdersService {
     return order;
   }
 
+  // Confirma un pedido cobrado (lo llama el webhook de Stripe, tarea 06). Es la
+  // FUENTE DE VERDAD del pago, no el retorno del navegador. Idempotente y atómico:
+  //  - Localiza el pedido por PaymentIntent (o por orderId de la metadata).
+  //  - Si ya está PAID, no hace nada (Stripe entrega "al menos una vez" y puede
+  //    reintentar el mismo evento; sin esto se descontaría stock de más).
+  //  - Si no sigue PENDING (p. ej. la reserva expiró y se canceló, tarea 07), no
+  //    descuenta stock: es la carrera "pago justo al expirar"; se registra para
+  //    revisión manual (el reembolso queda fuera del MVP, CLAUDE.md).
+  //  - Si procede: descuenta Product/Lot.stock según las líneas, consume las
+  //    reservas y marca PAID + paidAt.
+  // Devuelve el estado resultante para que el llamador decida efectos secundarios
+  // (email de confirmación, factura) sin bloquear la respuesta a Stripe.
+  async confirmOrderPaid(params: {
+    paymentIntentId?: string;
+    orderId?: string;
+  }): Promise<{
+    outcome: 'paid' | 'already_paid' | 'not_payable' | 'not_found';
+    orderId?: string;
+  }> {
+    return this.prisma.$transaction(async (tx) => {
+      const order = await tx.order.findFirst({
+        where: params.paymentIntentId
+          ? { stripePaymentIntentId: params.paymentIntentId }
+          : { id: params.orderId },
+        include: { lines: true },
+      });
+
+      if (!order) {
+        return { outcome: 'not_found' as const };
+      }
+      if (order.status === OrderStatus.PAID) {
+        return { outcome: 'already_paid' as const, orderId: order.id };
+      }
+      if (order.status !== OrderStatus.PENDING) {
+        return { outcome: 'not_payable' as const, orderId: order.id };
+      }
+
+      // Descuento REAL del stock, una sola vez, ahora que el cobro está confirmado.
+      for (const line of order.lines) {
+        if (line.itemType === OrderItemType.PRODUCT) {
+          await tx.product.update({
+            where: { id: line.itemId },
+            data: { stock: { decrement: line.quantity } },
+          });
+        } else {
+          await tx.lot.update({
+            where: { id: line.itemId },
+            data: { stock: { decrement: line.quantity } },
+          });
+        }
+      }
+
+      // La reserva ya cumplió su función; se consume.
+      await tx.stockReservation.deleteMany({ where: { orderId: order.id } });
+
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          status: OrderStatus.PAID,
+          paidAt: new Date(),
+          // Si llegó por metadata.orderId sin PI enlazado aún, lo fijamos ahora
+          // para cerrar el enlace de conciliación (tarea 08).
+          ...(params.paymentIntentId && !order.stripePaymentIntentId
+            ? { stripePaymentIntentId: params.paymentIntentId }
+            : {}),
+        },
+      });
+
+      return { outcome: 'paid' as const, orderId: order.id };
+    });
+  }
+
   // Enlaza el pedido con su PaymentIntent de Stripe (idempotencia del webhook en
   // la tarea 06 y base de la conciliación en la 08).
   async setPaymentIntent(
