@@ -8,8 +8,10 @@ import {
 import './index.css'
 import App from './App.tsx'
 import { AuthProvider } from './lib/auth.tsx'
+import { CartProvider } from './lib/cart.tsx'
 import { CatalogPage } from './pages/CatalogPage.tsx'
 import { DetailPage } from './pages/DetailPage.tsx'
+import { CartPage } from './pages/CartPage.tsx'
 import { AdminLoginPage } from './pages/admin/AdminLoginPage.tsx'
 import { ProtectedAdmin } from './pages/admin/ProtectedAdmin.tsx'
 import { AdminLayout } from './pages/admin/AdminLayout.tsx'
@@ -27,6 +29,7 @@ const router = createBrowserRouter([
       { index: true, element: <CatalogPage /> },
       { path: 'productos/:id', element: <DetailPage kind="product" /> },
       { path: 'lotes/:id', element: <DetailPage kind="lot" /> },
+      { path: 'carrito', element: <CartPage /> },
     ],
   },
   { path: '/admin/login', element: <AdminLoginPage /> },
@@ -54,7 +57,9 @@ const router = createBrowserRouter([
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AuthProvider>
-      <RouterProvider router={router} />
+      <CartProvider>
+        <RouterProvider router={router} />
+      </CartProvider>
     </AuthProvider>
   </StrictMode>,
 )
