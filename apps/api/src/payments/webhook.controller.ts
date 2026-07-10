@@ -17,6 +17,7 @@ import type Stripe from 'stripe';
 import { Public } from '../auth/public.decorator';
 import { OrdersService } from '../orders/orders.service';
 import { InvoicingService } from '../invoicing/invoicing.service';
+import { OrderMailService } from '../mail/order-mail.service';
 import { STRIPE_CLIENT, type StripeClient } from './stripe.provider';
 
 // Webhook de Stripe: FUENTE DE VERDAD del pago. El usuario puede cerrar la
@@ -35,6 +36,7 @@ export class WebhookController {
     @Inject(STRIPE_CLIENT) private readonly stripe: StripeClient,
     private readonly orders: OrdersService,
     private readonly invoicing: InvoicingService,
+    private readonly orderMail: OrderMailService,
     private readonly config: ConfigService,
   ) {}
 
@@ -120,12 +122,15 @@ export class WebhookController {
         // regenerar después (la generación es idempotente por orderId).
         if (result.orderId) {
           try {
+            // La factura primero (el email la referencia), luego la confirmación.
             await this.invoicing.generateForOrder(result.orderId);
           } catch (err) {
             this.logger.error(
               `No se pudo generar la factura del pedido ${result.orderId}: ${err instanceof Error ? err.message : 'error'}`,
             );
           }
+          // Email de confirmación: tolerante a fallos (no revierte el pedido).
+          await this.orderMail.sendOrderConfirmation(result.orderId);
         }
         break;
       case 'already_paid':

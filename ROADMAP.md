@@ -93,7 +93,7 @@ Objetivo: comprar de verdad. Cierre del MVP funcional.
 - [x] Manejo de pago fallido / abandonado (liberar reserva de stock)
 - [x] Conciliación pago recibido ↔ pedido registrado
 - [x] Facturación automática con IVA tras el pago
-- [ ] Emails transaccionales de pedido (confirmación, cambios de estado)
+- [x] Emails transaccionales de pedido (confirmación, cambios de estado)
 - [ ] Flujo de recogida en almacén (sin envíos)
 
 ## Fase 4 — Legal, cumplimiento y lanzamiento
