@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { CatalogDetail, ItemKind } from '@localiator/shared';
 import { useApi } from '../lib/useApi';
+import { useCart } from '../lib/cart';
 import { conditionLabel, finalPriceCents, formatPrice } from '../lib/format';
 import { Gallery } from '../components/Gallery';
 
@@ -87,18 +89,60 @@ export function DetailPage({ kind }: { kind: ItemKind }) {
 
           <p className="whitespace-pre-line text-neutral-700">{data.description}</p>
 
-          {/* La compra (carrito/checkout) es Fase 3: aquí la ficha es informativa. */}
-          <button
-            type="button"
-            disabled
-            className="mt-2 w-full cursor-not-allowed rounded-md bg-neutral-900 px-4 py-3 font-medium text-white opacity-40 sm:w-auto"
-            title="La compra estará disponible próximamente"
-          >
-            Comprar (próximamente)
-          </button>
+          <AddToCart item={data} finalCents={finalCents} />
         </div>
       </div>
     </div>
+  );
+}
+
+// Botón de añadir al carrito. Solo si el artículo está disponible; si no, se
+// muestra deshabilitado. El feedback ("Añadido") es efímero para no navegar fuera
+// de la ficha. La validación fuerte de stock la hace el servidor en la reserva
+// (tarea 03); aquí solo respetamos `available`, ya que la ficha pública no expone
+// el stock exacto a propósito.
+function AddToCart({
+  item,
+  finalCents,
+}: {
+  item: CatalogDetail;
+  finalCents: number;
+}) {
+  const { add } = useCart();
+  const [added, setAdded] = useState(false);
+
+  if (!item.available) {
+    return (
+      <button
+        type="button"
+        disabled
+        className="mt-2 w-full cursor-not-allowed rounded-md bg-neutral-200 px-4 py-3 font-medium text-neutral-500 sm:w-auto"
+      >
+        Agotado
+      </button>
+    );
+  }
+
+  function handleAdd() {
+    add({
+      itemType: item.kind,
+      itemId: item.id,
+      nameSnapshot: item.name,
+      unitPriceCents: finalCents,
+      photo: item.photos[0] ?? null,
+    });
+    setAdded(true);
+    setTimeout(() => setAdded(false), 1500);
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleAdd}
+      className="mt-2 w-full rounded-md bg-neutral-900 px-4 py-3 font-medium text-white hover:bg-neutral-800 sm:w-auto"
+    >
+      {added ? '✓ Añadido al carrito' : 'Añadir al carrito'}
+    </button>
   );
 }
 

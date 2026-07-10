@@ -86,7 +86,7 @@ Objetivo: comprar de verdad. Cierre del MVP funcional.
 
 - [x] Esquema Prisma: Pedido + líneas de pedido + estados (pendiente / pagado / listo para
       recoger / recogido / cancelado)
-- [ ] Carrito de compra
+- [x] Carrito de compra
 - [ ] Reserva temporal de stock con expiración durante el checkout
 - [ ] Integración de pago con Stripe (Checkout / Payment Intents)
 - [ ] Webhook de Stripe: confirmar pedido al cobrar
