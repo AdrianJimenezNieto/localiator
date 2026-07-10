@@ -5,14 +5,17 @@ import {
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { OrderItemType } from '@prisma/client';
+import { OrderStatus } from '@prisma/client';
 import { OrdersService } from './orders.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { OrderMailService } from '../mail/order-mail.service';
 
 const prismaMock = {
   user: { findUnique: jest.fn() },
   order: {
     findMany: jest.fn(),
     findFirst: jest.fn(),
+    findUnique: jest.fn(),
     updateMany: jest.fn(),
     update: jest.fn(),
     create: jest.fn(),
@@ -31,6 +34,11 @@ const prismaMock = {
 // Igual que en el resto de specs: la transacción interactiva ejecuta el callback
 // con el propio mock como `tx`, de modo que tx.order.create === prismaMock.order.create.
 type TxCallback = (tx: typeof prismaMock) => unknown;
+
+const orderMailMock = {
+  sendStatusChange: jest.fn(),
+  sendOrderConfirmation: jest.fn(),
+};
 
 const verifiedUser = { emailVerifiedAt: new Date() };
 
@@ -53,6 +61,7 @@ describe('OrdersService', () => {
       providers: [
         OrdersService,
         { provide: PrismaService, useValue: prismaMock },
+        { provide: OrderMailService, useValue: orderMailMock },
       ],
     }).compile();
     service = moduleRef.get(OrdersService);
@@ -319,6 +328,50 @@ describe('OrdersService', () => {
 
       expect(count).toBe(2);
       expect(prismaMock.order.update).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('transitionStatus', () => {
+    it('acepta una transición legal (PAID → READY_FOR_PICKUP) y envía email', async () => {
+      prismaMock.order.findUnique.mockResolvedValue({
+        id: 'o1',
+        status: OrderStatus.PAID,
+      });
+      prismaMock.order.update.mockResolvedValue({
+        id: 'o1',
+        status: OrderStatus.READY_FOR_PICKUP,
+      });
+
+      const result = await service.transitionStatus(
+        'o1',
+        OrderStatus.READY_FOR_PICKUP,
+      );
+
+      expect(result.status).toBe(OrderStatus.READY_FOR_PICKUP);
+      expect(orderMailMock.sendStatusChange).toHaveBeenCalledWith(
+        'o1',
+        OrderStatus.READY_FOR_PICKUP,
+      );
+    });
+
+    it('rechaza con 409 una transición ilegal (CANCELLED → PICKED_UP)', async () => {
+      prismaMock.order.findUnique.mockResolvedValue({
+        id: 'o1',
+        status: OrderStatus.CANCELLED,
+      });
+
+      await expect(
+        service.transitionStatus('o1', OrderStatus.PICKED_UP),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(prismaMock.order.update).not.toHaveBeenCalled();
+    });
+
+    it('devuelve 404 si el pedido no existe', async () => {
+      prismaMock.order.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.transitionStatus('nope', OrderStatus.READY_FOR_PICKUP),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 });

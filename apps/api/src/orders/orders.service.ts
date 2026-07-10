@@ -6,8 +6,24 @@ import {
 } from '@nestjs/common';
 import { OrderItemType, OrderStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { OrderMailService } from '../mail/order-mail.service';
 import { CreateOrderDto, CreateOrderLineDto } from './dto/create-order.dto';
 import { RESERVATION_TTL_MINUTES } from './orders.constants';
+
+// Máquina de estados del pedido: qué transiciones son legales desde cada estado.
+// Centralizarla evita estados imposibles (p. ej. CANCELLED → PICKED_UP). Las
+// transiciones a PAID/CANCELLED automáticas (pago, expiración) las hacen el
+// webhook (06) y el barrido (07); estas son las MANUALES del admin (recogida).
+const LEGAL_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
+  [OrderStatus.PENDING]: [],
+  [OrderStatus.PAID]: [OrderStatus.READY_FOR_PICKUP, OrderStatus.CANCELLED],
+  [OrderStatus.READY_FOR_PICKUP]: [
+    OrderStatus.PICKED_UP,
+    OrderStatus.CANCELLED,
+  ],
+  [OrderStatus.PICKED_UP]: [],
+  [OrderStatus.CANCELLED]: [],
+};
 
 // Fila del artículo bloqueada con SELECT ... FOR UPDATE. Solo los campos que
 // necesitamos para reservar y para el snapshot de la línea.
@@ -31,7 +47,74 @@ interface ResolvedLine {
 
 @Injectable()
 export class OrdersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly orderMail: OrderMailService,
+  ) {}
+
+  // Pedidos del comprador (para "Mis pedidos"). Incluye líneas y nº de factura.
+  listMyOrders(userId: string) {
+    return this.prisma.order.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      include: { lines: true, invoice: { select: { number: true } } },
+    });
+  }
+
+  // Listado de gestión (admin), filtrable por estado.
+  listAllOrders(status?: OrderStatus) {
+    return this.prisma.order.findMany({
+      where: status ? { status } : {},
+      orderBy: { createdAt: 'desc' },
+      include: {
+        lines: true,
+        user: { select: { email: true } },
+        invoice: { select: { number: true } },
+      },
+    });
+  }
+
+  // Detalle de un pedido; el dueño (o un admin) puede verlo.
+  async getOrderForUser(orderId: string, userId: string, isAdmin: boolean) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { lines: true, invoice: { select: { number: true } } },
+    });
+    if (!order || (!isAdmin && order.userId !== userId)) {
+      throw new NotFoundException('Pedido no encontrado');
+    }
+    return order;
+  }
+
+  // Transición de estado MANUAL del admin (flujo de recogida, tarea 11). Valida
+  // que la transición es legal (rechaza las imposibles con 409) y dispara el email
+  // de la transición. Cancelar un pedido ya PAID NO repone stock (reembolsos
+  // mínimos, gestión manual; ver CLAUDE.md).
+  async transitionStatus(orderId: string, target: OrderStatus) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: { id: true, status: true },
+    });
+    if (!order) {
+      throw new NotFoundException('Pedido no encontrado');
+    }
+    const allowed = LEGAL_TRANSITIONS[order.status];
+    if (!allowed.includes(target)) {
+      throw new ConflictException(
+        `Transición no permitida: ${order.status} → ${target}`,
+      );
+    }
+
+    const updated = await this.prisma.order.update({
+      where: { id: orderId },
+      data: { status: target },
+    });
+
+    // Email de la transición: tolerante a fallos (no revierte el cambio).
+    await this.orderMail.sendStatusChange(orderId, target);
+
+    return updated;
+  }
 
   // Crea un pedido PENDING y reserva el stock de cada línea de forma ATÓMICA y con
   // expiración. Es el punto anti-condiciones-de-carrera de la Fase 3: dos clientes

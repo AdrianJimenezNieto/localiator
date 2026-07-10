@@ -1,4 +1,4 @@
-import { apiSend } from './api';
+import { apiGet, apiSend, API_URL } from './api';
 
 // Tipos e utilidades de PEDIDOS en el cliente. Los estados llegan del backend en
 // mayúsculas (enum Prisma OrderStatus), distintos de los valores de
@@ -32,6 +32,27 @@ export interface OrderView {
   lines: OrderLineView[];
 }
 
+// Pedido tal como lo devuelven "Mis pedidos" / detalle / gestión: como OrderView
+// pero con la factura (si existe) y, en el listado de admin, el email del cliente.
+export interface OrderRecord {
+  id: string;
+  status: ApiOrderStatus;
+  totalCents: number;
+  createdAt: string;
+  lines: OrderLineView[];
+  invoice?: { number: string } | null;
+  user?: { email: string };
+}
+
+// Etiquetas legibles del estado del pedido (mismas claves que el enum de la API).
+export const ORDER_STATUS_LABELS: Record<ApiOrderStatus, string> = {
+  PENDING: 'Pendiente de pago',
+  PAID: 'Pagado',
+  READY_FOR_PICKUP: 'Listo para recoger',
+  PICKED_UP: 'Recogido',
+  CANCELLED: 'Cancelado',
+};
+
 // Línea del carrito tal como la espera la API (mayúsculas). El precio NO se envía:
 // lo fija el servidor.
 export interface CreateOrderLine {
@@ -56,4 +77,49 @@ export function payOrder(
   token: string,
 ): Promise<{ url: string }> {
   return apiSend<{ url: string }>('POST', `/orders/${orderId}/pay`, undefined, token);
+}
+
+// "Mis pedidos" del comprador.
+export function getMyOrders(token: string): Promise<OrderRecord[]> {
+  return apiGet<OrderRecord[]>('/orders', token);
+}
+
+// Detalle de un pedido (dueño o admin).
+export function getOrder(orderId: string, token: string): Promise<OrderRecord> {
+  return apiGet<OrderRecord>(`/orders/${orderId}`, token);
+}
+
+// Listado de gestión (admin), opcionalmente filtrado por estado.
+export function adminListOrders(
+  token: string,
+  status?: ApiOrderStatus,
+): Promise<OrderRecord[]> {
+  const qs = status ? `?status=${status}` : '';
+  return apiGet<OrderRecord[]>(`/orders/admin${qs}`, token);
+}
+
+// Transición de estado (admin). El servidor valida que sea legal (409 si no).
+export function adminSetOrderStatus(
+  orderId: string,
+  status: ApiOrderStatus,
+  token: string,
+): Promise<OrderRecord> {
+  return apiSend<OrderRecord>('PATCH', `/orders/${orderId}/status`, { status }, token);
+}
+
+// Abre la factura (HTML) del pedido. El endpoint exige el access token (Bearer),
+// que un <a href> no adjunta; por eso se descarga con fetch autenticado y se abre
+// como blob en una pestaña nueva.
+export async function openInvoice(
+  orderId: string,
+  token: string,
+): Promise<void> {
+  const res = await fetch(`${API_URL}/orders/${orderId}/invoice`, {
+    credentials: 'include',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error('No se pudo abrir la factura');
+  const html = await res.text();
+  const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+  window.open(url, '_blank');
 }

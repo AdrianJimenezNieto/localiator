@@ -2,7 +2,7 @@
 // errores para que las páginas no repitan ese boilerplate. `credentials: include`
 // para que viaje la cookie de sesión cuando haga falta (rutas privadas del admin).
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+export const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
 export class ApiError extends Error {
   readonly status: number;

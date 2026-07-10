@@ -94,7 +94,7 @@ Objetivo: comprar de verdad. Cierre del MVP funcional.
 - [x] Conciliación pago recibido ↔ pedido registrado
 - [x] Facturación automática con IVA tras el pago
 - [x] Emails transaccionales de pedido (confirmación, cambios de estado)
-- [ ] Flujo de recogida en almacén (sin envíos)
+- [x] Flujo de recogida en almacén (sin envíos)
 
 ## Fase 4 — Legal, cumplimiento y lanzamiento
 Objetivo: poder abrir al público de forma legal y segura.

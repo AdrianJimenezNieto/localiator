@@ -16,6 +16,8 @@ import { LoginPage } from './pages/LoginPage.tsx'
 import { RegisterPage } from './pages/RegisterPage.tsx'
 import { CheckoutPage } from './pages/CheckoutPage.tsx'
 import { CheckoutResultPage } from './pages/CheckoutResultPage.tsx'
+import { MyOrdersPage } from './pages/MyOrdersPage.tsx'
+import { OrdersAdminPage } from './pages/admin/OrdersAdminPage.tsx'
 import { AdminLoginPage } from './pages/admin/AdminLoginPage.tsx'
 import { ProtectedAdmin } from './pages/admin/ProtectedAdmin.tsx'
 import { AdminLayout } from './pages/admin/AdminLayout.tsx'
@@ -38,6 +40,7 @@ const router = createBrowserRouter([
       { path: 'registro', element: <RegisterPage /> },
       { path: 'checkout', element: <CheckoutPage /> },
       { path: 'checkout/resultado', element: <CheckoutResultPage /> },
+      { path: 'mis-pedidos', element: <MyOrdersPage /> },
     ],
   },
   { path: '/admin/login', element: <AdminLoginPage /> },
@@ -56,6 +59,7 @@ const router = createBrowserRouter([
           { path: 'lotes/nuevo', element: <ItemFormPage kind="lot" /> },
           { path: 'lotes/:id', element: <ItemFormPage kind="lot" /> },
           { path: 'categorias', element: <CategoriesAdminPage /> },
+          { path: 'pedidos', element: <OrdersAdminPage /> },
         ],
       },
     ],
