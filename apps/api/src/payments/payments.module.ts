@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { OrdersModule } from '../orders/orders.module';
+import { InvoicingModule } from '../invoicing/invoicing.module';
 import { PaymentsController } from './payments.controller';
 import { WebhookController } from './webhook.controller';
 import { ReconciliationController } from './reconciliation.controller';
@@ -11,7 +12,7 @@ import { stripeProvider } from './stripe.provider';
 // el webhook que confirma el cobro. Importa OrdersModule para reutilizar
 // OrdersService (validación y enlace pedido ↔ PaymentIntent).
 @Module({
-  imports: [OrdersModule],
+  imports: [OrdersModule, InvoicingModule],
   controllers: [
     PaymentsController,
     WebhookController,

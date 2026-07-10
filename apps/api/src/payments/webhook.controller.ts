@@ -16,6 +16,7 @@ import type { Request } from 'express';
 import type Stripe from 'stripe';
 import { Public } from '../auth/public.decorator';
 import { OrdersService } from '../orders/orders.service';
+import { InvoicingService } from '../invoicing/invoicing.service';
 import { STRIPE_CLIENT, type StripeClient } from './stripe.provider';
 
 // Webhook de Stripe: FUENTE DE VERDAD del pago. El usuario puede cerrar la
@@ -33,6 +34,7 @@ export class WebhookController {
   constructor(
     @Inject(STRIPE_CLIENT) private readonly stripe: StripeClient,
     private readonly orders: OrdersService,
+    private readonly invoicing: InvoicingService,
     private readonly config: ConfigService,
   ) {}
 
@@ -113,6 +115,18 @@ export class WebhookController {
     switch (result.outcome) {
       case 'paid':
         this.logger.log(`Pedido ${result.orderId} confirmado como PAID`);
+        // Genera la factura (tarea 09). No bloquea ni revierte la confirmación:
+        // el pago ya ocurrió; si la factura falla, se registra y se puede
+        // regenerar después (la generación es idempotente por orderId).
+        if (result.orderId) {
+          try {
+            await this.invoicing.generateForOrder(result.orderId);
+          } catch (err) {
+            this.logger.error(
+              `No se pudo generar la factura del pedido ${result.orderId}: ${err instanceof Error ? err.message : 'error'}`,
+            );
+          }
+        }
         break;
       case 'already_paid':
         // Idempotencia: evento duplicado, no se hace nada.
