@@ -7,7 +7,13 @@ import { AppModule } from './app.module';
 import { StorageService } from './catalog/storage.service';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // rawBody: true conserva el cuerpo SIN parsear (req.rawBody, un Buffer) además
+  // del JSON ya parseado. Lo necesita el webhook de Stripe (payments/webhook) para
+  // verificar la firma sobre los bytes originales; el resto de rutas siguen usando
+  // el body JSON normal.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true,
+  });
 
   // trust proxy = 1: en producción la API va detrás de Nginx Proxy Manager. Sin
   // esto, Express vería la IP del proxy en todas las peticiones y el rate limiting
