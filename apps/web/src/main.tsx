@@ -12,6 +12,10 @@ import { CartProvider } from './lib/cart.tsx'
 import { CatalogPage } from './pages/CatalogPage.tsx'
 import { DetailPage } from './pages/DetailPage.tsx'
 import { CartPage } from './pages/CartPage.tsx'
+import { LoginPage } from './pages/LoginPage.tsx'
+import { RegisterPage } from './pages/RegisterPage.tsx'
+import { CheckoutPage } from './pages/CheckoutPage.tsx'
+import { CheckoutResultPage } from './pages/CheckoutResultPage.tsx'
 import { AdminLoginPage } from './pages/admin/AdminLoginPage.tsx'
 import { ProtectedAdmin } from './pages/admin/ProtectedAdmin.tsx'
 import { AdminLayout } from './pages/admin/AdminLayout.tsx'
@@ -30,6 +34,10 @@ const router = createBrowserRouter([
       { path: 'productos/:id', element: <DetailPage kind="product" /> },
       { path: 'lotes/:id', element: <DetailPage kind="lot" /> },
       { path: 'carrito', element: <CartPage /> },
+      { path: 'login', element: <LoginPage /> },
+      { path: 'registro', element: <RegisterPage /> },
+      { path: 'checkout', element: <CheckoutPage /> },
+      { path: 'checkout/resultado', element: <CheckoutResultPage /> },
     ],
   },
   { path: '/admin/login', element: <AdminLoginPage /> },
