@@ -33,6 +33,7 @@ model User {
   verificationTokens VerificationToken[]
   oauthAccounts      OAuthAccount[]
   refreshTokens      RefreshToken[]
+  orders             Order[]
 }
 
 // Sesión persistente (patrón decidido en CLAUDE.md): el access token (JWT corto)
@@ -242,4 +243,110 @@ model AuditLog {
   createdAt DateTime @default(now())
 
   @@index([entityType, entityId])
+}
+
+// ---------------------------------------------------------------------------
+// Pedidos (Fase 3). Flujo de RECOGIDA EN ALMACÉN (sin envíos, ver CLAUDE.md):
+// el pedido se paga y luego se prepara y se recoge físicamente; no hay tracking
+// ni transportista.
+// ---------------------------------------------------------------------------
+
+// Máquina de estados del pedido. El orden refleja el ciclo de vida real:
+//   PENDING  → recién creado, con stock reservado, esperando el pago (tarea 03).
+//   PAID     → el webhook de Stripe confirmó el cobro; stock ya descontado (06).
+//   READY_FOR_PICKUP → el admin lo preparó en el almacén (tarea 11).
+//   PICKED_UP → entregado al cliente en el almacén (tarea 11).
+//   CANCELLED → reserva expirada/pago fallido, o cancelación de admin (07/11).
+// Las transiciones legales se validan en el servicio (tarea 11), no aquí.
+enum OrderStatus {
+  PENDING
+  PAID
+  READY_FOR_PICKUP
+  PICKED_UP
+  CANCELLED
+}
+
+// Producto y Lote son entidades SEPARADAS (CLAUDE.md), sin una FK común. Una
+// línea de pedido apunta a una u otra con este discriminador + `itemId`, en vez
+// de dos FKs medio vacías. La contrapartida: Prisma no fuerza la integridad de
+// `itemId`; se valida en el servicio al crear el pedido.
+enum OrderItemType {
+  PRODUCT
+  LOT
+}
+
+model Order {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  status OrderStatus @default(PENDING)
+
+  // Total en céntimos (Int), como el resto del dinero del proyecto: lo fija el
+  // servidor releyendo el precio de BD, nunca el cliente (seguridad, tarea 03).
+  totalCents Int
+  currency   String @default("eur")
+
+  // Enlace fuerte con el cobro de Stripe. @unique hace de clave de idempotencia
+  // del webhook (tarea 06: un mismo PaymentIntent no confirma el pedido dos
+  // veces) y de base para la conciliación (tarea 08). Nullable porque el pedido
+  // nace antes de crear el intent de pago (tarea 04).
+  stripePaymentIntentId String? @unique
+
+  paidAt DateTime? // se rellena al confirmar el cobro (tarea 06).
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines        OrderLine[]
+  reservations StockReservation[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+// Copia DESNORMALIZADA (snapshot) del artículo en el momento de la compra. Se
+// guarda el nombre y el precio de entonces porque el producto puede editarse o
+// borrarse después y el pedido debe seguir siendo fiel a lo que se compró.
+// Referenciar solo `itemId` dejaría pedidos "rotos" al cambiar el catálogo.
+model OrderLine {
+  id String @id @default(cuid())
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  itemType OrderItemType
+  itemId   String // id lógico del Product/Lot (no es FK real; ver enum).
+
+  nameSnapshot   String // nombre del artículo cuando se compró.
+  unitPriceCents Int // precio unitario aplicado (con descuento ya incluido).
+  quantity       Int
+  lineTotalCents Int // unitPriceCents * quantity, materializado para el histórico.
+
+  @@index([orderId])
+}
+
+// Reserva temporal de stock durante el checkout. Es lo que impide vender dos
+// veces el mismo artículo mientras un cliente paga (tarea 03). El stock real de
+// Product/Lot NO se descuenta aquí: el "disponible" se calcula como
+// stock − reservas vivas, así una reserva que expira o un pago fallido liberan
+// stock sin tener que "devolverlo" (tareas 03/06/07). El barrido de expiradas
+// vive en la tarea 07.
+model StockReservation {
+  id String @id @default(cuid())
+
+  itemType OrderItemType
+  itemId   String
+  quantity Int
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  expiresAt DateTime // now + N min al crear la reserva (tarea 03).
+  createdAt DateTime @default(now())
+
+  @@index([itemType, itemId])
+  @@index([expiresAt])
+  @@index([orderId])
 }

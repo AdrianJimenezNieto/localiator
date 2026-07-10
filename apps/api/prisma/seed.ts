@@ -1,6 +1,12 @@
 // Seed idempotente de datos de prueba (desarrollo). Usa `upsert` en todos los
 // modelos para poder re-ejecutarse sin duplicar filas.
-import { PrismaClient, ItemCondition, Role } from '@prisma/client';
+import {
+  PrismaClient,
+  ItemCondition,
+  Role,
+  OrderStatus,
+  OrderItemType,
+} from '@prisma/client';
 import * as argon2 from 'argon2';
 
 const prisma = new PrismaClient();
@@ -142,9 +148,40 @@ async function main() {
     },
   });
 
+  // Pedido de ejemplo YA pagado (sin reserva viva, para no interferir con el
+  // barrido de reservas expiradas de la tarea 07). Sirve para desarrollar la
+  // vista "Mis pedidos" y el backoffice de pedidos sin tener que pasar por el
+  // checkout completo. Idempotente por id fijo, como Product/Lot.
+  const auricularesUnitPrice = 2500 - 500; // precio con descuento aplicado.
+  await prisma.order.upsert({
+    where: { id: 'seed-order-buyer-pagado' },
+    update: {},
+    create: {
+      id: 'seed-order-buyer-pagado',
+      userId: buyer.id,
+      status: OrderStatus.PAID,
+      totalCents: auricularesUnitPrice * 2,
+      currency: 'eur',
+      paidAt: new Date(),
+      lines: {
+        create: [
+          {
+            itemType: OrderItemType.PRODUCT,
+            itemId: 'seed-product-auriculares',
+            nameSnapshot: 'Auriculares inalámbricos',
+            unitPriceCents: auricularesUnitPrice,
+            quantity: 2,
+            lineTotalCents: auricularesUnitPrice * 2,
+          },
+        ],
+      },
+    },
+  });
+
   console.log('Seed completado:', {
     usuarios: [admin.email, buyer.email],
     categorias: [electronica.slug, herramientas.slug, hogar.slug],
+    pedidos: ['seed-order-buyer-pagado'],
   });
 }
 
