@@ -84,7 +84,7 @@ Objetivo: dar de alta productos/lotes y que se vean/filtren en la web.
 ## Fase 3 — Carrito, pedidos y pagos (MVP de venta)
 Objetivo: comprar de verdad. Cierre del MVP funcional.
 
-- [ ] Esquema Prisma: Pedido + líneas de pedido + estados (pendiente / pagado / listo para
+- [x] Esquema Prisma: Pedido + líneas de pedido + estados (pendiente / pagado / listo para
       recoger / recogido / cancelado)
 - [ ] Carrito de compra
 - [ ] Reserva temporal de stock con expiración durante el checkout
