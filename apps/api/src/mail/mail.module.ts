@@ -1,10 +1,12 @@
 import { Module } from '@nestjs/common';
 import { MailService } from './mail.service';
+import { OrderMailService } from './order-mail.service';
 
-// Exporta MailService para que AuthModule (y futuros módulos: pedidos, subastas)
-// puedan inyectarlo sin reconstruir la configuración de Resend.
+// Exporta MailService (transporte Resend) y OrderMailService (emails de pedido)
+// para que AuthModule, el webhook de pagos y OrdersModule los inyecten sin
+// reconstruir la configuración.
 @Module({
-  providers: [MailService],
-  exports: [MailService],
+  providers: [MailService, OrderMailService],
+  exports: [MailService, OrderMailService],
 })
 export class MailModule {}

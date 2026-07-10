@@ -44,7 +44,9 @@ export class MailService {
     );
   }
 
-  private async send(to: string, subject: string, html: string): Promise<void> {
+  // Público para que OrderMailService (mismo módulo) envíe correos de pedido con
+  // sus propias plantillas sin duplicar la lógica de transporte de Resend.
+  async send(to: string, subject: string, html: string): Promise<void> {
     if (!this.resend) {
       this.logger.warn(
         `RESEND_API_KEY ausente; email NO enviado a ${to}. Asunto: "${subject}".`,

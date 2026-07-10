@@ -7,6 +7,7 @@ import { WebhookController } from './webhook.controller';
 import { STRIPE_CLIENT } from './stripe.provider';
 import { OrdersService } from '../orders/orders.service';
 import { InvoicingService } from '../invoicing/invoicing.service';
+import { OrderMailService } from '../mail/order-mail.service';
 
 const constructEvent = jest.fn();
 const stripeMock = { webhooks: { constructEvent } };
@@ -17,6 +18,7 @@ const ordersMock = {
 };
 
 const invoicingMock = { generateForOrder: jest.fn() };
+const orderMailMock = { sendOrderConfirmation: jest.fn() };
 
 const configMock = {
   get: jest.fn((key: string) =>
@@ -40,6 +42,7 @@ describe('WebhookController', () => {
         { provide: STRIPE_CLIENT, useValue: stripeMock },
         { provide: OrdersService, useValue: ordersMock },
         { provide: InvoicingService, useValue: invoicingMock },
+        { provide: OrderMailService, useValue: orderMailMock },
         { provide: ConfigService, useValue: configMock },
       ],
     }).compile();
