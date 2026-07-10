@@ -8,6 +8,7 @@ import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { CatalogModule } from './catalog/catalog.module';
+import { OrdersModule } from './orders/orders.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 
@@ -26,6 +27,7 @@ import { RolesGuard } from './auth/roles.guard';
     PrismaModule,
     AuthModule,
     CatalogModule,
+    OrdersModule,
   ],
   controllers: [AppController],
   providers: [
