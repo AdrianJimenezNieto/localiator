@@ -193,7 +193,7 @@ export class OrdersService {
         where: params.paymentIntentId
           ? { stripePaymentIntentId: params.paymentIntentId }
           : { id: params.orderId },
-        include: { lines: true },
+        include: { lines: true, reservations: true },
       });
 
       if (!order) {
@@ -203,6 +203,19 @@ export class OrdersService {
         return { outcome: 'already_paid' as const, orderId: order.id };
       }
       if (order.status !== OrderStatus.PENDING) {
+        return { outcome: 'not_payable' as const, orderId: order.id };
+      }
+
+      // Coherencia con la liberación de reservas (tarea 07): si la reserva ya
+      // expiró (aunque el barrido aún no haya cancelado el pedido), NO confirmamos
+      // el cobro, porque ese stock pudo asignarse a otro comprador y descontarlo
+      // aquí provocaría sobreventa. Se marca como no pagable para revisión manual
+      // (reembolso fuera del MVP, CLAUDE.md).
+      const now = Date.now();
+      const reservationLive =
+        order.reservations.length > 0 &&
+        order.reservations.every((r) => r.expiresAt.getTime() > now);
+      if (!reservationLive) {
         return { outcome: 'not_payable' as const, orderId: order.id };
       }
 
@@ -239,6 +252,54 @@ export class OrdersService {
 
       return { outcome: 'paid' as const, orderId: order.id };
     });
+  }
+
+  // Libera la reserva de un pedido y lo cancela (tarea 07). La usa tanto el evento
+  // de pago fallido/cancelado de Stripe (liberación inmediata) como el barrido de
+  // reservas expiradas. Idempotente: si el pedido ya no es PENDING, no hace nada
+  // (liberar dos veces no rompe). Cancelamos el pedido (frente a dejarlo PENDING
+  // sin reserva) para que la conciliación (08) y el cliente lo vean claro.
+  async releaseReservation(params: {
+    paymentIntentId?: string;
+    orderId?: string;
+  }): Promise<{ released: boolean; orderId?: string }> {
+    return this.prisma.$transaction(async (tx) => {
+      const order = await tx.order.findFirst({
+        where: params.paymentIntentId
+          ? { stripePaymentIntentId: params.paymentIntentId }
+          : { id: params.orderId },
+        select: { id: true, status: true },
+      });
+      if (!order || order.status !== OrderStatus.PENDING) {
+        return { released: false, orderId: order?.id };
+      }
+      await tx.stockReservation.deleteMany({ where: { orderId: order.id } });
+      await tx.order.update({
+        where: { id: order.id },
+        data: { status: OrderStatus.CANCELLED },
+      });
+      return { released: true, orderId: order.id };
+    });
+  }
+
+  // Barre las reservas EXPIRADAS de pedidos aún PENDING y las libera. Lo llama el
+  // cron (ReservationCleanupService). Devuelve cuántos pedidos se cancelaron.
+  async releaseExpiredReservations(): Promise<number> {
+    const expired = await this.prisma.stockReservation.findMany({
+      where: {
+        expiresAt: { lt: new Date() },
+        order: { status: OrderStatus.PENDING },
+      },
+      select: { orderId: true },
+      distinct: ['orderId'],
+    });
+
+    let cancelled = 0;
+    for (const { orderId } of expired) {
+      const result = await this.releaseReservation({ orderId });
+      if (result.released) cancelled++;
+    }
+    return cancelled;
   }
 
   // Enlaza el pedido con su PaymentIntent de Stripe (idempotencia del webhook en

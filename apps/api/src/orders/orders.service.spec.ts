@@ -22,6 +22,7 @@ const prismaMock = {
   stockReservation: {
     aggregate: jest.fn(),
     deleteMany: jest.fn(),
+    findMany: jest.fn(),
   },
   $queryRaw: jest.fn(),
   $transaction: jest.fn(),
@@ -185,6 +186,7 @@ describe('OrdersService', () => {
 
   describe('confirmOrderPaid', () => {
     it('descuenta stock, consume reservas y marca PAID un pedido PENDING', async () => {
+      const future = new Date(Date.now() + 60_000);
       prismaMock.order.findFirst.mockResolvedValue({
         id: 'o1',
         status: 'PENDING',
@@ -193,6 +195,7 @@ describe('OrdersService', () => {
           { itemType: 'PRODUCT', itemId: 'p1', quantity: 2 },
           { itemType: 'LOT', itemId: 'l1', quantity: 1 },
         ],
+        reservations: [{ expiresAt: future }],
       });
 
       const result = await service.confirmOrderPaid({
@@ -247,6 +250,75 @@ describe('OrdersService', () => {
 
       expect(result.outcome).toBe('not_payable');
       expect(prismaMock.product.update).not.toHaveBeenCalled();
+    });
+
+    it('no descuenta stock si la reserva ya expiró (pago justo al expirar)', async () => {
+      const past = new Date(Date.now() - 60_000);
+      prismaMock.order.findFirst.mockResolvedValue({
+        id: 'o1',
+        status: 'PENDING',
+        stripePaymentIntentId: 'pi_1',
+        lines: [{ itemType: 'PRODUCT', itemId: 'p1', quantity: 2 }],
+        reservations: [{ expiresAt: past }],
+      });
+
+      const result = await service.confirmOrderPaid({
+        paymentIntentId: 'pi_1',
+      });
+
+      expect(result.outcome).toBe('not_payable');
+      expect(prismaMock.product.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('releaseReservation', () => {
+    it('libera la reserva y cancela un pedido PENDING', async () => {
+      prismaMock.order.findFirst.mockResolvedValue({
+        id: 'o1',
+        status: 'PENDING',
+      });
+
+      const result = await service.releaseReservation({ orderId: 'o1' });
+
+      expect(result).toEqual({ released: true, orderId: 'o1' });
+      expect(prismaMock.stockReservation.deleteMany).toHaveBeenCalledWith({
+        where: { orderId: 'o1' },
+      });
+      expect(prismaMock.order.update).toHaveBeenCalledWith({
+        where: { id: 'o1' },
+        data: { status: 'CANCELLED' },
+      });
+    });
+
+    it('es idempotente: no hace nada si el pedido ya no es PENDING', async () => {
+      prismaMock.order.findFirst.mockResolvedValue({
+        id: 'o1',
+        status: 'PAID',
+      });
+
+      const result = await service.releaseReservation({ orderId: 'o1' });
+
+      expect(result.released).toBe(false);
+      expect(prismaMock.stockReservation.deleteMany).not.toHaveBeenCalled();
+      expect(prismaMock.order.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('releaseExpiredReservations', () => {
+    it('cancela cada pedido PENDING con reserva expirada', async () => {
+      prismaMock.stockReservation.findMany.mockResolvedValue([
+        { orderId: 'o1' },
+        { orderId: 'o2' },
+      ]);
+      prismaMock.order.findFirst.mockResolvedValue({
+        id: 'o1',
+        status: 'PENDING',
+      });
+
+      const count = await service.releaseExpiredReservations();
+
+      expect(count).toBe(2);
+      expect(prismaMock.order.update).toHaveBeenCalledTimes(2);
     });
   });
 });

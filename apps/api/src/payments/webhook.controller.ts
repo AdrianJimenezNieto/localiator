@@ -69,11 +69,31 @@ export class WebhookController {
     // Respondemos 200 rápido en cualquier caso; los eventos que no manejamos se
     // ignoran (Stripe envía muchos tipos). El trabajo pesado (email, factura) se
     // dispara desde aquí en tareas siguientes sin bloquear esta respuesta.
-    if (event.type === 'checkout.session.completed') {
-      await this.onCheckoutCompleted(event.data.object);
+    switch (event.type) {
+      case 'checkout.session.completed':
+        await this.onCheckoutCompleted(event.data.object);
+        break;
+      // Pago fallido o cancelado: liberamos la reserva de inmediato en vez de
+      // esperar a que expire (tarea 07), para devolver el stock cuanto antes.
+      case 'payment_intent.payment_failed':
+      case 'payment_intent.canceled':
+        await this.onPaymentFailed(event.data.object);
+        break;
     }
 
     return { received: true };
+  }
+
+  private async onPaymentFailed(intent: Stripe.PaymentIntent): Promise<void> {
+    const result = await this.orders.releaseReservation({
+      paymentIntentId: intent.id,
+      orderId: intent.metadata?.orderId ?? undefined,
+    });
+    if (result.released) {
+      this.logger.log(
+        `Pago fallido/cancelado: reserva liberada y pedido ${result.orderId} cancelado`,
+      );
+    }
   }
 
   private async onCheckoutCompleted(
