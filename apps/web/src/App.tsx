@@ -1,11 +1,13 @@
 import { Link, Outlet } from 'react-router-dom'
 import { useCart } from './lib/cart'
+import { useAuth } from './lib/auth'
 
 // Layout público común: cabecera + contenedor donde el router pinta cada página
-// (<Outlet/>). Es la base sobre la que cuelgan el catálogo, la ficha, el carrito
-// y (más adelante) el backoffice.
+// (<Outlet/>). Es la base sobre la que cuelgan el catálogo, la ficha, el carrito,
+// el checkout y la sesión de comprador.
 function App() {
   const { count } = useCart()
+  const { user, ready, logout } = useAuth()
 
   return (
     <div className="min-h-screen bg-neutral-50 text-neutral-900">
@@ -15,17 +17,38 @@ function App() {
             Localiator
           </Link>
 
-          <Link
-            to="/carrito"
-            className="relative flex items-center gap-2 text-sm font-medium text-neutral-700 hover:text-neutral-900"
-          >
-            Carrito
-            {count > 0 && (
-              <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-neutral-900 px-1.5 text-xs font-semibold text-white">
-                {count}
-              </span>
+          <nav className="flex items-center gap-5 text-sm font-medium text-neutral-700">
+            <Link
+              to="/carrito"
+              className="relative flex items-center gap-2 hover:text-neutral-900"
+            >
+              Carrito
+              {count > 0 && (
+                <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-neutral-900 px-1.5 text-xs font-semibold text-white">
+                  {count}
+                </span>
+              )}
+            </Link>
+
+            {ready && user ? (
+              <>
+                <Link to="/mis-pedidos" className="hover:text-neutral-900">
+                  Mis pedidos
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => void logout()}
+                  className="text-neutral-500 hover:text-neutral-900"
+                >
+                  Salir
+                </button>
+              </>
+            ) : (
+              <Link to="/login" className="hover:text-neutral-900">
+                Entrar
+              </Link>
             )}
-          </Link>
+          </nav>
         </div>
       </header>
 

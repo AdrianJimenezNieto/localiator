@@ -22,6 +22,7 @@ interface AuthContextValue {
   ready: boolean;
   isAdmin: boolean;
   login: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -74,6 +75,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(me);
   }
 
+  // Registro de comprador. NO inicia sesión: el backend crea la cuenta y envía el
+  // email de verificación; hasta verificar no se puede comprar (política de la
+  // Fase 3). `website: ''` es el honeypot vacío que espera el AntiBotGuard.
+  async function register(email: string, password: string) {
+    await apiSend('POST', '/auth/register', { email, password, website: '' });
+  }
+
   async function logout() {
     try {
       await apiSend('POST', '/auth/logout');
@@ -88,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, token, ready, isAdmin, login, logout }}
+      value={{ user, token, ready, isAdmin, login, register, logout }}
     >
       {children}
     </AuthContext.Provider>
