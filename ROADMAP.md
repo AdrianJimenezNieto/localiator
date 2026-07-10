@@ -92,7 +92,7 @@ Objetivo: comprar de verdad. Cierre del MVP funcional.
 - [x] Webhook de Stripe: confirmar pedido al cobrar
 - [x] Manejo de pago fallido / abandonado (liberar reserva de stock)
 - [x] Conciliación pago recibido ↔ pedido registrado
-- [ ] Facturación automática con IVA tras el pago
+- [x] Facturación automática con IVA tras el pago
 - [ ] Emails transaccionales de pedido (confirmación, cambios de estado)
 - [ ] Flujo de recogida en almacén (sin envíos)
 

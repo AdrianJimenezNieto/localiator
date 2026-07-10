@@ -301,6 +301,7 @@ model Order {
 
   lines        OrderLine[]
   reservations StockReservation[]
+  invoice      Invoice?
 
   @@index([userId])
   @@index([status])
@@ -349,4 +350,42 @@ model StockReservation {
   @@index([itemType, itemId])
   @@index([expiresAt])
   @@index([orderId])
+}
+
+// Factura de un pedido pagado (tarea 09). Se genera automáticamente al confirmar
+// el cobro (webhook, tarea 06). Los precios del catálogo son IVA INCLUIDO, así que
+// el desglose va "hacia atrás": grossCents = total del pedido; netCents = base
+// imponible; vatCents = grossCents − netCents.
+model Invoice {
+  id String @id @default(cuid())
+
+  orderId String @unique // un pedido, una factura (idempotencia de la generación).
+  order   Order  @relation(fields: [orderId], references: [id])
+
+  // Serie legal correlativa sin huecos (p. ej. "2026-000123"). El número lo asigna
+  // un contador atómico por año (InvoiceCounter): requisito legal.
+  number   String   @unique
+  issuedAt DateTime @default(now())
+
+  // Dinero en céntimos (Int), como el resto del proyecto. vatRateBps = tipo de IVA
+  // en puntos básicos (2100 = 21 %): entero, sin decimales flotantes en impuestos.
+  netCents   Int
+  vatRateBps Int
+  vatCents   Int
+  grossCents Int
+
+  // Snapshot mínimo del cliente (el emisor es constante y se lee de configuración
+  // al renderizar). El email puede cambiar/borrarse después; la factura no.
+  customerEmail String
+
+  createdAt DateTime @default(now())
+}
+
+// Contador correlativo de facturas por año. Fila por año; el número se incrementa
+// de forma atómica (INSERT ... ON CONFLICT DO UPDATE ... RETURNING) para que dos
+// facturas simultáneas no se salten ni repitan número (sin huecos, requisito
+// legal). Tabla propia en vez de contar filas de Invoice: evita carreras.
+model InvoiceCounter {
+  year       Int @id
+  lastNumber Int @default(0)
 }
