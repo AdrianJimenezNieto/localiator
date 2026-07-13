@@ -16,16 +16,28 @@ const prismaMock = {
     findFirst: jest.fn(),
     create: jest.fn(),
   },
+  $queryRaw: jest.fn(),
+  $transaction: jest.fn(),
 };
 
 // El servicio emite a la room tras registrar la puja (punto único de emisión).
 const gatewayMock = { broadcastBidAccepted: jest.fn() };
 
+// Fila que devolvería el SELECT ... FOR UPDATE de la subasta bloqueada. Misma
+// forma que las validaciones necesitan; por defecto, LIVE y dentro de ventana.
+const now = Date.now();
+const lockedRow = {
+  status: 'LIVE',
+  startsAt: new Date(now - 60 * 60 * 1000),
+  endsAt: new Date(now + 60 * 60 * 1000),
+  startingPriceCents: 4500,
+  minIncrementCents: 500,
+};
+
 const verifiedUser = { emailVerifiedAt: new Date() };
 
 // Subasta LIVE base: empezó hace una hora, cierra dentro de una hora. Cada test
 // la ajusta con un spread si necesita otro estado/ventana.
-const now = Date.now();
 const liveAuction = {
   id: 'auction-1',
   itemType: 'PRODUCT',
@@ -57,6 +69,13 @@ describe('AuctionsService', () => {
     prismaMock.bid.create.mockImplementation(({ data }) =>
       Promise.resolve({ id: 'bid-new', createdAt: new Date(), ...data }),
     );
+    // La transacción interactiva ejecuta el callback con el propio mock como `tx`
+    // (mismo patrón que el spec de orders). El SELECT ... FOR UPDATE devuelve la
+    // fila bloqueada por defecto.
+    prismaMock.$transaction.mockImplementation(
+      (cb: (tx: typeof prismaMock) => unknown) => cb(prismaMock),
+    );
+    prismaMock.$queryRaw.mockResolvedValue([lockedRow]);
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -120,6 +139,29 @@ describe('AuctionsService', () => {
     });
 
     expect(bid).toMatchObject({ amountCents: 5500 });
+  });
+
+  it('toma el bloqueo de fila (SELECT ... FOR UPDATE) al registrar la puja', async () => {
+    await service.placeBid('auction-1', 'user-1', { amountCents: 4500 });
+
+    expect(prismaMock.$transaction).toHaveBeenCalled();
+    expect(prismaMock.$queryRaw).toHaveBeenCalled();
+  });
+
+  it('rechaza con OUTBID cuando otra puja se cuela entre el fast path y el lock', async () => {
+    // Fast path ve la máxima en 5000 (mín. 5500); la puja de 5500 pasa la fase 1.
+    // Bajo el lock, la máxima ya avanzó a 5500 (otra puja ganó la carrera): ahora
+    // el mínimo es 6000, así que 5500 se rechaza como OUTBID, no como BID_TOO_LOW.
+    prismaMock.bid.findFirst
+      .mockResolvedValueOnce({ id: 'b1', userId: 'other', amountCents: 5000 })
+      .mockResolvedValueOnce({ id: 'b2', userId: 'other2', amountCents: 5500 });
+
+    const error = await service
+      .placeBid('auction-1', 'user-1', { amountCents: 5500 })
+      .catch((e: unknown) => e);
+
+    expect(rejectCode(error)).toBe(BidRejectReason.OUTBID);
+    expect(prismaMock.bid.create).not.toHaveBeenCalled();
   });
 
   it('rechaza pujar contra uno mismo cuando ya eres el líder', async () => {

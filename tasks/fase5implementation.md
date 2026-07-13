@@ -153,3 +153,55 @@ identidad.
 | --- | --- |
 | `join` | `{ auctionId }` — entrar a la room |
 | `bid` | `{ auctionId, amountCents }` — pujar |
+
+---
+
+## Tarea 04 · Control de concurrencia en pujas casi simultáneas
+
+**Qué**: blindar `placeBid` para que dos pujas casi a la vez no ganen ambas sobre
+la misma máxima. Cierra el `TODO(tarea 04)`.
+
+**Mecanismo**: **bloqueo de fila** con `SELECT ... FOR UPDATE` sobre la fila de
+`Auction`, dentro de una transacción Prisma. Serializa las pujas de *esa* subasta
+(otras subastas no se ven afectadas) hasta el commit. Se elige sobre la escritura
+condicional (`updateMany ... where`) por **consistencia con la reserva de stock**
+de la Fase 3 (`OrdersService.lockItem`) y por ser más explícito de razonar.
+
+**`placeBid` en dos fases**
+1. **Fast path (sin lock)**: rechaza lo obvio —subasta cerrada, auto-superarse,
+   puja por debajo de la máxima conocida (`BID_TOO_LOW`)— sin coger el lock, para
+   no serializar pujas inválidas ni spam.
+2. **Fase autoritativa (bajo lock)**: `lockAuction` hace el `FOR UPDATE`, se
+   relee la máxima **bajo el lock** y se revalida. Si la máxima **avanzó** desde
+   el fast path, es que otra puja ganó la carrera → se rechaza con **`OUTBID`**.
+   Si no, se inserta el `Bid`. El broadcast se emite tras el commit.
+
+**Distinción semántica** (un helper `assertBeats` con un `tooLowReason`
+parametrizado la produce sin duplicar código):
+- `BID_TOO_LOW`: pujaste por debajo a sabiendas de la máxima que veías.
+- `OUTBID`: tu puja era válida al enviarla, pero alguien te adelantó entre medias.
+
+**Helpers extraídos** (reutilizados por HTTP y por el lock, y de aquí en adelante
+por 05/06): `lockAuction`, `highestBid`, `assertOpen`, `assertBeats`.
+
+> **Concepto a repasar**: `SELECT ... FOR UPDATE` y transacciones Prisma
+> interactivas (`$transaction(async (tx) => …)`). El lock se mantiene hasta el
+> commit; una segunda transacción que quiera la misma fila espera. Es el mismo
+> concepto que ya salió con la reserva de stock.
+
+### Nota honesta sobre los tests (importante para la revisión)
+
+El `.md` pide un test que "lance N pujas concurrentes". **No se ha hecho un test de
+carrera contra BD real**, y es una decisión consciente, no un olvido:
+- Todo el proyecto testea con `prismaMock` (mocks), no con Postgres real.
+- La **CI no aplica migraciones** antes de los tests (solo `prisma generate`), así
+  que un spec que tocara BD real fallaría (no hay tablas). La reserva de stock —su
+  análoga— tampoco se testeó a nivel de BD por lo mismo.
+
+Lo que **sí** se testea (determinista, sin hilos): que se **toma el lock**
+(`$transaction` + `$queryRaw` invocados) y que el camino de carrera produce
+`OUTBID` (simulando que la máxima avanzó entre el fast path y el lock con
+`mockResolvedValueOnce`). La serialización real la da el `FOR UPDATE` a nivel de
+Postgres, idéntico al patrón de stock ya en producción. Si más adelante se monta un
+arnés de test con BD real (migraciones en CI), aquí encajaría un test de carrera de
+verdad con `Promise.all`.
