@@ -102,7 +102,7 @@ Objetivo: poder abrir al público de forma legal y segura.
 - [x] Aviso legal y condiciones de venta
 - [ ] Política de privacidad + RGPD (derecho al olvido)
 - [ ] Banner y política de cookies / consentimiento
-- [ ] Garantías legales al consumidor reflejadas en las condiciones
+- [x] Garantías legales al consumidor reflejadas en las condiciones
 - [ ] Revisión de seguridad: CSRF, XSS, inyección, secretos, HTTPS, cifrado en reposo
 - [ ] SEO básico (metadatos, sitemap, URLs amigables)
 - [ ] Backups automáticos de la base de datos

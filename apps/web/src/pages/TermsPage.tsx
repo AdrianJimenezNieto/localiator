@@ -60,6 +60,36 @@ export function TermsPage() {
         </p>
       </LegalSection>
 
+      <LegalSection title="Garantía legal y estado de los artículos">
+        <p>
+          Los artículos que se venden en {COMPANY.brand} proceden de subasta y son,
+          en su mayoría, bienes de segunda mano que pueden presentar signos de uso o
+          desperfectos. El <strong>estado real de cada artículo</strong> se describe
+          y fotografía en su ficha; esa descripción forma parte de lo acordado en la
+          compra, por lo que los defectos ya informados no dan lugar a reclamación
+          por falta de conformidad.
+        </p>
+        <p>
+          Como consumidor, dispone de la garantía legal por falta de conformidad que
+          la normativa española de defensa del consumidor reconoce a los bienes de
+          segunda mano{' '}
+          <em>[PENDIENTE revisión legal: plazo concreto de garantía aplicable]</em>.
+          Para ejercerla, comuníquenos cualquier falta de conformidad no descrita en
+          la ficha a través de {COMPANY.email}, indicando su pedido.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="Derecho de desistimiento">
+        <p>
+          El derecho de desistimiento presenta límites y excepciones para
+          determinados bienes, en particular los adquiridos en subastas públicas y
+          los artículos únicos o claramente identificados por su estado{' '}
+          <em>[PENDIENTE revisión legal: alcance exacto del desistimiento en este
+          caso]</em>. Cuando proceda, el plazo y la forma de ejercerlo se
+          comunicarán conforme a la normativa vigente.
+        </p>
+      </LegalSection>
+
       <LegalSection title="Cancelaciones y reembolsos">
         <p>
           Al tratarse de artículos únicos procedentes de subasta, a menudo usados o

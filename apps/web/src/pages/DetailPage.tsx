@@ -89,6 +89,21 @@ export function DetailPage({ kind }: { kind: ItemKind }) {
 
           <p className="whitespace-pre-line text-neutral-700">{data.description}</p>
 
+          {/* El estado y los desperfectos descritos arriba forman parte de lo
+              acordado en la compra: lo enlazamos con la garantía de las condiciones
+              de venta (tarea 04) para dar transparencia al comprador. */}
+          <p className="text-sm text-neutral-500">
+            Artículo de subasta: su estado ({conditionLabel(data.condition)}) y los
+            desperfectos descritos forman parte de la venta. Consulta la{' '}
+            <Link
+              to="/condiciones-venta"
+              className="underline hover:text-neutral-900"
+            >
+              garantía y condiciones de venta
+            </Link>
+            .
+          </p>
+
           <AddToCart item={data} finalCents={finalCents} />
         </div>
       </div>
