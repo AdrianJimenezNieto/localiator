@@ -1,0 +1,12 @@
+# Lo que NO entra en el contexto de build de Docker. Sobre todo node_modules y dist
+# del host: dentro de la imagen se instalan/compilan limpios (evita arrastrar binarios
+# del host y acelera el envío del contexto).
+**/node_modules
+**/dist
+.git
+apps/api/uploads
+backups
+*.log
+.env
+.env.*
+!.env.example

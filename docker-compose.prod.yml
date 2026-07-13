@@ -1,0 +1,65 @@
+# Compose de PRODUCCIÓN (Fase 4, tarea 09). A diferencia del docker-compose.yml de
+# desarrollo (que solo levanta Postgres), aquí corren los tres servicios: base de
+# datos, API y web, construidos desde sus Dockerfiles.
+#
+# Delante va Nginx Proxy Manager (fuera de este compose) con el dominio y el SSL de
+# Let's Encrypt, haciendo proxy a `web` (y a `api`). Los secretos vienen de
+# .env.production (fuera del repo).
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # Fotos subidas por el admin: persisten fuera del contenedor (UPLOAD_DIR).
+      - uploads:/repo/apps/api/uploads
+    # Reutiliza el /health ya existente en la API para saber si está viva.
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3000/health || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    # Expuesto solo a Nginx Proxy Manager (misma red); si NPM está en otra red
+    # Docker, publica el puerto o conéctalos con `networks`.
+    ports:
+      - '127.0.0.1:3000:3000'
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # URL pública de la API (se inyecta en el build de Vite). Debe apuntar al
+        # dominio real de la API en producción.
+        VITE_API_URL: ${VITE_API_URL}
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - '127.0.0.1:8080:80'
+
+volumes:
+  pgdata:
+  uploads:
