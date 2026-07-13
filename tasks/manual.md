@@ -42,3 +42,18 @@ Marca `[x]` según las completes.
 > En desarrollo, sin `RESEND_API_KEY` los emails se **registran en el log** en vez de
 > enviarse (comportamiento ya existente del `MailService`), así que se puede desarrollar la
 > Fase 3 sin Resend configurado.
+
+---
+
+## Fase 4 — Legal, cumplimiento y lanzamiento
+
+### Datos legales del titular — tareas 01, 02, 04
+Rellenar en `apps/web/src/lib/legal.ts` (hoy con marcadores `[PENDIENTE]`). Sin estos datos
+reales no se puede abrir al público (tarea 12 exige que no queden `[PENDIENTE]`).
+- [ ] **Razón social / nombre y apellidos** del titular (persona física o jurídica).
+- [ ] **NIF/CIF**.
+- [ ] **Domicilio fiscal** completo.
+- [ ] **Email de contacto** legal (para avisos, ejercicio de derechos RGPD, reclamaciones).
+- [ ] **Datos registrales** (solo si el titular es una sociedad; un autónomo no los tiene).
+- [ ] (Recomendado) revisar los textos legales con un abogado antes del lanzamiento; los
+      puntos que requieren criterio jurídico están marcados `[PENDIENTE revisión legal]`.
