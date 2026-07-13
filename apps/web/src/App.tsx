@@ -1,6 +1,7 @@
 import { Link, Outlet } from 'react-router-dom'
 import { useCart } from './lib/cart'
 import { useAuth } from './lib/auth'
+import { Footer } from './components/Footer'
 
 // Layout público común: cabecera + contenedor donde el router pinta cada página
 // (<Outlet/>). Es la base sobre la que cuelgan el catálogo, la ficha, el carrito,
@@ -10,7 +11,7 @@ function App() {
   const { user, ready, logout } = useAuth()
 
   return (
-    <div className="min-h-screen bg-neutral-50 text-neutral-900">
+    <div className="flex min-h-screen flex-col bg-neutral-50 text-neutral-900">
       <header className="border-b border-neutral-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
           <Link to="/" className="text-xl font-bold">
@@ -52,9 +53,11 @@ function App() {
         </div>
       </header>
 
-      <main>
+      <main className="flex-1">
         <Outlet />
       </main>
+
+      <Footer />
     </div>
   )
 }
