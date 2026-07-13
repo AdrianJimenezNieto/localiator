@@ -26,6 +26,13 @@ model User {
   passwordHash    String? // nullable: un usuario de Google puede no tener contraseña local.
   role            Role      @default(BUYER)
 
+  // Derecho al olvido (RGPD, Fase 4 tarea 02): no se puede borrar la fila de un
+  // usuario con facturas (deber de conservación fiscal), así que se ANONIMIZA:
+  // email/contraseña se sustituyen por valores neutros y se marca aquí la fecha.
+  // Un valor no nulo significa "cuenta anonimizada": no puede volver a iniciar
+  // sesión y sus facturas se conservan.
+  anonymizedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

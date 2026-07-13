@@ -20,6 +20,8 @@ import { MyOrdersPage } from './pages/MyOrdersPage.tsx'
 import { LegalPage } from './pages/LegalPage.tsx'
 import { TermsPage } from './pages/TermsPage.tsx'
 import { CookiesPage } from './pages/CookiesPage.tsx'
+import { PrivacyPage } from './pages/PrivacyPage.tsx'
+import { AccountPage } from './pages/AccountPage.tsx'
 import { OrdersAdminPage } from './pages/admin/OrdersAdminPage.tsx'
 import { AdminLoginPage } from './pages/admin/AdminLoginPage.tsx'
 import { ProtectedAdmin } from './pages/admin/ProtectedAdmin.tsx'
@@ -47,6 +49,8 @@ const router = createBrowserRouter([
       { path: 'aviso-legal', element: <LegalPage /> },
       { path: 'condiciones-venta', element: <TermsPage /> },
       { path: 'cookies', element: <CookiesPage /> },
+      { path: 'privacidad', element: <PrivacyPage /> },
+      { path: 'cuenta', element: <AccountPage /> },
     ],
   },
   { path: '/admin/login', element: <AdminLoginPage /> },
