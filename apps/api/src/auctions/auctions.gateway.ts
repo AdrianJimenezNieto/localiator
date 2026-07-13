@@ -149,6 +149,15 @@ export class AuctionsGateway implements OnGatewayConnection {
     this.server.to(this.room(auctionId)).emit('auction:extended', { endsAt });
   }
 
+  // Avisa a la room de que la subasta se cerró (tarea 06). El ganador va
+  // enmascarado (o null si quedó desierta). Lo llama AuctionsService.closeAuction.
+  broadcastClosed(
+    auctionId: string,
+    payload: { winnerMasked: string | null; amountCents: number | null },
+  ): void {
+    this.server.to(this.room(auctionId)).emit('auction:closed', payload);
+  }
+
   private room(auctionId: string): string {
     return `auction:${auctionId}`;
   }

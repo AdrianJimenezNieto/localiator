@@ -34,6 +34,20 @@ interface BiddableAuction {
   minIncrementCents: number;
 }
 
+// Resultado de intentar cerrar una subasta (tarea 06). Los outcomes "no cierre"
+// (not_found/noop/not_due) hacen que la idempotencia sea explícita y testeable.
+export type CloseResult =
+  | { outcome: 'not_found' }
+  | { outcome: 'noop' } // ya no estaba LIVE (cerrada antes).
+  | { outcome: 'not_due' } // el antisniping movió endsAt al futuro.
+  | { outcome: 'closed_empty' } // cerrada sin pujas: desierta.
+  | {
+      outcome: 'closed_won';
+      winnerUserId: string;
+      winningBidId: string;
+      amountCents: number;
+    };
+
 @Injectable()
 export class AuctionsService {
   constructor(
@@ -74,6 +88,82 @@ export class AuctionsService {
         createdAt: b.createdAt,
       })),
     };
+  }
+
+  // Subastas vencidas que aún siguen LIVE: candidatas a cerrarse. Lo consulta el
+  // cron (AuctionsCloser). `endsAt <= now` respeta el antisniping porque una
+  // extensión ya habría movido `endsAt` al futuro y no saldría aquí.
+  async findDueAuctions(): Promise<string[]> {
+    const due = await this.prisma.auction.findMany({
+      where: { status: AuctionStatus.LIVE, endsAt: { lte: new Date() } },
+      select: { id: true },
+    });
+    return due.map((a) => a.id);
+  }
+
+  // Cierra una subasta vencida y fija su ganador (o la deja desierta). Transaccional
+  // y con bloqueo de fila, por las mismas razones que una puja:
+  //  - Relee `endsAt` BAJO el lock: una puja de última hora pudo extenderlo
+  //    (antisniping, tarea 05); si ahora `endsAt > now`, no se cierra.
+  //  - IDEMPOTENTE: solo actúa si sigue LIVE. Cerrar una subasta ya cerrada (cron
+  //    solapado o proceso reiniciado) no reasigna ganador ni rompe.
+  //  - Ganador DESNORMALIZADO: fija winnerUserId + winningBidId (tarea 01) para no
+  //    recalcular la máxima en el cobro (09) ni en el impago (07).
+  async closeAuction(auctionId: string): Promise<CloseResult> {
+    const result = await this.prisma.$transaction(
+      async (tx): Promise<CloseResult> => {
+        const locked = await this.lockAuction(tx, auctionId);
+        if (!locked) {
+          return { outcome: 'not_found' };
+        }
+        // Idempotencia: solo se cierra lo que sigue en curso.
+        if (locked.status !== AuctionStatus.LIVE) {
+          return { outcome: 'noop' };
+        }
+        // El antisniping pudo mover el cierre al futuro entre que el cron la
+        // seleccionó y este lock: entonces todavía no toca cerrarla.
+        if (locked.endsAt.getTime() > Date.now()) {
+          return { outcome: 'not_due' };
+        }
+
+        const highest = await this.highestBid(tx, auctionId);
+        await tx.auction.update({
+          where: { id: auctionId },
+          data: {
+            status: AuctionStatus.CLOSED,
+            winnerUserId: highest?.userId ?? null,
+            winningBidId: highest?.id ?? null,
+          },
+        });
+
+        return highest
+          ? {
+              outcome: 'closed_won',
+              winnerUserId: highest.userId,
+              winningBidId: highest.id,
+              amountCents: highest.amountCents,
+            }
+          : { outcome: 'closed_empty' };
+      },
+    );
+
+    // Emisión y ganchos, ya con el cierre confirmado en BD.
+    if (result.outcome === 'closed_won') {
+      this.gateway.broadcastClosed(auctionId, {
+        winnerMasked: maskBidder(result.winnerUserId),
+        amountCents: result.amountCents,
+      });
+      // TODO(tarea 08): notificar "has ganado" al ganador y "no ganado" al resto.
+      // TODO(tarea 09): crear el Order PENDING del ganador con su paymentDueAt.
+    } else if (result.outcome === 'closed_empty') {
+      // Subasta desierta: nadie pujó.
+      this.gateway.broadcastClosed(auctionId, {
+        winnerMasked: null,
+        amountCents: null,
+      });
+    }
+
+    return result;
   }
 
   // Registra una puja aplicando las reglas de negocio de la subasta. Esta es la
