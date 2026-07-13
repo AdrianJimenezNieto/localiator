@@ -110,7 +110,8 @@ Objetivo: poder abrir al público de forma legal y segura.
 - [x] Despliegue en VPS: Docker + Nginx Proxy Manager + SSL Let's Encrypt + dominio
 - [x] CD con estrategia de rollback
 - [x] Escaneo automático de vulnerabilidades en dependencias
-- [ ] **Lanzamiento del MVP** 🚀
+- [ ] **Lanzamiento del MVP** 🚀 — pendiente solo del lanzamiento manual en producción
+      (ver `docs/launch-checklist.md`); todo el código de la Fase 4 está terminado.
 
 ## Fase 5 — Subastas propias (post-MVP)
 Objetivo: pujas en tiempo real sobre productos/lotes.

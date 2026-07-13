@@ -103,3 +103,14 @@ El workflow `.github/workflows/deploy.yml` está listo; faltan los secretos y un
       (paquetes públicos, o `docker login` con un PAT de solo lectura).
 - [ ] **Probar el rollback** una vez: forzar un deploy que falle el health-check y verificar
       que vuelve a la release anterior (`.last_good_tag`).
+
+### Lanzamiento del MVP — tarea 12
+Todo el código de la Fase 4 está listo; el lanzamiento es la verificación final en
+producción (ver la checklist completa en `docs/launch-checklist.md`).
+- [ ] Completar los datos legales reales (sección «Datos legales del titular»).
+- [ ] Desplegar en el VPS y activar el CD (secciones de las tareas 09 y 10).
+- [ ] **Stripe a modo live**: `STRIPE_SECRET_KEY` real + webhook de producción (`whsec_...`).
+- [ ] Verificar una **compra real de bajo importe** de punta a punta.
+- [ ] Prueba de humo (registro, login social, compra, admin, emails de Resend en prod).
+- [ ] Backup previo + rollback confirmado.
+- [ ] Marcar «**Lanzamiento del MVP**» en `ROADMAP.md` una vez todo verificado en producción.
