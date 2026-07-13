@@ -1,11 +1,15 @@
 import {
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import { AuctionStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuctionsGateway } from './auctions.gateway';
+import { maskBidder } from './auctions.mask';
 import { PlaceBidDto } from './dto/place-bid.dto';
 
 // Motivos estables de rechazo de una puja. Se envían como `code` en el 409 para
@@ -19,7 +23,45 @@ export const BidRejectReason = {
 
 @Injectable()
 export class AuctionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    // forwardRef: el gateway también depende de este servicio (procesa el mensaje
+    // `bid` delegando aquí), así que hay ciclo. NestJS lo rompe resolviendo esta
+    // referencia de forma diferida. El servicio es el ÚNICO punto de emisión: así
+    // una puja por HTTP o por WS llega igual a los espectadores.
+    @Inject(forwardRef(() => AuctionsGateway))
+    private readonly gateway: AuctionsGateway,
+  ) {}
+
+  // Estado inicial que se envía a un socket al unirse a la subasta (evento
+  // `auction:state`), para que el front pinte sin un GET REST aparte. Solo datos
+  // públicos + identidad enmascarada de los postores (RGPD).
+  async getAuctionState(auctionId: string) {
+    const auction = await this.prisma.auction.findUnique({
+      where: { id: auctionId },
+      include: { bids: { orderBy: { createdAt: 'desc' }, take: 20 } },
+    });
+    if (!auction) {
+      throw new NotFoundException('Subasta no encontrada');
+    }
+    const highest = auction.bids.reduce<(typeof auction.bids)[number] | null>(
+      (max, b) => (!max || b.amountCents > max.amountCents ? b : max),
+      null,
+    );
+    return {
+      id: auction.id,
+      status: auction.status,
+      startingPriceCents: auction.startingPriceCents,
+      minIncrementCents: auction.minIncrementCents,
+      endsAt: auction.endsAt,
+      highestBidCents: highest?.amountCents ?? null,
+      bids: auction.bids.map((b) => ({
+        amountCents: b.amountCents,
+        userMasked: maskBidder(b.userId),
+        createdAt: b.createdAt,
+      })),
+    };
+  }
 
   // Registra una puja aplicando las reglas de negocio de la subasta. Esta es la
   // ÚNICA puerta de entrada de una puja: el gateway de tiempo real (tarea 03)
@@ -91,9 +133,19 @@ export class AuctionsService {
     // TODO(tarea 04): envolver este "leer máxima → validar → insertar" en una
     // transacción con bloqueo de fila de la subasta, para que dos pujas casi
     // simultáneas no ganen ambas sobre la misma máxima.
-    return this.prisma.bid.create({
+    const bid = await this.prisma.bid.create({
       data: { auctionId, userId, amountCents: dto.amountCents },
     });
+
+    // Punto ÚNICO de emisión: da igual si la puja entró por HTTP o por WS, todos
+    // los que miran esta subasta reciben el nuevo precio. Identidad enmascarada.
+    this.gateway.broadcastBidAccepted(auctionId, {
+      amountCents: bid.amountCents,
+      userMasked: maskBidder(userId),
+      endsAt: auction.endsAt,
+    });
+
+    return bid;
   }
 
   // 409 con motivo estable en `code` (además del mensaje humano en `message`).

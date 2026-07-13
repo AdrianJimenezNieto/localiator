@@ -6,6 +6,7 @@ import {
 import { Test } from '@nestjs/testing';
 import { AuctionStatus } from '@prisma/client';
 import { AuctionsService, BidRejectReason } from './auctions.service';
+import { AuctionsGateway } from './auctions.gateway';
 import { PrismaService } from '../prisma/prisma.service';
 
 const prismaMock = {
@@ -16,6 +17,9 @@ const prismaMock = {
     create: jest.fn(),
   },
 };
+
+// El servicio emite a la room tras registrar la puja (punto único de emisión).
+const gatewayMock = { broadcastBidAccepted: jest.fn() };
 
 const verifiedUser = { emailVerifiedAt: new Date() };
 
@@ -58,6 +62,7 @@ describe('AuctionsService', () => {
       providers: [
         AuctionsService,
         { provide: PrismaService, useValue: prismaMock },
+        { provide: AuctionsGateway, useValue: gatewayMock },
       ],
     }).compile();
     service = moduleRef.get(AuctionsService);
@@ -72,6 +77,11 @@ describe('AuctionsService', () => {
     expect(prismaMock.bid.create).toHaveBeenCalledWith({
       data: { auctionId: 'auction-1', userId: 'user-1', amountCents: 4500 },
     });
+    // Se difunde el nuevo precio a la room, con identidad enmascarada.
+    expect(gatewayMock.broadcastBidAccepted).toHaveBeenCalledWith(
+      'auction-1',
+      expect.objectContaining({ amountCents: 4500 }),
+    );
   });
 
   it('rechaza la primera puja por debajo del precio de salida', async () => {

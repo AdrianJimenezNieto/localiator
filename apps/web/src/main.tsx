@@ -17,6 +17,7 @@ import { RegisterPage } from './pages/RegisterPage.tsx'
 import { CheckoutPage } from './pages/CheckoutPage.tsx'
 import { CheckoutResultPage } from './pages/CheckoutResultPage.tsx'
 import { MyOrdersPage } from './pages/MyOrdersPage.tsx'
+import { AuctionPage } from './pages/AuctionPage.tsx'
 import { LegalPage } from './pages/LegalPage.tsx'
 import { TermsPage } from './pages/TermsPage.tsx'
 import { CookiesPage } from './pages/CookiesPage.tsx'
@@ -48,6 +49,7 @@ const router = createBrowserRouter([
       { path: 'checkout', element: <CheckoutPage /> },
       { path: 'checkout/resultado', element: <CheckoutResultPage /> },
       { path: 'mis-pedidos', element: <MyOrdersPage /> },
+      { path: 'subastas/:id', element: <AuctionPage /> },
       { path: 'aviso-legal', element: <LegalPage /> },
       { path: 'condiciones-venta', element: <TermsPage /> },
       { path: 'cookies', element: <CookiesPage /> },
