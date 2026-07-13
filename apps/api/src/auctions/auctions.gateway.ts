@@ -1,0 +1,161 @@
+import { ConflictException, Inject, Logger, forwardRef } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import {
+  ConnectedSocket,
+  MessageBody,
+  OnGatewayConnection,
+  SubscribeMessage,
+  WebSocketGateway,
+  WebSocketServer,
+} from '@nestjs/websockets';
+import { DefaultEventsMap, Server, Socket } from 'socket.io';
+import { AccessTokenPayload } from '../auth/session.service';
+import { AuctionsService } from './auctions.service';
+
+// Identidad autenticada del socket (o undefined si es un invitado que solo mira).
+interface SocketUser {
+  userId: string;
+  role: string;
+}
+
+// `Socket.data` es `any` por defecto en Socket.IO. Lo tipamos con la identidad del
+// socket para que leer `client.data.user` sea seguro (sin `any` suelto).
+type AuctionSocket = Socket<
+  DefaultEventsMap,
+  DefaultEventsMap,
+  DefaultEventsMap,
+  { user?: SocketUser }
+>;
+
+// Rate limit propio del canal WS: una puja como mucho cada MIN_BID_INTERVAL_MS por
+// socket. El ThrottlerGuard global es para HTTP y no ve los mensajes de Socket.IO,
+// así que el flood de pujas se frena aquí (punto sensible, CLAUDE.md).
+const MIN_BID_INTERVAL_MS = 1000;
+
+// Origen permitido para el WebSocket: el mismo que el CORS HTTP de main.ts. Se lee
+// de process.env directamente (no de ConfigService) porque el decorador se evalúa
+// al IMPORTAR la clase, antes de que el ConfigModule cargue el .env. En producción
+// APP_URL es una variable de entorno real (docker-compose), disponible ya en ese
+// momento; en desarrollo cae al default correcto.
+const CORS_ORIGIN =
+  process.env.APP_URL ?? process.env.VITE_APP_URL ?? 'http://localhost:5173';
+
+@WebSocketGateway({
+  namespace: '/auctions',
+  cors: { origin: CORS_ORIGIN, credentials: true },
+})
+export class AuctionsGateway implements OnGatewayConnection {
+  private readonly logger = new Logger(AuctionsGateway.name);
+  private readonly lastBidAt = new Map<string, number>();
+
+  @WebSocketServer()
+  private readonly server!: Server;
+
+  constructor(
+    private readonly jwt: JwtService,
+    // forwardRef: ciclo con AuctionsService (ver comentario en el servicio).
+    @Inject(forwardRef(() => AuctionsService))
+    private readonly auctions: AuctionsService,
+  ) {}
+
+  // Autenticación del handshake: distinta del guard HTTP. Los guards de Nest no
+  // ven el handshake de Socket.IO, así que verificamos el token a mano. Si el
+  // token es válido, el socket queda autenticado (puede pujar); si no hay token o
+  // es inválido, se DEJA conectar igual (el invitado mira pero no puja).
+  handleConnection(client: AuctionSocket): void {
+    const token = client.handshake.auth?.token as string | undefined;
+    if (!token) return;
+    try {
+      const payload = this.jwt.verify<AccessTokenPayload>(token);
+      client.data.user = { userId: payload.sub, role: payload.role };
+    } catch {
+      // Token caducado/inválido: se ignora, el socket queda como invitado.
+    }
+  }
+
+  // El cliente entra a la room de una subasta al abrir su ficha. Le devolvemos el
+  // estado actual solo a él (no a toda la room) para que pinte sin un GET REST.
+  @SubscribeMessage('join')
+  async onJoin(
+    @ConnectedSocket() client: AuctionSocket,
+    @MessageBody() body: { auctionId: string },
+  ) {
+    const auctionId = body?.auctionId;
+    if (!auctionId) return;
+    await client.join(this.room(auctionId));
+    try {
+      const state = await this.auctions.getAuctionState(auctionId);
+      client.emit('auction:state', state);
+    } catch {
+      client.emit('bid:rejected', {
+        code: 'NOT_FOUND',
+        message: 'Subasta no encontrada',
+      });
+    }
+  }
+
+  // Pujar por WS: exige socket autenticado y respeta el rate limit por socket.
+  // Delega en la MISMA regla de negocio que el endpoint HTTP (no se duplica). El
+  // broadcast a la room lo hace el servicio (punto único de emisión).
+  @SubscribeMessage('bid')
+  async onBid(
+    @ConnectedSocket() client: AuctionSocket,
+    @MessageBody() body: { auctionId: string; amountCents: number },
+  ) {
+    const user = client.data.user;
+    if (!user) {
+      client.emit('bid:rejected', {
+        code: 'UNAUTHENTICATED',
+        message: 'Inicia sesión para pujar',
+      });
+      return;
+    }
+
+    const now = Date.now();
+    const last = this.lastBidAt.get(client.id) ?? 0;
+    if (now - last < MIN_BID_INTERVAL_MS) {
+      client.emit('bid:rejected', {
+        code: 'RATE_LIMITED',
+        message: 'Vas demasiado rápido, espera un momento',
+      });
+      return;
+    }
+    this.lastBidAt.set(client.id, now);
+
+    try {
+      await this.auctions.placeBid(body.auctionId, user.userId, {
+        amountCents: body.amountCents,
+      });
+      // Confirmación al emisor; el nuevo precio a la room lo emite el servicio.
+      client.emit('bid:accepted:self');
+    } catch (error) {
+      client.emit('bid:rejected', this.toRejection(error));
+    }
+  }
+
+  // Difunde a toda la room de la subasta que hay una nueva puja máxima. Lo llama
+  // AuctionsService.placeBid tras registrar la puja (único punto de emisión).
+  broadcastBidAccepted(
+    auctionId: string,
+    payload: { amountCents: number; userMasked: string; endsAt: Date },
+  ): void {
+    this.server.to(this.room(auctionId)).emit('bid:accepted', payload);
+  }
+
+  private room(auctionId: string): string {
+    return `auction:${auctionId}`;
+  }
+
+  // Traduce la excepción del servicio al payload { code, message } del canal. Si
+  // es un ConflictException con nuestro { code, message }, se reenvía tal cual.
+  private toRejection(error: unknown): { code: string; message: string } {
+    if (error instanceof ConflictException) {
+      const res = error.getResponse();
+      if (typeof res === 'object' && res !== null && 'code' in res) {
+        return res as { code: string; message: string };
+      }
+    }
+    this.logger.warn(`Puja rechazada por error inesperado: ${String(error)}`);
+    return { code: 'REJECTED', message: 'No se pudo registrar la puja' };
+  }
+}
