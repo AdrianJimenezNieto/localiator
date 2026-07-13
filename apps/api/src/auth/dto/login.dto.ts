@@ -1,10 +1,12 @@
 import { IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
+import { AntiBotDto } from './anti-bot.dto';
 
 // En login NO aplicamos la política de contraseña (longitud, letras/números): esa
 // solo rige al crear/cambiar la contraseña. Aquí basta con validar que llegan un
 // email y una cadena, para no rechazar por formato a quien tiene una contraseña
 // antigua y, sobre todo, para no filtrar reglas por la respuesta.
-export class LoginDto {
+// Hereda de AntiBotDto los campos honeypot/turnstile (tarea 05).
+export class LoginDto extends AntiBotDto {
   @IsEmail({}, { message: 'Email no válido' })
   @MaxLength(254)
   email!: string;

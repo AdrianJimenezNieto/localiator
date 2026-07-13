@@ -1,7 +1,9 @@
 import { IsString, MinLength } from 'class-validator';
 import { IsStrongPassword } from './password.decorator';
+import { AntiBotDto } from './anti-bot.dto';
 
-export class ResetPasswordDto {
+// Hereda de AntiBotDto los campos honeypot/turnstile (tarea 05).
+export class ResetPasswordDto extends AntiBotDto {
   // Token del enlace del email; su validez real se comprueba en el servicio.
   @IsString()
   @MinLength(1)
