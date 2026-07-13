@@ -2,6 +2,7 @@ import { Link, Outlet } from 'react-router-dom'
 import { useCart } from './lib/cart'
 import { useAuth } from './lib/auth'
 import { Footer } from './components/Footer'
+import { CookieBanner } from './components/CookieBanner'
 
 // Layout público común: cabecera + contenedor donde el router pinta cada página
 // (<Outlet/>). Es la base sobre la que cuelgan el catálogo, la ficha, el carrito,
@@ -58,6 +59,7 @@ function App() {
       </main>
 
       <Footer />
+      <CookieBanner />
     </div>
   )
 }
