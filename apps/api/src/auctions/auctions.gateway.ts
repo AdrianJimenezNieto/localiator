@@ -142,6 +142,13 @@ export class AuctionsGateway implements OnGatewayConnection {
     this.server.to(this.room(auctionId)).emit('bid:accepted', payload);
   }
 
+  // Avisa a la room de que el antisniping (tarea 05) movió el cierre. Lo llama
+  // AuctionsService.placeBid tras extender `endsAt` dentro de la transacción, para
+  // que todos los relojes del front actualicen la cuenta atrás.
+  broadcastExtended(auctionId: string, endsAt: Date): void {
+    this.server.to(this.room(auctionId)).emit('auction:extended', { endsAt });
+  }
+
   private room(auctionId: string): string {
     return `auction:${auctionId}`;
   }

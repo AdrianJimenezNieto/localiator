@@ -11,7 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const prismaMock = {
   user: { findUnique: jest.fn() },
-  auction: { findUnique: jest.fn() },
+  auction: { findUnique: jest.fn(), update: jest.fn() },
   bid: {
     findFirst: jest.fn(),
     create: jest.fn(),
@@ -20,8 +20,12 @@ const prismaMock = {
   $transaction: jest.fn(),
 };
 
-// El servicio emite a la room tras registrar la puja (punto único de emisión).
-const gatewayMock = { broadcastBidAccepted: jest.fn() };
+// El servicio emite a la room tras registrar la puja (punto único de emisión) y,
+// si el antisniping mueve el cierre, avisa con broadcastExtended.
+const gatewayMock = {
+  broadcastBidAccepted: jest.fn(),
+  broadcastExtended: jest.fn(),
+};
 
 // Fila que devolvería el SELECT ... FOR UPDATE de la subasta bloqueada. Misma
 // forma que las validaciones necesitan; por defecto, LIVE y dentro de ventana.
@@ -162,6 +166,40 @@ describe('AuctionsService', () => {
 
     expect(rejectCode(error)).toBe(BidRejectReason.OUTBID);
     expect(prismaMock.bid.create).not.toHaveBeenCalled();
+  });
+
+  it('antisniping: NO extiende el cierre si la puja llega con margen (10 min)', async () => {
+    prismaMock.$queryRaw.mockResolvedValue([
+      { ...lockedRow, endsAt: new Date(now + 10 * 60 * 1000) },
+    ]);
+
+    await service.placeBid('auction-1', 'user-1', { amountCents: 4500 });
+
+    expect(prismaMock.auction.update).not.toHaveBeenCalled();
+    expect(gatewayMock.broadcastExtended).not.toHaveBeenCalled();
+  });
+
+  it('antisniping: extiende el cierre a now + 5 min si la puja llega en los últimos minutos', async () => {
+    prismaMock.$queryRaw.mockResolvedValue([
+      { ...lockedRow, endsAt: new Date(now + 2 * 60 * 1000) }, // quedan 2 min.
+    ]);
+
+    const before = Date.now();
+    await service.placeBid('auction-1', 'user-1', { amountCents: 4500 });
+
+    // Se movió el cierre en BD a ~ now + 5 min y se avisó a la room.
+    expect(prismaMock.auction.update).toHaveBeenCalledTimes(1);
+    const updateCalls = prismaMock.auction.update.mock.calls as Array<
+      [{ data: { endsAt: Date } }]
+    >;
+    const updateArg = updateCalls[0][0];
+    const newEndsMs = updateArg.data.endsAt.getTime();
+    expect(newEndsMs).toBeGreaterThanOrEqual(before + 5 * 60 * 1000 - 1000);
+    expect(newEndsMs).toBeLessThanOrEqual(Date.now() + 5 * 60 * 1000 + 1000);
+    expect(gatewayMock.broadcastExtended).toHaveBeenCalledWith(
+      'auction-1',
+      updateArg.data.endsAt,
+    );
   });
 
   it('rechaza pujar contra uno mismo cuando ya eres el líder', async () => {

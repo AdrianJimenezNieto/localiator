@@ -120,7 +120,7 @@ Objetivo: pujas en tiempo real sobre productos/lotes.
 - [x] Reglas de puja (incremento mínimo, precio de salida, cierre)
 - [x] WebSockets (Gateway NestJS + Socket.IO) para pujas en vivo
 - [x] Control de concurrencia (evitar condiciones de carrera en pujas casi simultáneas)
-- [ ] Antisniping: extensión automática del cierre a 5 min
+- [x] Antisniping: extensión automática del cierre a 5 min
 - [ ] Cierre automático de subasta y asignación de ganador
 - [ ] Impago del ganador: segunda oportunidad al siguiente + ban automático
 - [ ] Notificaciones en tiempo real (superado, ganado, a punto de cerrar)
