@@ -1,0 +1,29 @@
+# Actualizaciones automáticas de dependencias (Fase 4, tarea 11).
+# Dependabot abre PRs de actualización que pasan por la CI (lint+build+test) antes
+# de poder mergearse. Se AGRUPAN los parches/menores para no inundar de PRs el flujo
+# GitHub Flow del repo.
+version: 2
+updates:
+  # Dependencias del monorepo (pnpm). Dependabot lee el pnpm-lock.yaml de la raíz y
+  # cubre todos los workspaces (api, web, shared).
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # Un único PR semanal con todos los parches y versiones menores.
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: chore(deps)
+
+  # Acciones de los workflows de CI/CD.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci(deps)

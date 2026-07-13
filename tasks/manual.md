@@ -69,3 +69,10 @@ falta configurarlo en el VPS.
 - [ ] (Opcional) sincronizar una copia a almacenamiento externo sin coste.
 - [ ] Re-probar la **restauración** en el VPS una vez configurado (el ciclo dump→restore ya
       se validó en desarrollo).
+
+### Escaneo de vulnerabilidades — tarea 11
+El código (Dependabot + `pnpm audit` en CI) está listo; falta activarlo en GitHub.
+- [ ] Activar **Dependabot alerts** y **Dependabot security updates** en
+      *Settings → Code security and analysis* del repo.
+- [ ] (Si es gratis para el repo) activar **CodeQL** (análisis estático de seguridad).
+- [ ] Revisar el primer lote de PRs de Dependabot cuando lleguen (mergear tras CI verde).

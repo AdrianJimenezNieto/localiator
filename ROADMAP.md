@@ -109,7 +109,7 @@ Objetivo: poder abrir al público de forma legal y segura.
 - [x] Logs centralizados + trazabilidad de errores en producción
 - [ ] Despliegue en VPS: Docker + Nginx Proxy Manager + SSL Let's Encrypt + dominio
 - [ ] CD con estrategia de rollback
-- [ ] Escaneo automático de vulnerabilidades en dependencias
+- [x] Escaneo automático de vulnerabilidades en dependencias
 - [ ] **Lanzamiento del MVP** 🚀
 
 ## Fase 5 — Subastas propias (post-MVP)
