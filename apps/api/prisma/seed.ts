@@ -6,6 +6,7 @@ import {
   Role,
   OrderStatus,
   OrderItemType,
+  AuctionStatus,
 } from '@prisma/client';
 import * as argon2 from 'argon2';
 
@@ -178,10 +179,37 @@ async function main() {
     },
   });
 
+  // Subasta de ejemplo EN CURSO (Fase 5), para desarrollar la ficha de puja y el
+  // canal en vivo sin tener que crearla a mano. Cierra dentro de una hora e
+  // incluye un par de pujas del comprador para que el historial no esté vacío.
+  // Idempotente por id fijo, como Product/Lot/Order.
+  const ahora = Date.now();
+  await prisma.auction.upsert({
+    where: { id: 'seed-auction-taladro' },
+    update: {},
+    create: {
+      id: 'seed-auction-taladro',
+      itemType: OrderItemType.PRODUCT,
+      itemId: 'seed-product-taladro',
+      startingPriceCents: 4500,
+      minIncrementCents: 500,
+      startsAt: new Date(ahora - 60 * 60 * 1000), // empezó hace 1 h.
+      endsAt: new Date(ahora + 60 * 60 * 1000), // cierra en 1 h.
+      status: AuctionStatus.LIVE,
+      bids: {
+        create: [
+          { id: 'seed-bid-1', userId: buyer.id, amountCents: 4500 },
+          { id: 'seed-bid-2', userId: buyer.id, amountCents: 5000 },
+        ],
+      },
+    },
+  });
+
   console.log('Seed completado:', {
     usuarios: [admin.email, buyer.email],
     categorias: [electronica.slug, herramientas.slug, hogar.slug],
     pedidos: ['seed-order-buyer-pagado'],
+    subastas: ['seed-auction-taladro'],
   });
 }
 
