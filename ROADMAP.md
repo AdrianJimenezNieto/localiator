@@ -99,7 +99,7 @@ Objetivo: comprar de verdad. Cierre del MVP funcional.
 ## Fase 4 — Legal, cumplimiento y lanzamiento
 Objetivo: poder abrir al público de forma legal y segura.
 
-- [ ] Aviso legal y condiciones de venta
+- [x] Aviso legal y condiciones de venta
 - [ ] Política de privacidad + RGPD (derecho al olvido)
 - [ ] Banner y política de cookies / consentimiento
 - [ ] Garantías legales al consumidor reflejadas en las condiciones
