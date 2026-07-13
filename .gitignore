@@ -31,3 +31,6 @@ apps/api/prisma/*.db
 
 # Fotos subidas (se sirven desde disco; en producción es un volumen Docker)
 apps/api/uploads/
+
+# Copias de seguridad de la BD (tarea 07); nunca en el repo.
+backups/

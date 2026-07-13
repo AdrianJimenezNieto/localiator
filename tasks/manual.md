@@ -57,3 +57,15 @@ reales no se puede abrir al público (tarea 12 exige que no queden `[PENDIENTE]`
 - [ ] **Datos registrales** (solo si el titular es una sociedad; un autónomo no los tiene).
 - [ ] (Recomendado) revisar los textos legales con un abogado antes del lanzamiento; los
       puntos que requieren criterio jurídico están marcados `[PENDIENTE revisión legal]`.
+
+### Backups de la base de datos — tarea 07
+El código (`scripts/backup-db.sh`, `scripts/restore-db.sh`, `docs/backups.md`) está listo;
+falta configurarlo en el VPS.
+- [ ] Elegir y guardar una **`BACKUP_PASSPHRASE`** fuerte en el gestor de secretos (NO junto
+      a los backups) y ponerla en el `.env` del VPS.
+- [ ] Definir `BACKUP_DIR` en un disco/carpeta **fuera del volumen de la BD**.
+- [ ] Dar de alta el **cron diario** en el VPS (ejemplo en `docs/backups.md`).
+- [ ] Verificar el **cifrado en reposo** del disco/volumen del VPS (coherente con tarea 05).
+- [ ] (Opcional) sincronizar una copia a almacenamiento externo sin coste.
+- [ ] Re-probar la **restauración** en el VPS una vez configurado (el ciclo dump→restore ya
+      se validó en desarrollo).
