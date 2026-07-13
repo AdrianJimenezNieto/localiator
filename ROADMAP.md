@@ -108,7 +108,7 @@ Objetivo: poder abrir al público de forma legal y segura.
 - [x] Backups automáticos de la base de datos
 - [x] Logs centralizados + trazabilidad de errores en producción
 - [x] Despliegue en VPS: Docker + Nginx Proxy Manager + SSL Let's Encrypt + dominio
-- [ ] CD con estrategia de rollback
+- [x] CD con estrategia de rollback
 - [x] Escaneo automático de vulnerabilidades en dependencias
 - [ ] **Lanzamiento del MVP** 🚀
 

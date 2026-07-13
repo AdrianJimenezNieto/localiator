@@ -70,5 +70,43 @@ Luego, en **Nginx Proxy Manager**:
 - El entrypoint de la API compilada es `dist/src/main.js` (lo que deja `nest build`).
 - Imagen de la API: por simplicidad conserva el `node_modules` completo del build.
   Reducir su tamaño (deploy pruneado) queda como mejora futura.
-- CD automático y rollback: ver la tarea 10 (más abajo en este documento cuando se
-  añada `deploy.yml`).
+## Despliegue continuo (CD) y rollback — tarea 10
+
+El workflow `.github/workflows/deploy.yml` automatiza el despliegue:
+
+1. **Disparo**: se ejecuta cuando el workflow **CI** termina en verde sobre `main`
+   (`workflow_run` + `conclusion == success`). Nunca despliega una rama rota.
+2. **Imágenes por SHA**: construye y publica en **GHCR** las imágenes de API y web
+   etiquetadas con el **SHA** del commit (además de `latest`). El SHA es la clave del
+   rollback determinista.
+3. **Deploy por SSH**: entra al VPS, hace `git pull` del repo, `docker compose pull`
+   de las imágenes nuevas y `up -d`. La API aplica `migrate deploy` al arrancar.
+4. **Health-check + rollback**: tras arrancar, sondea `GET /health`. Si responde, guarda
+   el tag en `.last_good_tag` (release estable). Si **falla**, vuelve a desplegar el tag
+   anterior (`.last_good_tag`) automáticamente y marca el job como fallido.
+
+### Rollback manual
+
+Como cada release es una imagen etiquetada por SHA, volver atrás es redeploy del tag
+anterior:
+
+```sh
+cd /opt/localiator
+export IMAGE_TAG=<sha-anterior>          # o: cat .last_good_tag
+docker compose -f docker-compose.prod.yml pull api web
+docker compose -f docker-compose.prod.yml up -d
+```
+
+### Secretos necesarios (GitHub → Settings → Secrets/Variables)
+
+- Secrets: `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`, `VPS_PROJECT_DIR`.
+- Variables: `VITE_API_URL` (URL pública de la API para el build de la web).
+- El `environment: production` del job permite exigir **aprobación manual** antes de
+  desplegar.
+
+### Migraciones y compatibilidad hacia atrás
+
+Prisma no revierte migraciones de forma trivial. El rollback de **código** (imagen
+anterior) es la primera línea; por eso las migraciones deben diseñarse **compatibles
+hacia atrás** siempre que se pueda (p. ej. añadir columnas nullable antes de usarlas),
+para que la versión anterior siga funcionando contra el esquema nuevo. Riesgo a vigilar.
