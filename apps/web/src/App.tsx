@@ -37,6 +37,9 @@ function App() {
                 <Link to="/mis-pedidos" className="hover:text-neutral-900">
                   Mis pedidos
                 </Link>
+                <Link to="/cuenta" className="hover:text-neutral-900">
+                  Mi cuenta
+                </Link>
                 <button
                   type="button"
                   onClick={() => void logout()}

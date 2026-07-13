@@ -100,7 +100,7 @@ Objetivo: comprar de verdad. Cierre del MVP funcional.
 Objetivo: poder abrir al público de forma legal y segura.
 
 - [x] Aviso legal y condiciones de venta
-- [ ] Política de privacidad + RGPD (derecho al olvido)
+- [x] Política de privacidad + RGPD (derecho al olvido)
 - [x] Banner y política de cookies / consentimiento
 - [x] Garantías legales al consumidor reflejadas en las condiciones
 - [ ] Revisión de seguridad: CSRF, XSS, inyección, secretos, HTTPS, cifrado en reposo
