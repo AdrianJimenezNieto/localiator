@@ -205,3 +205,32 @@ Lo que **sí** se testea (determinista, sin hilos): que se **toma el lock**
 Postgres, idéntico al patrón de stock ya en producción. Si más adelante se monta un
 arnés de test con BD real (migraciones en CI), aquí encajaría un test de carrera de
 verdad con `Promise.all`.
+
+---
+
+## Tarea 05 · Antisniping (extensión automática del cierre a 5 min)
+
+**Qué**: si llega una puja válida cuando quedan menos de 5 min, el cierre se mueve
+para dar tiempo a reaccionar y evitar el "sniping" (ganar en el último segundo).
+
+**Dónde**: **dentro de la misma transacción y del mismo lock** que registra la puja
+ganadora (tarea 04). Es lo importante: puja aceptada y cierre extendido son
+**atómicos**. Un proceso aparte podría aceptar la puja pero perder la extensión por
+una carrera.
+
+**Regla**: si `endsAt - now < ANTISNIPE_WINDOW_MS` (5 min), se pone
+`endsAt = now + 5 min`. Se elige **`now + 5 min`** (ventana de reacción constante)
+en vez de *sumar* 5 min al `endsAt`, que dejaría ventanas raras si varias pujas
+caen juntas. El umbral y la extensión son la **misma constante configurable**
+(`auctions.constants.ts`), no un número mágico repartido.
+
+**Propagación**: tras el commit, si hubo extensión, `broadcastExtended` emite
+`auction:extended { endsAt }` a la room; el hook del front actualiza la cuenta
+atrás. La **verdad del `endsAt` está en el servidor**; el front solo lo refleja.
+
+**Coherencia con el cierre (tarea 06)**: el cierre releerá siempre el `endsAt`
+actual bajo lock, así respeta las extensiones de última hora.
+
+> **Concepto a repasar**: por qué la extensión debe ir en la MISMA transacción que
+> la puja (atomicidad), y la sincronización de relojes cliente/servidor (el front
+> cuenta atrás, pero el `endsAt` real vive en el servidor).

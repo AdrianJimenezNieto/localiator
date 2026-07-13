@@ -78,6 +78,12 @@ export function useAuctionSocket(auctionId: string) {
       setLastRejection(rejection)
     })
 
+    // Antisniping (tarea 05): el servidor movió el cierre; actualizamos la cuenta
+    // atrás. La verdad del `endsAt` está en el servidor, no en el reloj local.
+    socket.on('auction:extended', ({ endsAt: newEndsAt }: { endsAt: string }) => {
+      setEndsAt(newEndsAt)
+    })
+
     return () => {
       socket.disconnect()
       socketRef.current = null

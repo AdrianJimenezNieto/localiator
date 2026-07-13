@@ -10,6 +10,7 @@ import { AuctionStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuctionsGateway } from './auctions.gateway';
 import { maskBidder } from './auctions.mask';
+import { ANTISNIPE_WINDOW_MS } from './auctions.constants';
 import { PlaceBidDto } from './dto/place-bid.dto';
 
 // Motivos estables de rechazo de una puja. Se envían como `code` en el 409 para
@@ -118,29 +119,48 @@ export class AuctionsService {
     );
 
     // --- Fase 2: fase autoritativa bajo bloqueo de fila ---
-    const { bid, endsAt } = await this.prisma.$transaction(async (tx) => {
-      const locked = await this.lockAuction(tx, auctionId);
-      if (!locked) {
-        throw new NotFoundException('Subasta no encontrada');
-      }
-      this.assertOpen(locked); // pudo cerrarse entre el fast path y el lock.
+    const { bid, endsAt, extended } = await this.prisma.$transaction(
+      async (tx) => {
+        const locked = await this.lockAuction(tx, auctionId);
+        if (!locked) {
+          throw new NotFoundException('Subasta no encontrada');
+        }
+        this.assertOpen(locked); // pudo cerrarse entre el fast path y el lock.
 
-      const highest = await this.highestBid(tx, auctionId);
-      // Si aquí la puja ya no supera la máxima es porque OTRA puja se coló entre
-      // el fast path y este lock: no es culpa del pujador, es una carrera perdida.
-      this.assertBeats(
-        locked,
-        highest,
-        userId,
-        dto.amountCents,
-        BidRejectReason.OUTBID,
-      );
+        const highest = await this.highestBid(tx, auctionId);
+        // Si aquí la puja ya no supera la máxima es porque OTRA puja se coló entre
+        // el fast path y este lock: no es culpa del pujador, es una carrera perdida.
+        this.assertBeats(
+          locked,
+          highest,
+          userId,
+          dto.amountCents,
+          BidRejectReason.OUTBID,
+        );
 
-      const created = await tx.bid.create({
-        data: { auctionId, userId, amountCents: dto.amountCents },
-      });
-      return { bid: created, endsAt: locked.endsAt };
-    });
+        const created = await tx.bid.create({
+          data: { auctionId, userId, amountCents: dto.amountCents },
+        });
+
+        // Antisniping (tarea 05): si la puja llega en los últimos minutos, se
+        // mueve el cierre a `now + ventana`. DENTRO de la misma transacción y del
+        // mismo lock que la puja: así puja aceptada y cierre extendido son
+        // atómicos; un proceso aparte podría perder la extensión por una carrera.
+        const now = Date.now();
+        let endsAt = locked.endsAt;
+        let extended = false;
+        if (endsAt.getTime() - now < ANTISNIPE_WINDOW_MS) {
+          endsAt = new Date(now + ANTISNIPE_WINDOW_MS);
+          extended = true;
+          await tx.auction.update({
+            where: { id: auctionId },
+            data: { endsAt },
+          });
+        }
+
+        return { bid: created, endsAt, extended };
+      },
+    );
 
     // Punto ÚNICO de emisión, ya con la puja confirmada en BD. Da igual si entró
     // por HTTP o por WS: todos los que miran reciben el nuevo precio (enmascarado).
@@ -149,6 +169,13 @@ export class AuctionsService {
       userMasked: maskBidder(userId),
       endsAt,
     });
+
+    // Si el antisniping movió el cierre, se avisa a la room para que todos los
+    // relojes del front actualicen la cuenta atrás (la verdad del endsAt está en
+    // el servidor, no en el cliente).
+    if (extended) {
+      this.gateway.broadcastExtended(auctionId, endsAt);
+    }
 
     return bid;
   }
