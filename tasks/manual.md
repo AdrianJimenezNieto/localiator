@@ -97,6 +97,8 @@ El workflow `.github/workflows/deploy.yml` está listo; faltan los secretos y un
       **Secrets** `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`, `VPS_PROJECT_DIR`;
       **Variable** `VITE_API_URL`.
 - [ ] (Opcional) crear el *environment* `production` con **aprobación manual** para el deploy.
+- [ ] Cuando el VPS y los secretos estén listos, poner la **Variable** `DEPLOY_ENABLED=true`
+      para activar el CD (mientras no exista o sea distinto de `true`, el deploy no corre).
 - [ ] Asegurar que el VPS puede hacer `docker login ghcr.io` / pull de las imágenes
       (paquetes públicos, o `docker login` con un PAT de solo lectura).
 - [ ] **Probar el rollback** una vez: forzar un deploy que falle el health-check y verificar

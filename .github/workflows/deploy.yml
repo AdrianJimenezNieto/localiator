@@ -21,8 +21,12 @@ env:
 
 jobs:
   build-and-push:
-    # Solo si la CI que disparó esto acabó en verde.
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    # Solo si la CI que disparó esto acabó en verde Y el CD está habilitado. El
+    # interruptor `DEPLOY_ENABLED` (variable de repo) evita que el CD corra —y
+    # publique imágenes o intente el SSH— antes de configurar el VPS y sus secretos.
+    if: >-
+      ${{ github.event.workflow_run.conclusion == 'success' &&
+      vars.DEPLOY_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.vars.outputs.sha }}
