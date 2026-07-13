@@ -106,7 +106,7 @@ Objetivo: poder abrir al público de forma legal y segura.
 - [ ] Revisión de seguridad: CSRF, XSS, inyección, secretos, HTTPS, cifrado en reposo
 - [x] SEO básico (metadatos, sitemap, URLs amigables)
 - [ ] Backups automáticos de la base de datos
-- [ ] Logs centralizados + trazabilidad de errores en producción
+- [x] Logs centralizados + trazabilidad de errores en producción
 - [ ] Despliegue en VPS: Docker + Nginx Proxy Manager + SSL Let's Encrypt + dominio
 - [ ] CD con estrategia de rollback
 - [ ] Escaneo automático de vulnerabilidades en dependencias

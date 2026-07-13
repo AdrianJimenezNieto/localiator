@@ -3,6 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
+import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { StorageService } from './catalog/storage.service';
 
@@ -11,9 +12,16 @@ async function bootstrap() {
   // del JSON ya parseado. Lo necesita el webhook de Stripe (payments/webhook) para
   // verificar la firma sobre los bytes originales; el resto de rutas siguen usando
   // el body JSON normal.
+  // bufferLogs: retiene los logs de arranque hasta que useLogger active pino, para
+  // que también salgan estructurados (no con el logger por defecto de Nest).
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     rawBody: true,
+    bufferLogs: true,
   });
+
+  // Sustituye el logger de Nest por pino (nestjs-pino): logs estructurados con
+  // request-id en toda la app, incluidos los this.logger.* de los servicios.
+  app.useLogger(app.get(Logger));
 
   // trust proxy = 1: en producción la API va detrás de Nginx Proxy Manager. Sin
   // esto, Express vería la IP del proxy en todas las peticiones y el rate limiting

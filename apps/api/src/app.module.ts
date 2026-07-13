@@ -1,8 +1,11 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { LoggerModule } from 'nestjs-pino';
+import { buildLoggerParams } from './logging/logger.config';
+import { AllExceptionsFilter } from './logging/all-exceptions.filter';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -21,6 +24,12 @@ import { RolesGuard } from './auth/roles.guard';
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '../../.env',
+    }),
+    // Logs estructurados (JSON) con request-id y nivel por .env. Sustituye al
+    // logger por defecto de Nest (se activa con app.useLogger en main.ts).
+    LoggerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: buildLoggerParams,
     }),
     // Habilita las tareas @Cron (limpieza de sesiones caducadas, tarea 10).
     ScheduleModule.forRoot(),
@@ -47,6 +56,8 @@ import { RolesGuard } from './auth/roles.guard';
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    // Filtro global: normaliza y registra TODAS las excepciones (tarea 08).
+    { provide: APP_FILTER, useClass: AllExceptionsFilter },
   ],
 })
 export class AppModule {}
