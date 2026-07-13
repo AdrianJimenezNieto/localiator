@@ -52,3 +52,25 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+  # Auditoría de vulnerabilidades de dependencias (tarea 11). Falla el pipeline si
+  # hay vulnerabilidades ALTAS o CRÍTICAS. Job aparte: no necesita BD y corre en
+  # paralelo al build. Los falsos positivos justificados se pueden silenciar con
+  # pnpm.auditConfig.ignoreGhsas en pnpm-workspace.yaml (ver docs/dependencies.md).
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Audit dependencies (fail on high/critical)
+        run: pnpm audit --audit-level=high

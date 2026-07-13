@@ -1,6 +1,11 @@
 packages:
   - "apps/*"
   - "packages/*"
+# Fuerza la versión parcheada de multer (tarea 11): @nestjs/platform-express
+# arrastra una multer <2.2.0 vulnerable (GHSA-72gw-mp4g-v24j). El override la sube
+# a la parcheada en toda la resolución. Revisar/retirar cuando Nest actualice.
+overrides:
+  multer: "^2.2.0"
 allowBuilds:
   '@prisma/client': true
   '@prisma/engines': true
