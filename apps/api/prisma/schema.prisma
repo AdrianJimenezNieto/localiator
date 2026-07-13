@@ -41,6 +41,8 @@ model User {
   oauthAccounts      OAuthAccount[]
   refreshTokens      RefreshToken[]
   orders             Order[]
+  bids               Bid[]
+  wonAuctions        Auction[]
 }
 
 // Sesión persistente (patrón decidido en CLAUDE.md): el access token (JWT corto)
@@ -395,4 +397,87 @@ model Invoice {
 model InvoiceCounter {
   year       Int @id
   lastNumber Int @default(0)
+}
+
+// ---------------------------------------------------------------------------
+// Subastas propias (Fase 5). Una subasta pone a pujar UN artículo (producto o
+// lote) del catálogo durante una ventana de tiempo. El cobro del ganador
+// (tarea 09) reutiliza el flujo de pedidos/Stripe de la Fase 3: una subasta
+// ganada acaba siendo un Order normal, indistinguible de una venta directa.
+// ---------------------------------------------------------------------------
+
+// Ciclo de vida de la subasta. El orden refleja el flujo real:
+//   SCHEDULED → creada, aún no ha llegado su `startsAt`.
+//   LIVE      → abierta, admite pujas entre `startsAt` y `endsAt` (tarea 02).
+//   CLOSED    → venció `endsAt`; ganador fijado o desierta (tarea 06).
+//   PAID      → el ganador pagó por el flujo Stripe existente (tarea 09).
+//   CANCELLED → cancelada, o desierta sin más pujadores tras impago (tarea 07).
+// Las transiciones legales se validan en el servicio, no aquí (como OrderStatus).
+enum AuctionStatus {
+  SCHEDULED
+  LIVE
+  CLOSED
+  PAID
+  CANCELLED
+}
+
+// El artículo subastado es un Product o un Lot, entidades SEPARADAS sin FK común
+// (CLAUDE.md). Se reutiliza `OrderItemType` como discriminador en vez de crear un
+// enum propio: los valores son los mismos (PRODUCT/LOT) y significan lo mismo.
+// Como en OrderLine, `itemId` NO es una FK real; se valida en el servicio.
+model Auction {
+  id String @id @default(cuid())
+
+  itemType OrderItemType
+  itemId   String // id lógico del Product/Lot (no es FK real; ver enum).
+
+  // Dinero en céntimos (Int), como todo el dinero del proyecto. Precio de salida
+  // y salto mínimo entre pujas; el incremento es fijo por subasta (tarea 02).
+  startingPriceCents Int
+  minIncrementCents  Int
+
+  startsAt DateTime
+  // Columna normal MUTABLE (no calculada): el antisniping (tarea 05) la mueve a
+  // `now + 5 min` ante pujas de último segundo, y el cierre (tarea 06) la relee.
+  endsAt   DateTime
+
+  status AuctionStatus @default(SCHEDULED)
+
+  // Ganador DESNORMALIZADO: se fija al cerrar (tarea 06) para no recalcular la
+  // puja máxima en cada lectura ni en el cobro (tarea 09) / impago (tarea 07).
+  // `winningBidId` es @unique: una puja no puede ganar dos subastas.
+  winnerUserId String?
+  winner       User?   @relation(fields: [winnerUserId], references: [id])
+  winningBidId String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bids Bid[]
+
+  @@index([status])
+  @@index([itemType, itemId])
+}
+
+// Una puja de un usuario sobre una subasta. Las pujas son INMUTABLES: el
+// "historial de pujas" son todas las filas Bid de una subasta ordenadas por
+// `createdAt`, sin necesidad de una tabla de historial aparte. La regla de
+// negocio (superar la máxima + incremento) vive en el servicio (tarea 02) y su
+// blindaje de concurrencia en la tarea 04.
+model Bid {
+  id String @id @default(cuid())
+
+  auctionId String
+  auction   Auction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  amountCents Int
+
+  createdAt DateTime @default(now())
+
+  // Índice compuesto para leer la puja máxima de una subasta rápido
+  // (ORDER BY amountCents DESC LIMIT 1).
+  @@index([auctionId, amountCents])
 }

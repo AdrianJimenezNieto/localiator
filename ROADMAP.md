@@ -116,7 +116,7 @@ Objetivo: poder abrir al público de forma legal y segura.
 ## Fase 5 — Subastas propias (post-MVP)
 Objetivo: pujas en tiempo real sobre productos/lotes.
 
-- [ ] Esquema Prisma: Subasta, Puja, historial y ganador
+- [x] Esquema Prisma: Subasta, Puja, historial y ganador
 - [ ] Reglas de puja (incremento mínimo, precio de salida, cierre)
 - [ ] WebSockets (Gateway NestJS + Socket.IO) para pujas en vivo
 - [ ] Control de concurrencia (evitar condiciones de carrera en pujas casi simultáneas)
