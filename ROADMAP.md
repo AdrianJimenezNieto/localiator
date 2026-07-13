@@ -117,7 +117,7 @@ Objetivo: poder abrir al público de forma legal y segura.
 Objetivo: pujas en tiempo real sobre productos/lotes.
 
 - [x] Esquema Prisma: Subasta, Puja, historial y ganador
-- [ ] Reglas de puja (incremento mínimo, precio de salida, cierre)
+- [x] Reglas de puja (incremento mínimo, precio de salida, cierre)
 - [ ] WebSockets (Gateway NestJS + Socket.IO) para pujas en vivo
 - [ ] Control de concurrencia (evitar condiciones de carrera en pujas casi simultáneas)
 - [ ] Antisniping: extensión automática del cierre a 5 min

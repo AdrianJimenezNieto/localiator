@@ -13,6 +13,7 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { OrdersModule } from './orders/orders.module';
+import { AuctionsModule } from './auctions/auctions.module';
 import { PaymentsModule } from './payments/payments.module';
 import { InvoicingModule } from './invoicing/invoicing.module';
 import { SeoModule } from './seo/seo.module';
@@ -42,6 +43,7 @@ import { RolesGuard } from './auth/roles.guard';
     UsersModule,
     CatalogModule,
     OrdersModule,
+    AuctionsModule,
     PaymentsModule,
     InvoicingModule,
     SeoModule,
