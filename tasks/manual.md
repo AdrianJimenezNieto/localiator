@@ -76,3 +76,16 @@ El código (Dependabot + `pnpm audit` en CI) está listo; falta activarlo en Git
       *Settings → Code security and analysis* del repo.
 - [ ] (Si es gratis para el repo) activar **CodeQL** (análisis estático de seguridad).
 - [ ] Revisar el primer lote de PRs de Dependabot cuando lleguen (mergear tras CI verde).
+
+### Despliegue en el VPS — tarea 09
+Los artefactos (`apps/api/Dockerfile`, `apps/web/Dockerfile`, `docker-compose.prod.yml`,
+`docs/deploy.md`) están listos y las imágenes se han probado en local. Falta lo del VPS:
+- [ ] Apuntar el **dominio** (y subdominio de la API) por DNS a la IP del VPS.
+- [ ] Crear el **`.env.production`** en el VPS (fuera del repo) con los secretos reales.
+- [ ] Instalar/usar **Nginx Proxy Manager**; crear los Proxy Hosts y pedir **Let's Encrypt**
+      con *Force SSL* + **HSTS**. Exponer `/sitemap.xml` y `/robots.txt` desde la raíz hacia
+      la API (tarea 06).
+- [ ] `docker compose -f docker-compose.prod.yml up -d --build` y comprobar healthchecks.
+- [ ] **Stripe en producción**: dar de alta el webhook público y poner su `whsec_...` en
+      `.env.production` (ya anotado en la sección de Stripe; se cierra en la tarea 12).
+- [ ] Probar una compra de extremo a extremo por HTTPS (Stripe test primero).
