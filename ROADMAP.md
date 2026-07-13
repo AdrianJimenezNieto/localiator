@@ -103,7 +103,7 @@ Objetivo: poder abrir al público de forma legal y segura.
 - [x] Política de privacidad + RGPD (derecho al olvido)
 - [x] Banner y política de cookies / consentimiento
 - [x] Garantías legales al consumidor reflejadas en las condiciones
-- [ ] Revisión de seguridad: CSRF, XSS, inyección, secretos, HTTPS, cifrado en reposo
+- [x] Revisión de seguridad: CSRF, XSS, inyección, secretos, HTTPS, cifrado en reposo
 - [x] SEO básico (metadatos, sitemap, URLs amigables)
 - [ ] Backups automáticos de la base de datos
 - [x] Logs centralizados + trazabilidad de errores en producción
