@@ -1,12 +1,6 @@
 import { Link } from 'react-router-dom';
-import type { CatalogItem } from '@localiator/shared';
+import { itemPath, type CatalogItem } from '@localiator/shared';
 import { conditionLabel, finalPriceCents, formatPrice } from '../lib/format';
-
-// Ruta de la ficha según el tipo (producto o lote). La define la tarea 11; aquí ya
-// enlazamos para no rehacer las tarjetas después.
-function detailPath(item: CatalogItem): string {
-  return item.kind === 'lot' ? `/lotes/${item.id}` : `/productos/${item.id}`;
-}
 
 export function ProductCard({ item }: { item: CatalogItem }) {
   const hasDiscount = item.discountCents > 0;
@@ -14,7 +8,7 @@ export function ProductCard({ item }: { item: CatalogItem }) {
 
   return (
     <Link
-      to={detailPath(item)}
+      to={itemPath(item.kind, item.id, item.name)}
       className="group flex flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white transition hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900"
     >
       <div className="aspect-square w-full overflow-hidden bg-neutral-100">

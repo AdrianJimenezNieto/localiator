@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import type { CatalogDetail, ItemKind } from '@localiator/shared';
+import { itemPath, type CatalogDetail, type ItemKind } from '@localiator/shared';
 import { useApi } from '../lib/useApi';
 import { useCart } from '../lib/cart';
+import { useSeo } from '../lib/useSeo';
 import { conditionLabel, finalPriceCents, formatPrice } from '../lib/format';
 import { Gallery } from '../components/Gallery';
 
@@ -14,6 +15,16 @@ export function DetailPage({ kind }: { kind: ItemKind }) {
   const { data, error, status, loading } = useApi<CatalogDetail>(
     `/catalog/${basePath}/${id}`,
   );
+
+  // SEO por ficha: título/descripción propios y canonical con slug (deduplica la
+  // URL con y sin slug). El hook se llama SIEMPRE (antes de los early returns);
+  // con data null usa valores por defecto.
+  useSeo({
+    title: data ? `${data.name} — Localiator` : 'Localiator',
+    description: data?.description.slice(0, 155),
+    image: data?.photos[0],
+    canonicalPath: data ? itemPath(data.kind, data.id, data.name) : undefined,
+  });
 
   if (loading) {
     return <DetailSkeleton />;

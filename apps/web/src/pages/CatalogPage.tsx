@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import type { CatalogItem, ItemCondition, Paginated } from '@localiator/shared';
 import { toQuery } from '../lib/api';
 import { useApi } from '../lib/useApi';
+import { useSeo } from '../lib/useSeo';
 import { eurosToCents } from '../lib/format';
 import { ProductCard } from '../components/ProductCard';
 import { Pagination } from '../components/Pagination';
@@ -12,6 +13,13 @@ const PAGE_SIZE = 12;
 
 export function CatalogPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+
+  useSeo({
+    title: 'Catálogo — Localiator',
+    description:
+      'Explora lotes y productos individuales de subasta disponibles para recoger en almacén. Filtra por categoría, precio y estado.',
+    canonicalPath: '/',
+  });
 
   // La página y todos los filtros viven en la URL: compartir/recargar los conserva.
   const page = Math.max(1, Number(searchParams.get('page') ?? '1') || 1);

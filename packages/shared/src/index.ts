@@ -80,3 +80,27 @@ export interface CatalogDetail {
   photos: string[];
   category: { id: string; name: string };
 }
+
+// --- SEO / URLs amigables (Fase 4, tarea 06) ---
+
+// Normaliza un texto a slug kebab-case apto para URLs: sin acentos, minúsculas y
+// con guiones. Compartido por web y API para que ambas generen EXACTAMENTE la
+// misma URL de una ficha (si divergieran, el canonical no cuadraría).
+export function slugify(input: string): string {
+  return input
+    .normalize("NFD") // separa cada letra de su tilde (á → "a" + acento combinable).
+    .replace(/[̀-ͯ]/g, "") // elimina los diacríticos ya separados.
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-") // todo lo no alfanumérico → guion.
+    .replace(/^-+|-+$/g, ""); // sin guiones sobrantes al principio/final.
+}
+
+// Ruta pública de una ficha con URL amigable: /productos/:id/:slug (o /lotes/...).
+// El `id` es la clave real de búsqueda; el slug es cosmético/SEO. Si el nombre no
+// produce slug (p. ej. solo símbolos), se omite el segmento.
+export function itemPath(kind: ItemKind, id: string, name: string): string {
+  const base = kind === "lot" ? "lotes" : "productos";
+  const slug = slugify(name);
+  return slug ? `/${base}/${id}/${slug}` : `/${base}/${id}`;
+}

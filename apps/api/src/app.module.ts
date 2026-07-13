@@ -12,6 +12,7 @@ import { CatalogModule } from './catalog/catalog.module';
 import { OrdersModule } from './orders/orders.module';
 import { PaymentsModule } from './payments/payments.module';
 import { InvoicingModule } from './invoicing/invoicing.module';
+import { SeoModule } from './seo/seo.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 
@@ -34,6 +35,7 @@ import { RolesGuard } from './auth/roles.guard';
     OrdersModule,
     PaymentsModule,
     InvoicingModule,
+    SeoModule,
   ],
   controllers: [AppController],
   providers: [
