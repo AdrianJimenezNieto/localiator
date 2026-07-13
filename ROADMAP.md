@@ -104,7 +104,7 @@ Objetivo: poder abrir al público de forma legal y segura.
 - [x] Banner y política de cookies / consentimiento
 - [x] Garantías legales al consumidor reflejadas en las condiciones
 - [ ] Revisión de seguridad: CSRF, XSS, inyección, secretos, HTTPS, cifrado en reposo
-- [ ] SEO básico (metadatos, sitemap, URLs amigables)
+- [x] SEO básico (metadatos, sitemap, URLs amigables)
 - [ ] Backups automáticos de la base de datos
 - [ ] Logs centralizados + trazabilidad de errores en producción
 - [ ] Despliegue en VPS: Docker + Nginx Proxy Manager + SSL Let's Encrypt + dominio

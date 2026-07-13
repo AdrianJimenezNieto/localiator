@@ -39,7 +39,9 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <CatalogPage /> },
       { path: 'productos/:id', element: <DetailPage kind="product" /> },
+      { path: 'productos/:id/:slug', element: <DetailPage kind="product" /> },
       { path: 'lotes/:id', element: <DetailPage kind="lot" /> },
+      { path: 'lotes/:id/:slug', element: <DetailPage kind="lot" /> },
       { path: 'carrito', element: <CartPage /> },
       { path: 'login', element: <LoginPage /> },
       { path: 'registro', element: <RegisterPage /> },
