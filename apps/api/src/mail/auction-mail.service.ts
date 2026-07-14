@@ -41,7 +41,6 @@ export class AuctionMailService {
   // se conecta en la tarea 09; de momento lleva a la ficha de la subasta.
   async sendWon(
     userId: string,
-    auctionId: string,
     amountCents: number,
     secondChance: boolean,
   ): Promise<void> {
@@ -56,7 +55,7 @@ export class AuctionMailService {
       `${intro}
        <p>Importe: <strong>${this.eur(amountCents)}</strong>.</p>
        <p>Completa el pago para asegurar tu artículo:</p>
-       <p><a href="${this.auctionUrl(auctionId)}">Pagar ahora</a></p>`,
+       <p><a href="${this.myOrdersUrl()}">Pagar ahora</a></p>`,
     );
   }
 
@@ -104,9 +103,18 @@ export class AuctionMailService {
   }
 
   private auctionUrl(auctionId: string): string {
-    const appUrl =
-      this.config.get<string>('APP_URL') ?? 'http://localhost:5173';
-    return `${appUrl}/subastas/${auctionId}`;
+    return `${this.appUrl()}/subastas/${auctionId}`;
+  }
+
+  // Página "mis pedidos": ahí el ganador ve su pedido de subasta PENDING y lo paga
+  // por el flujo Stripe existente (tarea 09). No enlazamos a un pedido concreto
+  // porque el email no maneja el id del pedido; la lista basta para el MVP.
+  private myOrdersUrl(): string {
+    return `${this.appUrl()}/mis-pedidos`;
+  }
+
+  private appUrl(): string {
+    return this.config.get<string>('APP_URL') ?? 'http://localhost:5173';
   }
 
   // Envuelve el envío para que un fallo se registre pero no rompa el flujo de

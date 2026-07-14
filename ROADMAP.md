@@ -124,7 +124,7 @@ Objetivo: pujas en tiempo real sobre productos/lotes.
 - [x] Cierre automático de subasta y asignación de ganador
 - [x] Impago del ganador: segunda oportunidad al siguiente + ban automático
 - [x] Notificaciones en tiempo real (superado, ganado, a punto de cerrar)
-- [ ] Cobro del ganador vía Stripe reutilizando el flujo de pedidos
+- [x] Cobro del ganador vía Stripe reutilizando el flujo de pedidos
 
 ## Backlog / futuro (sin fase asignada)
 - [ ] Envíos con transportista (ahora solo recogida en almacén)

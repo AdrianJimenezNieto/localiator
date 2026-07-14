@@ -314,6 +314,15 @@ model Order {
 
   paidAt DateTime? // se rellena al confirmar el cobro (tarea 06).
 
+  // Origen SUBASTA (tarea 09): si el pedido nace de ganar una subasta, apunta a
+  // ella. Nullable: los pedidos de venta directa no la tienen. NO es @unique a
+  // propósito: en la segunda oportunidad (tarea 07) se crea un pedido nuevo para el
+  // MISMO auctionId (el del moroso queda CANCELLED). Marca el origen para la
+  // conciliación y permite saltarse la reserva de stock en el cobro (el ganador ya
+  // es el único con derecho al artículo; no pasa por carrito).
+  auctionId String?
+  auction   Auction? @relation(fields: [auctionId], references: [id])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -323,6 +332,7 @@ model Order {
 
   @@index([userId])
   @@index([status])
+  @@index([auctionId])
 }
 
 // Copia DESNORMALIZADA (snapshot) del artículo en el momento de la compra. Se
@@ -475,6 +485,11 @@ model Auction {
   updatedAt DateTime @updatedAt
 
   bids Bid[]
+
+  // Pedidos nacidos de esta subasta (tarea 09). Normalmente uno (el del ganador);
+  // pueden ser varios en el tiempo si hubo impago + segunda oportunidad (tarea 07):
+  // el del moroso queda CANCELLED y se crea otro para el nuevo ganador.
+  orders Order[]
 
   @@index([status])
   @@index([itemType, itemId])

@@ -6,7 +6,7 @@ import {
   NotFoundException,
   forwardRef,
 } from '@nestjs/common';
-import { AuctionStatus, Prisma } from '@prisma/client';
+import { AuctionStatus, OrderStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuctionsGateway } from './auctions.gateway';
 import { maskBidder } from './auctions.mask';
@@ -16,6 +16,7 @@ import {
   ENDING_SOON_WINDOW_MS,
 } from './auctions.constants';
 import { AuctionMailService } from '../mail/auction-mail.service';
+import { OrdersService } from '../orders/orders.service';
 import { PlaceBidDto } from './dto/place-bid.dto';
 
 // Motivos estables de rechazo de una puja. Se envían como `code` en el 409 para
@@ -80,6 +81,9 @@ export class AuctionsService {
     private readonly gateway: AuctionsGateway,
     // Emails de subasta (tarea 08): respaldo del WS para superado/ganado/impago.
     private readonly mail: AuctionMailService,
+    // Cobro del ganador (tarea 09): crea su pedido dentro de la misma transacción
+    // de cierre/reasignación, para que ganador y pedido sean atómicos.
+    private readonly orders: OrdersService,
   ) {}
 
   // Estado inicial que se envía a un socket al unirse a la subasta (evento
@@ -216,6 +220,16 @@ export class AuctionsService {
           },
         });
 
+        if (highest) {
+          // Cobro (tarea 09): crea el pedido PENDING del ganador en ESTA misma
+          // transacción, para que fijar-ganador y crear-pedido sean atómicos.
+          await this.orders.createAuctionOrder(tx, {
+            userId: highest.userId,
+            auctionId,
+            amountCents: highest.amountCents,
+          });
+        }
+
         return highest
           ? {
               outcome: 'closed_won',
@@ -240,13 +254,7 @@ export class AuctionsService {
         amountCents: result.amountCents,
         secondChance: false,
       });
-      void this.mail.sendWon(
-        result.winnerUserId,
-        auctionId,
-        result.amountCents,
-        false,
-      );
-      // TODO(tarea 09): crear el Order PENDING del ganador con su paymentDueAt.
+      void this.mail.sendWon(result.winnerUserId, result.amountCents, false);
     } else if (result.outcome === 'closed_empty') {
       // Subasta desierta: nadie pujó.
       this.gateway.broadcastClosed(auctionId, {
@@ -342,6 +350,13 @@ export class AuctionsService {
               paymentDueAt: new Date(now.getTime() + PAYMENT_WINDOW_MS),
             },
           });
+          // Cobro (tarea 09): pedido del nuevo ganador. createAuctionOrder cancela
+          // primero el pedido PENDING del moroso, así solo hay un pedido vivo.
+          await this.orders.createAuctionOrder(tx, {
+            userId: next.userId,
+            auctionId,
+            amountCents: next.amountCents,
+          });
           return {
             outcome: 'reassigned',
             bannedUserId,
@@ -361,6 +376,12 @@ export class AuctionsService {
             paymentDueAt: null,
           },
         });
+        // Cobro (tarea 09): el moroso no pagó y no hay quien herede la subasta, así
+        // que su pedido PENDING se cancela para no dejarlo huérfano.
+        await tx.order.updateMany({
+          where: { auctionId, status: OrderStatus.PENDING },
+          data: { status: OrderStatus.CANCELLED },
+        });
         return { outcome: 'cancelled_empty', bannedUserId };
       },
     );
@@ -379,14 +400,8 @@ export class AuctionsService {
         amountCents: result.amountCents,
         secondChance: true,
       });
-      void this.mail.sendWon(
-        result.winnerUserId,
-        auctionId,
-        result.amountCents,
-        true,
-      );
+      void this.mail.sendWon(result.winnerUserId, result.amountCents, true);
       void this.mail.sendBannedForNonPayment(result.bannedUserId);
-      // TODO(tarea 09): reabrir el cobro (nuevo Order PENDING) para el nuevo ganador.
     } else if (result.outcome === 'cancelled_empty') {
       this.gateway.broadcastClosed(auctionId, {
         winnerMasked: null,
@@ -394,7 +409,6 @@ export class AuctionsService {
       });
       // El moroso queda baneado aunque no haya siguiente pujador: se le avisa igual.
       void this.mail.sendBannedForNonPayment(result.bannedUserId);
-      // TODO(tarea 09): liberar el artículo (no hubo venta).
     }
 
     return result;

@@ -6,6 +6,7 @@ import { AuctionsService } from './auctions.service';
 import { AuctionsGateway } from './auctions.gateway';
 import { AuctionsCloserService } from './auctions.closer.service';
 import { MailModule } from '../mail/mail.module';
+import { OrdersModule } from '../orders/orders.module';
 
 // Módulo de subastas (Fase 5). Reglas de puja (tarea 02) + canal en vivo (tarea
 // 03); en tareas siguientes suma la concurrencia (04), el antisniping (05), el
@@ -25,6 +26,9 @@ import { MailModule } from '../mail/mail.module';
     }),
     // Emails de subasta (tarea 08): respaldo del WebSocket para superado/ganado.
     MailModule,
+    // Cobro del ganador (tarea 09): reutiliza OrdersService para crear el pedido
+    // del ganador y que pague por el flujo Stripe existente.
+    OrdersModule,
   ],
   controllers: [AuctionsController],
   providers: [AuctionsService, AuctionsGateway, AuctionsCloserService],

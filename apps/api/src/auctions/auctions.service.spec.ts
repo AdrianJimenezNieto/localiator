@@ -8,6 +8,7 @@ import { AuctionStatus } from '@prisma/client';
 import { AuctionsService, BidRejectReason } from './auctions.service';
 import { AuctionsGateway } from './auctions.gateway';
 import { AuctionMailService } from '../mail/auction-mail.service';
+import { OrdersService } from '../orders/orders.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 const prismaMock = {
@@ -22,6 +23,9 @@ const prismaMock = {
     findFirst: jest.fn(),
     create: jest.fn(),
   },
+  // order.updateMany: lo usa la rama "moroso baneado y sin siguiente" para cancelar
+  // su pedido PENDING huérfano (tarea 09).
+  order: { updateMany: jest.fn() },
   $queryRaw: jest.fn(),
   $transaction: jest.fn(),
 };
@@ -46,6 +50,13 @@ const mailMock = {
   sendWon: jest.fn(),
   sendBannedForNonPayment: jest.fn(),
   sendEndingSoon: jest.fn(),
+};
+
+// Cobro del ganador (tarea 09): OrdersService.createAuctionOrder crea el pedido del
+// ganador dentro de la transacción de cierre/reasignación. Aquí solo se verifica que
+// se llama con los datos correctos; la lógica del pedido se prueba en orders.spec.
+const ordersMock = {
+  createAuctionOrder: jest.fn().mockResolvedValue({ id: 'order-1' }),
 };
 
 // Fila que devolvería el SELECT ... FOR UPDATE de la subasta bloqueada. Misma
@@ -108,6 +119,7 @@ describe('AuctionsService', () => {
         { provide: PrismaService, useValue: prismaMock },
         { provide: AuctionsGateway, useValue: gatewayMock },
         { provide: AuctionMailService, useValue: mailMock },
+        { provide: OrdersService, useValue: ordersMock },
       ],
     }).compile();
     service = moduleRef.get(AuctionsService);
@@ -382,11 +394,15 @@ describe('AuctionsService', () => {
         amountCents: 5000,
         secondChance: false,
       });
-      expect(mailMock.sendWon).toHaveBeenCalledWith(
-        'winner-1',
-        'auction-1',
-        5000,
-        false,
+      expect(mailMock.sendWon).toHaveBeenCalledWith('winner-1', 5000, false);
+      // Cobro (tarea 09): se crea el pedido PENDING del ganador con su puja.
+      expect(ordersMock.createAuctionOrder).toHaveBeenCalledWith(
+        prismaMock,
+        expect.objectContaining({
+          userId: 'winner-1',
+          auctionId: 'auction-1',
+          amountCents: 5000,
+        }),
       );
     });
 
@@ -487,13 +503,18 @@ describe('AuctionsService', () => {
         amountCents: 5000,
         secondChance: true,
       });
-      expect(mailMock.sendWon).toHaveBeenCalledWith(
-        'user-2',
-        'auction-1',
-        5000,
-        true,
-      );
+      expect(mailMock.sendWon).toHaveBeenCalledWith('user-2', 5000, true);
       expect(mailMock.sendBannedForNonPayment).toHaveBeenCalledWith('winner-1');
+      // Cobro (tarea 09): pedido del NUEVO ganador (createAuctionOrder cancela antes
+      // el pedido PENDING del moroso).
+      expect(ordersMock.createAuctionOrder).toHaveBeenCalledWith(
+        prismaMock,
+        expect.objectContaining({
+          userId: 'user-2',
+          auctionId: 'auction-1',
+          amountCents: 5000,
+        }),
+      );
     });
 
     it('sin más pujadores, deja la subasta desierta (cancelada)', async () => {
@@ -521,6 +542,13 @@ describe('AuctionsService', () => {
         winnerMasked: null,
         amountCents: null,
       });
+      // Cobro (tarea 09): sin heredero, el pedido PENDING del moroso se cancela y no
+      // se crea ninguno nuevo.
+      expect(prismaMock.order.updateMany).toHaveBeenCalledWith({
+        where: { auctionId: 'auction-1', status: 'PENDING' },
+        data: { status: 'CANCELLED' },
+      });
+      expect(ordersMock.createAuctionOrder).not.toHaveBeenCalled();
     });
 
     it('es idempotente: no actúa si la subasta ya no está CLOSED', async () => {
