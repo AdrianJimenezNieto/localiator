@@ -62,4 +62,21 @@ export class AuctionsCloserService {
       );
     }
   }
+
+  // Aviso "a punto de cerrar" (tarea 08). Cada minuto busca subastas LIVE que entran
+  // en la ventana de aviso y aún no se han avisado, y las notifica. notifyEndingSoon
+  // reclama el aviso de forma atómica, así que solapes del cron no duplican el aviso.
+  @Cron(CronExpression.EVERY_MINUTE)
+  async handleEndingSoon(): Promise<void> {
+    const ids = await this.auctions.findEndingSoon();
+    let notified = 0;
+    for (const id of ids) {
+      if (await this.auctions.notifyEndingSoon(id)) {
+        notified++;
+      }
+    }
+    if (notified > 0) {
+      this.logger.log(`Avisos "a punto de cerrar" enviados: ${notified}.`);
+    }
+  }
 }

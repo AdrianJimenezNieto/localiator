@@ -465,6 +465,12 @@ model Auction {
   // moroso y ofrece la subasta al siguiente pujador. Nullable: desierta o aún LIVE.
   paymentDueAt DateTime?
 
+  // Aviso "a punto de cerrar" (tarea 08): marca el instante en que se avisó a los
+  // pujadores de que quedaba poco. Guard para no reavisar (una vez por cuenta
+  // atrás). El antisniping (tarea 05) lo REINICIA a null al extender `endsAt`, para
+  // poder volver a avisar cuando la subasta se acerque de nuevo a su nuevo cierre.
+  endingSoonNotifiedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

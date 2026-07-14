@@ -330,3 +330,73 @@ Quedan los `TODO(tarea 08)` (notificar "segunda oportunidad" al nuevo ganador y
 > de puja (tarea 02); diseño de un **job idempotente** (banear con `bannedAt: null`
 > en el `where`, releer bajo lock); y por qué banear-antes-de-buscar-siguiente
 > simplifica el "saltar todas las pujas del moroso" a una sola consulta.
+
+---
+
+## Tarea 08 · Notificaciones en tiempo real (superado, ganado, a punto de cerrar)
+
+**Qué**: avisar a cada pujador de lo que le importa por **dos canales
+complementarios**: WebSocket (instantáneo, tarea 03) y email de respaldo (Resend,
+el mismo transporte de los pedidos). Tres eventos: **te superaron**, **has ganado**
+(cierre normal y segunda oportunidad) y **a punto de cerrar**; más el email de
+**baneado por impago** al moroso (tarea 07).
+
+**Rooms por usuario** (`AuctionsGateway`): además de la room de la subasta
+(`auction:<id>`), al autenticarse el socket entra a `user:<id>`. Los avisos
+**personales** (superado, ganado) se emiten a esa room, no a la de la subasta: así
+llegan a **todas las pestañas** del usuario y **nunca** exponen su identidad a los
+demás espectadores (RGPD). El aviso "a punto de cerrar" sí va a la room de la
+subasta: no es personal (la cuenta atrás la ve todo el mundo).
+
+- `notifyOutbid(userId, ...)` / `notifyWon(userId, ...)` → room de usuario.
+- `broadcastEndingSoon(auctionId, endsAt)` → room de la subasta.
+
+**Superado (`outbid`)** en `placeBid`: la fase transaccional ahora devuelve
+`previousLeaderId` (el `highest.userId` **antes** de crear la puja; `null` en la
+primera puja). Tras el commit, si esa puja destronó a alguien, se le avisa **solo a
+él** por WS + email. Una vez **por pérdida de liderato**, no en cada puja intermedia:
+enterarse de las pujas que siguen no le aporta al que ya no es líder, y evita spam.
+
+**Has ganado (`won`)**: enganchado al cierre (tarea 06, `secondChance=false`) y a la
+segunda oportunidad (tarea 07, `secondChance=true`). Sustituye los `TODO(tarea 08)`
+que dejaron esas tareas. WS a la room del ganador + email con el importe e (de
+momento) enlace a la ficha; el enlace de pago real llega en la tarea 09. En la
+segunda oportunidad, además, email de **ban** al moroso (que casi seguro no está
+conectado, por eso el email es el canal fiable).
+
+**A punto de cerrar (`ending-soon`)** — el punto con más chicha por los duplicados:
+- **Guard `Auction.endingSoonNotifiedAt`** (nuevo campo + migración): marca que ya
+  se avisó, para no repetir.
+- **Segundo cron** en `AuctionsCloserService` (`handleEndingSoon`, cada minuto)
+  busca subastas `LIVE` dentro de la ventana y sin avisar (`findEndingSoon`).
+- **`notifyEndingSoon` reclama el aviso de forma atómica** con un `updateMany`
+  condicional (marca `endingSoonNotifiedAt` solo si seguía a `null` y en ventana).
+  Solo la pasada que "gana" la fila (`count === 1`) emite → **idempotente**, dos
+  crons solapados no duplican. Reclamar **antes** de emitir evita el email doble si
+  emitir tarda.
+- **Interacción con el antisniping (clave)**: al extender `endsAt` (tarea 05),
+  `placeBid` **reinicia `endingSoonNotifiedAt` a `null`**, para poder reavisar
+  cuando la subasta se acerque a su **nuevo** cierre. Para que esto no genere spam,
+  la ventana de aviso (`ENDING_SOON_WINDOW_MINUTES = 2`) es **deliberadamente más
+  corta** que la del antisniping (5 min): tras extender a `now + 5 min` la subasta
+  queda fuera de la ventana de 2 min y el aviso no rearma hasta que vuelva a decaer
+  a 2 min de calma. Si fuese `>= 5`, cada puja de último minuto reavisaría.
+
+**Tolerancia a fallos**: `AuctionMailService` (nuevo, espejo de `OrderMailService`)
+**captura y registra** cualquier fallo de email en vez de propagarlo — un email
+caído no debe romper la puja/cierre, que ya ocurrieron. Por eso los emails se
+disparan con `void` (fire-and-forget) tras el commit.
+
+**Frontend**: `useAuctionSocket` expone `endingSoon` (bool) y `notice`
+(`{ kind: 'outbid' | 'won', ... }`); `AuctionPage` pinta un banner ámbar (superado),
+verde (ganado) o naranja (a punto de cerrar).
+
+**Tests** (`auctions.service.spec.ts`, 27 en verde): superar dispara `outbid` una
+vez; primera puja no; extender reinicia el guard; cierre dispara `won`; segunda
+oportunidad dispara `won(secondChance)` + ban; `notifyEndingSoon` emite al reclamar
+y **no** emite si otra pasada ya reclamó (`count === 0`).
+
+> **Conceptos a repasar**: rooms por usuario vs. por subasta en Socket.IO;
+> **reclamar-antes-de-emitir** con `updateMany` condicional como guard idempotente;
+> y por qué la ventana de "a punto de cerrar" debe ser **más corta** que la del
+> antisniping para no reavisar en cada extensión.

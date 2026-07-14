@@ -36,6 +36,15 @@ export interface AuctionClosed {
   amountCents: number | null
 }
 
+// Aviso PERSONAL dirigido a este usuario (tarea 08): superado o ganado. Llega por
+// su room de usuario (`user:<id>`), no por la room de la subasta, así que solo lo
+// recibe él. `kind` distingue el mensaje a pintar.
+export interface AuctionNotice {
+  kind: 'outbid' | 'won'
+  amountCents: number
+  secondChance?: boolean
+}
+
 // Suscribe la ficha de una subasta al canal en vivo. Se une a la room, mantiene el
 // precio máximo, la lista de pujas y el `endsAt` reaccionando a los eventos, y
 // expone `placeBid`. La reconexión automática la trae Socket.IO de fábrica; al
@@ -51,6 +60,8 @@ export function useAuctionSocket(auctionId: string) {
   const [connected, setConnected] = useState(false)
   const [lastRejection, setLastRejection] = useState<BidRejection | null>(null)
   const [closed, setClosed] = useState<AuctionClosed | null>(null)
+  const [endingSoon, setEndingSoon] = useState(false)
+  const [notice, setNotice] = useState<AuctionNotice | null>(null)
 
   useEffect(() => {
     // El token viaja en el handshake (auth). Si el usuario es invitado (sin
@@ -98,6 +109,33 @@ export function useAuctionSocket(auctionId: string) {
       setClosed(payload)
     })
 
+    // A punto de cerrar (tarea 08): aviso a toda la room (no personal), para que
+    // quien mira sepa que queda poco. La cuenta atrás sigue mandando el reloj.
+    socket.on('auction:ending-soon', () => {
+      setEndingSoon(true)
+    })
+
+    // Avisos PERSONALES (tarea 08): llegan por la room de usuario. Solo se reciben
+    // si el usuario tiene sesión (el token entra en el handshake).
+    socket.on(
+      'notification:outbid',
+      ({ amountCents }: { amountCents: number }) => {
+        setNotice({ kind: 'outbid', amountCents })
+      },
+    )
+    socket.on(
+      'notification:won',
+      ({
+        amountCents,
+        secondChance,
+      }: {
+        amountCents: number
+        secondChance: boolean
+      }) => {
+        setNotice({ kind: 'won', amountCents, secondChance })
+      },
+    )
+
     return () => {
       socket.disconnect()
       socketRef.current = null
@@ -117,6 +155,8 @@ export function useAuctionSocket(auctionId: string) {
     connected,
     lastRejection,
     closed,
+    endingSoon,
+    notice,
     placeBid,
   }
 }

@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh pr *)",
+      "Bash(git checkout *)",
+      "Bash(git pull *)",
+      "Bash(pnpm --filter @localiator/api build)",
+      "Bash(pnpm --filter @localiator/api test)",
+      "Bash(pnpm lint *)",
+      "Bash(git add *)",
+      "Bash(git reset *)",
+      "Bash(git commit -q -m ' *)",
+      "Bash(git push *)",
+      "Bash(pnpm format *)",
+      "Bash(npx tsc *)",
+      "Bash(echo \"===EXIT tsc: $?===\")",
+      "Bash(npx jest *)",
+      "Bash(echo \"===EXIT: $?===\")",
+      "Bash(npx eslint *)",
+      "Bash(echo \"===LINT EXIT: $?===\")",
+      "Bash(git commit *)"
+    ]
+  }
+}
