@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { AuctionsController } from './auctions.controller';
 import { AuctionsService } from './auctions.service';
 import { AuctionsGateway } from './auctions.gateway';
+import { AuctionsCloserService } from './auctions.closer.service';
 
 // Módulo de subastas (Fase 5). Reglas de puja (tarea 02) + canal en vivo (tarea
 // 03); en tareas siguientes suma la concurrencia (04), el antisniping (05), el
@@ -23,7 +24,7 @@ import { AuctionsGateway } from './auctions.gateway';
     }),
   ],
   controllers: [AuctionsController],
-  providers: [AuctionsService, AuctionsGateway],
+  providers: [AuctionsService, AuctionsGateway, AuctionsCloserService],
   exports: [AuctionsService],
 })
 export class AuctionsModule {}

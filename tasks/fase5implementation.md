@@ -234,3 +234,37 @@ actual bajo lock, así respeta las extensiones de última hora.
 > **Concepto a repasar**: por qué la extensión debe ir en la MISMA transacción que
 > la puja (atomicidad), y la sincronización de relojes cliente/servidor (el front
 > cuenta atrás, pero el `endsAt` real vive en el servidor).
+
+---
+
+## Tarea 06 · Cierre automático de subasta y asignación de ganador
+
+**Qué**: la subasta se cierra sola al vencer `endsAt`, fija el ganador (la puja
+máxima) o la marca desierta, y deja los ganchos para notificaciones (08) y cobro (09).
+
+**Disparo — cron, no timer** (`AuctionsCloserService`, `@Cron(EVERY_MINUTE)`): cada
+minuto busca subastas `LIVE` con `endsAt <= now` (`findDueAuctions`) y las cierra.
+Se elige cron frente a un timer por subasta porque **sobrevive a reinicios**: un
+timer en memoria se perdería y la subasta no se cerraría nunca. Mismo criterio que
+el barrido de reservas de la Fase 3.
+
+**`closeAuction(id)` — transaccional y con lock**, por las mismas razones que una
+puja:
+- **Relee `endsAt` bajo el lock**: una puja de última hora pudo extenderlo
+  (antisniping); si ahora `endsAt > now`, no se cierra (`not_due`).
+- **Idempotente**: solo actúa si sigue `LIVE`. Un cron solapado o un reinicio que
+  reprocese la misma subasta no reasigna ganador (`noop`).
+- **Ganador desnormalizado**: fija `winnerUserId` + `winningBidId` (los campos que
+  dejó la tarea 01), o los deja a null si no hubo pujas (desierta, `closed_empty`).
+
+**Resultado tipado** (`CloseResult`): los outcomes de "no cierre"
+(`not_found`/`noop`/`not_due`) hacen la idempotencia explícita y testeable, en vez
+de un booleano opaco.
+
+**Emisión y ganchos**: tras el commit, `broadcastClosed` emite `auction:closed`
+(ganador enmascarado o null) a la room. Ahí quedan anotados los `TODO(tarea 08)`
+(notificar ganado/no ganado) y `TODO(tarea 09)` (crear el `Order` del ganador).
+
+> **Concepto a repasar**: `@nestjs/schedule` / `@Cron`, por qué un cron resiste
+> reinicios mejor que un timer, e **idempotencia** de un cierre (evitar dobles
+> cierres con cron solapado).

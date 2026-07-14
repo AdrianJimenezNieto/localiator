@@ -21,10 +21,12 @@ const prismaMock = {
 };
 
 // El servicio emite a la room tras registrar la puja (punto único de emisión) y,
-// si el antisniping mueve el cierre, avisa con broadcastExtended.
+// si el antisniping mueve el cierre, avisa con broadcastExtended; al cerrar,
+// broadcastClosed.
 const gatewayMock = {
   broadcastBidAccepted: jest.fn(),
   broadcastExtended: jest.fn(),
+  broadcastClosed: jest.fn(),
 };
 
 // Fila que devolvería el SELECT ... FOR UPDATE de la subasta bloqueada. Misma
@@ -258,5 +260,76 @@ describe('AuctionsService', () => {
     await expect(
       service.placeBid('missing', 'user-1', { amountCents: 4500 }),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  describe('closeAuction', () => {
+    // Fila bloqueada de una subasta YA vencida (endsAt en el pasado).
+    const dueRow = { ...lockedRow, endsAt: new Date(now - 1000) };
+
+    it('cierra con ganador la subasta vencida con pujas', async () => {
+      prismaMock.$queryRaw.mockResolvedValue([dueRow]);
+      prismaMock.bid.findFirst.mockResolvedValue({
+        id: 'bid-top',
+        userId: 'winner-1',
+        amountCents: 5000,
+      });
+      prismaMock.auction.update.mockResolvedValue({});
+
+      const result = await service.closeAuction('auction-1');
+
+      expect(result).toMatchObject({
+        outcome: 'closed_won',
+        winnerUserId: 'winner-1',
+        winningBidId: 'bid-top',
+      });
+      expect(prismaMock.auction.update).toHaveBeenCalledWith({
+        where: { id: 'auction-1' },
+        data: {
+          status: AuctionStatus.CLOSED,
+          winnerUserId: 'winner-1',
+          winningBidId: 'bid-top',
+        },
+      });
+      expect(gatewayMock.broadcastClosed).toHaveBeenCalledWith(
+        'auction-1',
+        expect.objectContaining({ amountCents: 5000 }),
+      );
+    });
+
+    it('deja desierta la subasta vencida sin pujas', async () => {
+      prismaMock.$queryRaw.mockResolvedValue([dueRow]);
+      prismaMock.bid.findFirst.mockResolvedValue(null);
+      prismaMock.auction.update.mockResolvedValue({});
+
+      const result = await service.closeAuction('auction-1');
+
+      expect(result).toEqual({ outcome: 'closed_empty' });
+      expect(gatewayMock.broadcastClosed).toHaveBeenCalledWith('auction-1', {
+        winnerMasked: null,
+        amountCents: null,
+      });
+    });
+
+    it('es idempotente: no reasigna si ya no está LIVE', async () => {
+      prismaMock.$queryRaw.mockResolvedValue([
+        { ...dueRow, status: AuctionStatus.CLOSED },
+      ]);
+
+      const result = await service.closeAuction('auction-1');
+
+      expect(result).toEqual({ outcome: 'noop' });
+      expect(prismaMock.auction.update).not.toHaveBeenCalled();
+    });
+
+    it('no cierra si el antisniping extendió el cierre al futuro', async () => {
+      prismaMock.$queryRaw.mockResolvedValue([
+        { ...lockedRow, endsAt: new Date(now + 5 * 60 * 1000) },
+      ]);
+
+      const result = await service.closeAuction('auction-1');
+
+      expect(result).toEqual({ outcome: 'not_due' });
+      expect(prismaMock.auction.update).not.toHaveBeenCalled();
+    });
   });
 });

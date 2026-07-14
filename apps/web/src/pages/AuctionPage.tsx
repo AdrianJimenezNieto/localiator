@@ -10,7 +10,7 @@ import { formatPrice } from '../lib/format'
 export function AuctionPage() {
   const { id = '' } = useParams()
   const { user } = useAuth()
-  const { state, bids, highestBidCents, endsAt, connected, lastRejection, placeBid } =
+  const { state, bids, highestBidCents, endsAt, connected, lastRejection, closed, placeBid } =
     useAuctionSocket(id)
 
   // Mínimo válido de la próxima puja: precio de salida si no hay pujas, o la
@@ -69,7 +69,13 @@ export function AuctionPage() {
         )}
       </div>
 
-      {user ? (
+      {closed ? (
+        <div className="mt-4 rounded-md bg-neutral-100 px-4 py-3 text-sm">
+          {closed.winnerMasked
+            ? `Subasta cerrada. Ganador: ${closed.winnerMasked} · ${formatPrice(closed.amountCents ?? 0)}`
+            : 'Subasta cerrada sin pujas (desierta).'}
+        </div>
+      ) : user ? (
         <form onSubmit={onSubmit} className="mt-4 flex gap-2">
           <input
             type="number"

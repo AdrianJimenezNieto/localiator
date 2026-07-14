@@ -29,6 +29,13 @@ export interface BidRejection {
   message: string
 }
 
+// Resultado del cierre de la subasta (evento `auction:closed`). winnerMasked null
+// = subasta desierta (nadie pujó).
+export interface AuctionClosed {
+  winnerMasked: string | null
+  amountCents: number | null
+}
+
 // Suscribe la ficha de una subasta al canal en vivo. Se une a la room, mantiene el
 // precio máximo, la lista de pujas y el `endsAt` reaccionando a los eventos, y
 // expone `placeBid`. La reconexión automática la trae Socket.IO de fábrica; al
@@ -43,6 +50,7 @@ export function useAuctionSocket(auctionId: string) {
   const [endsAt, setEndsAt] = useState<string | null>(null)
   const [connected, setConnected] = useState(false)
   const [lastRejection, setLastRejection] = useState<BidRejection | null>(null)
+  const [closed, setClosed] = useState<AuctionClosed | null>(null)
 
   useEffect(() => {
     // El token viaja en el handshake (auth). Si el usuario es invitado (sin
@@ -84,6 +92,12 @@ export function useAuctionSocket(auctionId: string) {
       setEndsAt(newEndsAt)
     })
 
+    // Cierre automático (tarea 06): la subasta terminó. Guardamos el resultado
+    // (ganador enmascarado o desierta) para pintarlo.
+    socket.on('auction:closed', (payload: AuctionClosed) => {
+      setClosed(payload)
+    })
+
     return () => {
       socket.disconnect()
       socketRef.current = null
@@ -95,5 +109,14 @@ export function useAuctionSocket(auctionId: string) {
     socketRef.current?.emit('bid', { auctionId, amountCents })
   }, [auctionId])
 
-  return { state, bids, highestBidCents, endsAt, connected, lastRejection, placeBid }
+  return {
+    state,
+    bids,
+    highestBidCents,
+    endsAt,
+    connected,
+    lastRejection,
+    closed,
+    placeBid,
+  }
 }
