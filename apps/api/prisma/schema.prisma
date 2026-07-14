@@ -33,6 +33,15 @@ model User {
   // sesión y sus facturas se conservan.
   anonymizedAt DateTime?
 
+  // Ban automático por impago de una subasta ganada (Fase 5, tarea 07). Flag
+  // global simple para el MVP: un usuario baneado no puede volver a pujar (lo
+  // comprueba placeBid con BidRejectReason.BANNED). `bannedAt`/`banReason` son la
+  // propia traza de auditoría de la acción (cuándo y por qué); no hay desban por
+  // ahora. Si en el futuro hiciera falta granularidad (histórico, desbanes), se
+  // migra a una tabla de bans.
+  bannedAt  DateTime?
+  banReason String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -449,6 +458,12 @@ model Auction {
   winnerUserId String?
   winner       User?   @relation(fields: [winnerUserId], references: [id])
   winningBidId String? @unique
+
+  // Plazo de pago del ganador actual (tarea 07). Se fija al cerrar con ganador
+  // (tarea 06) y se REINICIA en cada segunda oportunidad. Un job busca subastas
+  // CLOSED con este plazo vencido y sin pago (aún CLOSED, no PAID): banea al
+  // moroso y ofrece la subasta al siguiente pujador. Nullable: desierta o aún LIVE.
+  paymentDueAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

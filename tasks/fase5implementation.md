@@ -268,3 +268,65 @@ de un booleano opaco.
 > **Concepto a repasar**: `@nestjs/schedule` / `@Cron`, por qué un cron resiste
 > reinicios mejor que un timer, e **idempotencia** de un cierre (evitar dobles
 > cierres con cron solapado).
+
+---
+
+## Tarea 07 · Impago del ganador: segunda oportunidad + ban automático
+
+**Qué**: si el ganador no paga en plazo, se le **banea** (no vuelve a pujar) y la
+subasta pasa al **siguiente pujador** (segunda oportunidad). Si no queda nadie,
+queda desierta. Cierra además el bucle del `BANNED` que ya anticipaban las reglas
+de puja (tarea 02).
+
+**Modelo**:
+- `User.bannedAt` + `User.banReason`: **flag de ban global** (MVP). La propia fila
+  es la **traza de auditoría** de la acción (cuándo y por qué), en vez de forzar un
+  `AuditLog` pensado solo para precio/stock (`Int oldValue/newValue`). Si algún día
+  hace falta granularidad (histórico, desbanes), se migra a una tabla de bans.
+- `Auction.paymentDueAt`: plazo de pago del **ganador actual**. Se fija al cerrar
+  con ganador (tarea 06) y se **reinicia** en cada segunda oportunidad.
+
+**"No pagó" = sigue `CLOSED`**: el cobro (tarea 09) pasará la subasta a `PAID`. Así,
+una subasta `CLOSED` con `winnerUserId` y `paymentDueAt <= now` es exactamente un
+impago. `findUnpaidWinners()` las busca; el cron las procesa.
+
+**Disparo — segundo cron** en `AuctionsCloserService` (`handleUnpaidWinners`,
+`@Cron(EVERY_MINUTE)`), mismo criterio que el cierre: un cron **sobrevive a
+reinicios** y `handleUnpaidWinner` es idempotente, así que solapes o reintentos no
+rebanean ni reasignan dos veces.
+
+**`handleUnpaidWinner(id)` — transaccional, con lock e idempotente**:
+- **Lock de fila** (`SELECT ... FOR UPDATE`) leyendo los campos del *ciclo de vida*
+  (`status`, `winnerUserId`, `paymentDueAt`), no los "biddables". Relee bajo el lock
+  y **no actúa** si ya no está `CLOSED`, si no hay ganador (`noop`), o si el plazo no
+  ha vencido / se reinició (`not_due`).
+- **Banea al moroso** con `updateMany({ where: { id, bannedAt: null }, ... })`: el
+  `bannedAt: null` en el `where` hace el ban **idempotente** (si ya estaba baneado,
+  no reescribe fecha ni motivo).
+- **Segunda oportunidad**: la puja más alta de un usuario **NO baneado**
+  (`user: { bannedAt: null }`). Como el moroso queda baneado en **esta misma
+  transacción**, sus pujas quedan excluidas automáticamente — y las de morosos
+  anteriores en cadena — **sin llevar una lista manual de descartados**. Esa es la
+  decisión de diseño clave: banear primero deja el "siguiente" bien definido con una
+  sola consulta.
+- Si hay siguiente → nuevo `winnerUserId`/`winningBidId` y `paymentDueAt` reiniciado;
+  sigue `CLOSED`. Si no → `CANCELLED` (desierta), ganador a null.
+
+**Resultado tipado** (`UnpaidResult`): `not_found`/`noop`/`not_due` (sin acción,
+idempotencia explícita) y `reassigned`/`cancelled_empty` (con el `bannedUserId`).
+
+**Cierre del bucle en `placeBid`**: `assertCanBid` sustituye a `assertEmailVerified`
+y lee `emailVerifiedAt` + `bannedAt` de una sola consulta. Un baneado se rechaza con
+`reject(BANNED)` → **409 con `code`**, el mismo mecanismo que los demás motivos de
+puja, para que HTTP y WS lo muestren igual (el gateway solo sabe reenviar el `code`
+de un `ConflictException`). El email sin verificar sigue siendo un 403 aparte.
+
+**Emisión y ganchos**: tras el commit, `broadcastClosed` reemite `auction:closed`
+(nuevo ganador enmascarado, o null si desierta) para mantener la room en sync.
+Quedan los `TODO(tarea 08)` (notificar "segunda oportunidad" al nuevo ganador y
+"baneado" al moroso) y `TODO(tarea 09)` (reabrir el cobro / liberar el artículo).
+
+> **Conceptos a repasar**: cómo el flag de ban **cierra el bucle** con la validación
+> de puja (tarea 02); diseño de un **job idempotente** (banear con `bannedAt: null`
+> en el `where`, releer bajo lock); y por qué banear-antes-de-buscar-siguiente
+> simplifica el "saltar todas las pujas del moroso" a una sola consulta.

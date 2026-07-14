@@ -37,4 +37,29 @@ export class AuctionsCloserService {
       this.logger.log(`Subastas cerradas automáticamente: ${closed}.`);
     }
   }
+
+  // Impago del ganador (tarea 07). Cada minuto busca subastas cerradas cuyo ganador
+  // dejó vencer el plazo de pago y las procesa: banea al moroso y ofrece la subasta
+  // al siguiente pujador (o la deja desierta). Mismo criterio que el cierre: un cron
+  // periódico sobrevive a reinicios, y handleUnpaidWinner es idempotente, así que
+  // solapes o reintentos no rebanean ni reasignan dos veces.
+  @Cron(CronExpression.EVERY_MINUTE)
+  async handleUnpaidWinners(): Promise<void> {
+    const unpaidIds = await this.auctions.findUnpaidWinners();
+    let reassigned = 0;
+    let cancelled = 0;
+    for (const id of unpaidIds) {
+      const result = await this.auctions.handleUnpaidWinner(id);
+      if (result.outcome === 'reassigned') {
+        reassigned++;
+      } else if (result.outcome === 'cancelled_empty') {
+        cancelled++;
+      }
+    }
+    if (reassigned > 0 || cancelled > 0) {
+      this.logger.log(
+        `Impagos procesados: ${reassigned} reasignadas, ${cancelled} desiertas.`,
+      );
+    }
+  }
 }

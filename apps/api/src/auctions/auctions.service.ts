@@ -10,7 +10,7 @@ import { AuctionStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuctionsGateway } from './auctions.gateway';
 import { maskBidder } from './auctions.mask';
-import { ANTISNIPE_WINDOW_MS } from './auctions.constants';
+import { ANTISNIPE_WINDOW_MS, PAYMENT_WINDOW_MS } from './auctions.constants';
 import { PlaceBidDto } from './dto/place-bid.dto';
 
 // Motivos estables de rechazo de una puja. Se envían como `code` en el 409 para
@@ -47,6 +47,21 @@ export type CloseResult =
       winningBidId: string;
       amountCents: number;
     };
+
+// Resultado de procesar el impago del ganador de una subasta (tarea 07). Como en
+// CloseResult, los outcomes "no acción" hacen la idempotencia explícita y testeable.
+export type UnpaidResult =
+  | { outcome: 'not_found' }
+  | { outcome: 'noop' } // ya no está CLOSED (pagada/cancelada) o ya no tiene ganador.
+  | { outcome: 'not_due' } // el plazo de pago aún no ha vencido.
+  | {
+      outcome: 'reassigned'; // moroso baneado; la subasta pasa al siguiente pujador.
+      bannedUserId: string;
+      winnerUserId: string;
+      winningBidId: string;
+      amountCents: number;
+    }
+  | { outcome: 'cancelled_empty'; bannedUserId: string }; // baneado y sin más pujadores: desierta.
 
 @Injectable()
 export class AuctionsService {
@@ -133,6 +148,11 @@ export class AuctionsService {
             status: AuctionStatus.CLOSED,
             winnerUserId: highest?.userId ?? null,
             winningBidId: highest?.id ?? null,
+            // Con ganador arranca su plazo de pago (tarea 07): si vence sin pagar,
+            // el barrido lo banea y ofrece la subasta al siguiente. Desierta: null.
+            paymentDueAt: highest
+              ? new Date(Date.now() + PAYMENT_WINDOW_MS)
+              : null,
           },
         });
 
@@ -166,6 +186,133 @@ export class AuctionsService {
     return result;
   }
 
+  // Subastas CLOSED cuyo ganador dejó vencer el plazo de pago sin pagar. Que sigan
+  // CLOSED (y no PAID) es justo lo que significa "no pagó": el cobro (tarea 09) las
+  // pasaría a PAID. Lo consulta el cron de impagos (AuctionsCloser).
+  async findUnpaidWinners(): Promise<string[]> {
+    const rows = await this.prisma.auction.findMany({
+      where: {
+        status: AuctionStatus.CLOSED,
+        winnerUserId: { not: null },
+        paymentDueAt: { lte: new Date() },
+      },
+      select: { id: true },
+    });
+    return rows.map((a) => a.id);
+  }
+
+  // Procesa el impago del ganador: lo banea y ofrece la subasta al siguiente
+  // pujador (segunda oportunidad), o la deja desierta si no queda nadie. Igual que
+  // el cierre, es transaccional, con bloqueo de fila e IDEMPOTENTE:
+  //  - Relee estado/ganador/plazo BAJO el lock; si ya no está CLOSED, ya no hay
+  //    ganador, o el plazo no ha vencido, no hace nada (dos pasadas del cron o un
+  //    reinicio no rebanean ni reasignan dos veces).
+  //  - El "siguiente pujador" es la puja más alta de un usuario NO baneado. Como el
+  //    moroso queda baneado en esta misma transacción, su(s) puja(s) quedan
+  //    excluidas automáticamente, igual que las de morosos anteriores en cadena: no
+  //    hace falta llevar una lista de descartados.
+  async handleUnpaidWinner(auctionId: string): Promise<UnpaidResult> {
+    const now = new Date();
+    const result = await this.prisma.$transaction(
+      async (tx): Promise<UnpaidResult> => {
+        // Lock de la fila con los campos del ciclo de vida (no los "biddables"):
+        // estado, ganador y plazo. Mismo patrón FOR UPDATE que lockAuction.
+        const rows = await tx.$queryRaw<
+          {
+            status: string;
+            winnerUserId: string | null;
+            paymentDueAt: Date | null;
+          }[]
+        >`
+          SELECT status, "winnerUserId", "paymentDueAt"
+          FROM "Auction" WHERE id = ${auctionId} FOR UPDATE`;
+        const locked = rows[0];
+        if (!locked) {
+          return { outcome: 'not_found' };
+        }
+        // Idempotencia: solo actúa sobre una subasta cerrada con ganador vivo.
+        if (locked.status !== AuctionStatus.CLOSED || !locked.winnerUserId) {
+          return { outcome: 'noop' };
+        }
+        // El plazo pudo reiniciarse (otra reasignación) o aún no haber vencido.
+        if (
+          !locked.paymentDueAt ||
+          locked.paymentDueAt.getTime() > now.getTime()
+        ) {
+          return { outcome: 'not_due' };
+        }
+
+        const bannedUserId = locked.winnerUserId;
+        // Ban del moroso. updateMany con `bannedAt: null` en el where lo hace
+        // idempotente: si ya estaba baneado, no reescribe la fecha/motivo.
+        await tx.user.updateMany({
+          where: { id: bannedUserId, bannedAt: null },
+          data: {
+            bannedAt: now,
+            banReason: `Impago de la subasta ${auctionId}`,
+          },
+        });
+
+        // Siguiente pujador: la puja más alta de alguien NO baneado. Excluye al
+        // moroso recién baneado (y a cualquier moroso anterior) sin lista manual.
+        const next = await tx.bid.findFirst({
+          where: { auctionId, user: { bannedAt: null } },
+          orderBy: { amountCents: 'desc' },
+        });
+
+        if (next) {
+          await tx.auction.update({
+            where: { id: auctionId },
+            data: {
+              winnerUserId: next.userId,
+              winningBidId: next.id,
+              // Reinicia el plazo para el nuevo ganador. Sigue CLOSED (aún sin pago).
+              paymentDueAt: new Date(now.getTime() + PAYMENT_WINDOW_MS),
+            },
+          });
+          return {
+            outcome: 'reassigned',
+            bannedUserId,
+            winnerUserId: next.userId,
+            winningBidId: next.id,
+            amountCents: next.amountCents,
+          };
+        }
+
+        // Sin más pujadores: la subasta queda desierta/cancelada.
+        await tx.auction.update({
+          where: { id: auctionId },
+          data: {
+            status: AuctionStatus.CANCELLED,
+            winnerUserId: null,
+            winningBidId: null,
+            paymentDueAt: null,
+          },
+        });
+        return { outcome: 'cancelled_empty', bannedUserId };
+      },
+    );
+
+    // Emisión y ganchos, ya con la reasignación confirmada en BD.
+    if (result.outcome === 'reassigned') {
+      this.gateway.broadcastClosed(auctionId, {
+        winnerMasked: maskBidder(result.winnerUserId),
+        amountCents: result.amountCents,
+      });
+      // TODO(tarea 08): notificar "segunda oportunidad, has ganado" al nuevo ganador
+      // y "baneado por impago" al moroso.
+      // TODO(tarea 09): reabrir el cobro (nuevo Order PENDING) para el nuevo ganador.
+    } else if (result.outcome === 'cancelled_empty') {
+      this.gateway.broadcastClosed(auctionId, {
+        winnerMasked: null,
+        amountCents: null,
+      });
+      // TODO(tarea 09): liberar el artículo (no hubo venta).
+    }
+
+    return result;
+  }
+
   // Registra una puja aplicando las reglas de negocio de la subasta. Esta es la
   // ÚNICA puerta de entrada de una puja: el gateway de tiempo real (tarea 03)
   // reutiliza este método en vez de duplicar la validación.
@@ -181,13 +328,10 @@ export class AuctionsService {
   //     serializan y solo una queda como máxima. Mismo mecanismo que la reserva
   //     de stock (Fase 3).
   async placeBid(auctionId: string, userId: string, dto: PlaceBidDto) {
-    // Solo puja quien ha verificado su email (misma política que comprar; el flag
-    // no viaja en el JWT, se lee de BD en el momento de la acción sensible).
-    await this.assertEmailVerified(userId);
-
-    // TODO(tarea 07): rechazar con BANNED si el usuario está baneado por impago.
-    // El campo `User.bannedAt` se añade en la tarea 07; hasta entonces no hay a
-    // quién banear, así que la comprobación se deja anotada aquí, en su sitio.
+    // Solo puja quien puede: email verificado y cuenta no baneada por impago
+    // (tarea 07). Ambos flags se leen de BD en el momento de la acción sensible
+    // (no viajan en el JWT), de una sola consulta.
+    await this.assertCanBid(userId);
 
     // --- Fase 1: fast path sin lock ---
     const auction = await this.prisma.auction.findUnique({
@@ -345,13 +489,23 @@ export class AuctionsService {
     return new ConflictException({ code, message });
   }
 
-  private async assertEmailVerified(userId: string): Promise<void> {
+  // Requisitos del pujador, leídos juntos de BD. Un baneado se rechaza con el
+  // mismo mecanismo que los demás motivos de puja (409 con `code` BANNED) para que
+  // HTTP y WS lo muestren igual; el email sin verificar es un 403 aparte (no es un
+  // rechazo de puja, es una cuenta a medio configurar).
+  private async assertCanBid(userId: string): Promise<void> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { emailVerifiedAt: true },
+      select: { emailVerifiedAt: true, bannedAt: true },
     });
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
+    }
+    if (user.bannedAt) {
+      throw this.reject(
+        BidRejectReason.BANNED,
+        'Tu cuenta está baneada por impago y no puede pujar',
+      );
     }
     if (!user.emailVerifiedAt) {
       throw new ForbiddenException('Verifica tu email antes de pujar');
