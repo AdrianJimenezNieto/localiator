@@ -34,3 +34,6 @@ apps/api/uploads/
 
 # Copias de seguridad de la BD (tarea 07); nunca en el repo.
 backups/
+
+# Configuración local y temporales de Claude Code (nunca en el repo).
+.claude/
