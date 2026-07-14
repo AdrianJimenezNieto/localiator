@@ -10,7 +10,12 @@ import { AuctionStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuctionsGateway } from './auctions.gateway';
 import { maskBidder } from './auctions.mask';
-import { ANTISNIPE_WINDOW_MS, PAYMENT_WINDOW_MS } from './auctions.constants';
+import {
+  ANTISNIPE_WINDOW_MS,
+  PAYMENT_WINDOW_MS,
+  ENDING_SOON_WINDOW_MS,
+} from './auctions.constants';
+import { AuctionMailService } from '../mail/auction-mail.service';
 import { PlaceBidDto } from './dto/place-bid.dto';
 
 // Motivos estables de rechazo de una puja. Se envían como `code` en el 409 para
@@ -73,6 +78,8 @@ export class AuctionsService {
     // una puja por HTTP o por WS llega igual a los espectadores.
     @Inject(forwardRef(() => AuctionsGateway))
     private readonly gateway: AuctionsGateway,
+    // Emails de subasta (tarea 08): respaldo del WS para superado/ganado/impago.
+    private readonly mail: AuctionMailService,
   ) {}
 
   // Estado inicial que se envía a un socket al unirse a la subasta (evento
@@ -114,6 +121,59 @@ export class AuctionsService {
       select: { id: true },
     });
     return due.map((a) => a.id);
+  }
+
+  // Subastas LIVE a punto de cerrar a las que aún no se ha avisado (tarea 08):
+  // dentro de la ventana `ENDING_SOON_WINDOW_MS` y con el guard `endingSoonNotifiedAt`
+  // sin marcar. `endsAt > now` excluye las ya vencidas (esas las cierra el otro cron).
+  // Lo consulta el cron de avisos (AuctionsCloser).
+  async findEndingSoon(): Promise<string[]> {
+    const now = new Date();
+    const rows = await this.prisma.auction.findMany({
+      where: {
+        status: AuctionStatus.LIVE,
+        endingSoonNotifiedAt: null,
+        endsAt: {
+          gt: now,
+          lte: new Date(now.getTime() + ENDING_SOON_WINDOW_MS),
+        },
+      },
+      select: { id: true },
+    });
+    return rows.map((a) => a.id);
+  }
+
+  // Avisa de que una subasta está a punto de cerrar (tarea 08). El guard es un
+  // `updateMany` condicional (no un lock de fila): marca `endingSoonNotifiedAt` solo
+  // si seguía sin marcar y en ventana. Es ATÓMICO e IDEMPOTENTE, así que dos pasadas
+  // del cron solapadas no avisan dos veces: solo la que "gana" la marca (count === 1)
+  // emite. Reclamar-antes-de-emitir evita el email duplicado si emitir tarda.
+  async notifyEndingSoon(auctionId: string): Promise<boolean> {
+    const now = new Date();
+    const claimed = await this.prisma.auction.updateMany({
+      where: {
+        id: auctionId,
+        status: AuctionStatus.LIVE,
+        endingSoonNotifiedAt: null,
+        endsAt: {
+          gt: now,
+          lte: new Date(now.getTime() + ENDING_SOON_WINDOW_MS),
+        },
+      },
+      data: { endingSoonNotifiedAt: now },
+    });
+    if (claimed.count === 0) {
+      return false; // otra pasada la reclamó, o ya no está en ventana.
+    }
+    const auction = await this.prisma.auction.findUnique({
+      where: { id: auctionId },
+      select: { endsAt: true },
+    });
+    if (auction) {
+      this.gateway.broadcastEndingSoon(auctionId, auction.endsAt);
+    }
+    void this.mail.sendEndingSoon(auctionId);
+    return true;
   }
 
   // Cierra una subasta vencida y fija su ganador (o la deja desierta). Transaccional
@@ -173,7 +233,19 @@ export class AuctionsService {
         winnerMasked: maskBidder(result.winnerUserId),
         amountCents: result.amountCents,
       });
-      // TODO(tarea 08): notificar "has ganado" al ganador y "no ganado" al resto.
+      // Notifica "has ganado" al ganador (WS a su room personal + email de
+      // respaldo con instrucciones de pago). secondChance=false: cierre normal.
+      this.gateway.notifyWon(result.winnerUserId, {
+        auctionId,
+        amountCents: result.amountCents,
+        secondChance: false,
+      });
+      void this.mail.sendWon(
+        result.winnerUserId,
+        auctionId,
+        result.amountCents,
+        false,
+      );
       // TODO(tarea 09): crear el Order PENDING del ganador con su paymentDueAt.
     } else if (result.outcome === 'closed_empty') {
       // Subasta desierta: nadie pujó.
@@ -299,14 +371,29 @@ export class AuctionsService {
         winnerMasked: maskBidder(result.winnerUserId),
         amountCents: result.amountCents,
       });
-      // TODO(tarea 08): notificar "segunda oportunidad, has ganado" al nuevo ganador
-      // y "baneado por impago" al moroso.
+      // Segunda oportunidad: "has ganado" al nuevo ganador (secondChance=true) y
+      // "baneado por impago" al moroso. WS solo al ganador (el moroso seguramente
+      // no está conectado); el email es el canal fiable para ambos.
+      this.gateway.notifyWon(result.winnerUserId, {
+        auctionId,
+        amountCents: result.amountCents,
+        secondChance: true,
+      });
+      void this.mail.sendWon(
+        result.winnerUserId,
+        auctionId,
+        result.amountCents,
+        true,
+      );
+      void this.mail.sendBannedForNonPayment(result.bannedUserId);
       // TODO(tarea 09): reabrir el cobro (nuevo Order PENDING) para el nuevo ganador.
     } else if (result.outcome === 'cancelled_empty') {
       this.gateway.broadcastClosed(auctionId, {
         winnerMasked: null,
         amountCents: null,
       });
+      // El moroso queda baneado aunque no haya siguiente pujador: se le avisa igual.
+      void this.mail.sendBannedForNonPayment(result.bannedUserId);
       // TODO(tarea 09): liberar el artículo (no hubo venta).
     }
 
@@ -353,8 +440,8 @@ export class AuctionsService {
     );
 
     // --- Fase 2: fase autoritativa bajo bloqueo de fila ---
-    const { bid, endsAt, extended } = await this.prisma.$transaction(
-      async (tx) => {
+    const { bid, endsAt, extended, previousLeaderId } =
+      await this.prisma.$transaction(async (tx) => {
         const locked = await this.lockAuction(tx, auctionId);
         if (!locked) {
           throw new NotFoundException('Subasta no encontrada');
@@ -372,6 +459,11 @@ export class AuctionsService {
           BidRejectReason.OUTBID,
         );
 
+        // El líder ANTES de crear esta puja es el que queda superado (tarea 08).
+        // Puede no haber (primera puja); nunca es el propio pujador (SELF_OUTBID lo
+        // habría rechazado en assertBeats).
+        const previousLeaderId = highest?.userId ?? null;
+
         const created = await tx.bid.create({
           data: { auctionId, userId, amountCents: dto.amountCents },
         });
@@ -388,13 +480,18 @@ export class AuctionsService {
           extended = true;
           await tx.auction.update({
             where: { id: auctionId },
-            data: { endsAt },
+            data: {
+              endsAt,
+              // Se reinicia el guard de "a punto de cerrar" (tarea 08): el cierre se
+              // ha movido, así que un aviso previo ya no vale y hay que poder
+              // reavisar cuando la subasta se acerque de nuevo a su nuevo cierre.
+              endingSoonNotifiedAt: null,
+            },
           });
         }
 
-        return { bid: created, endsAt, extended };
-      },
-    );
+        return { bid: created, endsAt, extended, previousLeaderId };
+      });
 
     // Punto ÚNICO de emisión, ya con la puja confirmada en BD. Da igual si entró
     // por HTTP o por WS: todos los que miran reciben el nuevo precio (enmascarado).
@@ -409,6 +506,17 @@ export class AuctionsService {
     // el servidor, no en el cliente).
     if (extended) {
       this.gateway.broadcastExtended(auctionId, endsAt);
+    }
+
+    // Superado (tarea 08): si esta puja destronó a un líder anterior, se le avisa
+    // SOLO a él (WS a su room personal + email de respaldo). Una vez por pérdida de
+    // liderato: no se notifica en cada puja intermedia.
+    if (previousLeaderId) {
+      this.gateway.notifyOutbid(previousLeaderId, {
+        auctionId,
+        amountCents: bid.amountCents,
+      });
+      void this.mail.sendOutbid(previousLeaderId, auctionId);
     }
 
     return bid;

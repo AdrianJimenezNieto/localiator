@@ -10,8 +10,18 @@ import { formatPrice } from '../lib/format'
 export function AuctionPage() {
   const { id = '' } = useParams()
   const { user } = useAuth()
-  const { state, bids, highestBidCents, endsAt, connected, lastRejection, closed, placeBid } =
-    useAuctionSocket(id)
+  const {
+    state,
+    bids,
+    highestBidCents,
+    endsAt,
+    connected,
+    lastRejection,
+    closed,
+    endingSoon,
+    notice,
+    placeBid,
+  } = useAuctionSocket(id)
 
   // Mínimo válido de la próxima puja: precio de salida si no hay pujas, o la
   // máxima + el incremento. Solo para prefijar el formulario; la verdad la impone
@@ -68,6 +78,30 @@ export function AuctionPage() {
           </p>
         )}
       </div>
+
+      {/* Aviso personal (tarea 08): superado o ganado. Llega por la room de usuario. */}
+      {notice && (
+        <div
+          className={`mt-4 rounded-md px-4 py-3 text-sm ${
+            notice.kind === 'won'
+              ? 'bg-green-50 text-green-800'
+              : 'bg-amber-50 text-amber-800'
+          }`}
+        >
+          {notice.kind === 'won'
+            ? `¡Has ganado la subasta por ${formatPrice(notice.amountCents)}!${
+                notice.secondChance ? ' (segunda oportunidad)' : ''
+              } Revisa tu email para pagar.`
+            : `Te han superado: la puja va por ${formatPrice(notice.amountCents)}.`}
+        </div>
+      )}
+
+      {/* A punto de cerrar (tarea 08): aviso a la room mientras siga abierta. */}
+      {endingSoon && !closed && (
+        <div className="mt-4 rounded-md bg-orange-50 px-4 py-3 text-sm text-orange-800">
+          La subasta está a punto de cerrar. Si te interesa, puja ya.
+        </div>
+      )}
 
       {closed ? (
         <div className="mt-4 rounded-md bg-neutral-100 px-4 py-3 text-sm">

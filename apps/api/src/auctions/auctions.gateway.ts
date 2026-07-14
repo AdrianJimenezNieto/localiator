@@ -68,6 +68,11 @@ export class AuctionsGateway implements OnGatewayConnection {
     try {
       const payload = this.jwt.verify<AccessTokenPayload>(token);
       client.data.user = { userId: payload.sub, role: payload.role };
+      // Room personal del usuario (tarea 08): además de la room de la subasta,
+      // cada socket autenticado entra a `user:<id>`. Así los eventos personales
+      // (superado, ganado) se dirigen a TODAS sus pestañas sin mandárselos a la
+      // room de la subasta (no filtramos identidades a terceros; RGPD).
+      void client.join(this.userRoom(payload.sub));
     } catch {
       // Token caducado/inválido: se ignora, el socket queda como invitado.
     }
@@ -158,8 +163,39 @@ export class AuctionsGateway implements OnGatewayConnection {
     this.server.to(this.room(auctionId)).emit('auction:closed', payload);
   }
 
+  // Avisa a la room de la subasta de que está a punto de cerrar (tarea 08). No es
+  // información personal (todos los que miran ven la cuenta atrás), así que va a la
+  // room de la subasta, no a rooms de usuario. Lo llama AuctionsService.notifyEndingSoon.
+  broadcastEndingSoon(auctionId: string, endsAt: Date): void {
+    this.server
+      .to(this.room(auctionId))
+      .emit('auction:ending-soon', { endsAt });
+  }
+
+  // Avisa a UN usuario (todas sus pestañas) de que le han superado (tarea 08). Va a
+  // su room personal, no a la de la subasta: es información dirigida.
+  notifyOutbid(
+    userId: string,
+    payload: { auctionId: string; amountCents: number },
+  ): void {
+    this.server.to(this.userRoom(userId)).emit('notification:outbid', payload);
+  }
+
+  // Avisa a UN usuario de que ha ganado (tarea 08). `secondChance` distingue el
+  // cierre normal de la segunda oportunidad por impago (tarea 07).
+  notifyWon(
+    userId: string,
+    payload: { auctionId: string; amountCents: number; secondChance: boolean },
+  ): void {
+    this.server.to(this.userRoom(userId)).emit('notification:won', payload);
+  }
+
   private room(auctionId: string): string {
     return `auction:${auctionId}`;
+  }
+
+  private userRoom(userId: string): string {
+    return `user:${userId}`;
   }
 
   // Traduce la excepción del servicio al payload { code, message } del canal. Si

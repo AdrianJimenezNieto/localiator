@@ -5,6 +5,7 @@ import { AuctionsController } from './auctions.controller';
 import { AuctionsService } from './auctions.service';
 import { AuctionsGateway } from './auctions.gateway';
 import { AuctionsCloserService } from './auctions.closer.service';
+import { MailModule } from '../mail/mail.module';
 
 // Módulo de subastas (Fase 5). Reglas de puja (tarea 02) + canal en vivo (tarea
 // 03); en tareas siguientes suma la concurrencia (04), el antisniping (05), el
@@ -22,6 +23,8 @@ import { AuctionsCloserService } from './auctions.closer.service';
           config.get<string>('JWT_ACCESS_SECRET') || 'dev-insecure-secret',
       }),
     }),
+    // Emails de subasta (tarea 08): respaldo del WebSocket para superado/ganado.
+    MailModule,
   ],
   controllers: [AuctionsController],
   providers: [AuctionsService, AuctionsGateway, AuctionsCloserService],

@@ -7,11 +7,17 @@ import { Test } from '@nestjs/testing';
 import { AuctionStatus } from '@prisma/client';
 import { AuctionsService, BidRejectReason } from './auctions.service';
 import { AuctionsGateway } from './auctions.gateway';
+import { AuctionMailService } from '../mail/auction-mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 const prismaMock = {
   user: { findUnique: jest.fn(), updateMany: jest.fn() },
-  auction: { findUnique: jest.fn(), findMany: jest.fn(), update: jest.fn() },
+  auction: {
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    update: jest.fn(),
+    updateMany: jest.fn(),
+  },
   bid: {
     findFirst: jest.fn(),
     create: jest.fn(),
@@ -22,11 +28,24 @@ const prismaMock = {
 
 // El servicio emite a la room tras registrar la puja (punto único de emisión) y,
 // si el antisniping mueve el cierre, avisa con broadcastExtended; al cerrar,
-// broadcastClosed.
+// broadcastClosed. Notificaciones dirigidas (tarea 08): notifyOutbid/notifyWon a la
+// room de usuario, broadcastEndingSoon a la room de la subasta.
 const gatewayMock = {
   broadcastBidAccepted: jest.fn(),
   broadcastExtended: jest.fn(),
   broadcastClosed: jest.fn(),
+  broadcastEndingSoon: jest.fn(),
+  notifyOutbid: jest.fn(),
+  notifyWon: jest.fn(),
+};
+
+// Emails de subasta (tarea 08): se comprueba que se disparan, pero el transporte
+// está mockeado (no se envía nada real).
+const mailMock = {
+  sendOutbid: jest.fn(),
+  sendWon: jest.fn(),
+  sendBannedForNonPayment: jest.fn(),
+  sendEndingSoon: jest.fn(),
 };
 
 // Fila que devolvería el SELECT ... FOR UPDATE de la subasta bloqueada. Misma
@@ -88,6 +107,7 @@ describe('AuctionsService', () => {
         AuctionsService,
         { provide: PrismaService, useValue: prismaMock },
         { provide: AuctionsGateway, useValue: gatewayMock },
+        { provide: AuctionMailService, useValue: mailMock },
       ],
     }).compile();
     service = moduleRef.get(AuctionsService);
@@ -277,6 +297,48 @@ describe('AuctionsService', () => {
     expect(prismaMock.bid.create).not.toHaveBeenCalled();
   });
 
+  it('avisa "superado" al líder anterior una sola vez (tarea 08)', async () => {
+    // Había un líder ('other') con 5000; user-1 puja 5500 y lo destrona.
+    prismaMock.bid.findFirst.mockResolvedValue({
+      id: 'bid-1',
+      userId: 'other',
+      amountCents: 5000,
+    });
+
+    await service.placeBid('auction-1', 'user-1', { amountCents: 5500 });
+
+    // Se avisa SOLO al líder superado, por WS y por email de respaldo.
+    expect(gatewayMock.notifyOutbid).toHaveBeenCalledTimes(1);
+    expect(gatewayMock.notifyOutbid).toHaveBeenCalledWith('other', {
+      auctionId: 'auction-1',
+      amountCents: 5500,
+    });
+    expect(mailMock.sendOutbid).toHaveBeenCalledWith('other', 'auction-1');
+  });
+
+  it('no avisa "superado" en la primera puja (no había líder)', async () => {
+    await service.placeBid('auction-1', 'user-1', { amountCents: 4500 });
+
+    expect(gatewayMock.notifyOutbid).not.toHaveBeenCalled();
+    expect(mailMock.sendOutbid).not.toHaveBeenCalled();
+  });
+
+  it('antisniping: al extender el cierre reinicia el guard de "a punto de cerrar"', async () => {
+    prismaMock.$queryRaw.mockResolvedValue([
+      { ...lockedRow, endsAt: new Date(now + 2 * 60 * 1000) }, // quedan 2 min.
+    ]);
+
+    await service.placeBid('auction-1', 'user-1', { amountCents: 4500 });
+
+    const updateCalls = prismaMock.auction.update.mock.calls as Array<
+      [{ data: Record<string, unknown> }]
+    >;
+    // El update del antisniping también pone endingSoonNotifiedAt a null (reevaluar).
+    expect(updateCalls[0][0].data).toMatchObject({
+      endingSoonNotifiedAt: null,
+    });
+  });
+
   describe('closeAuction', () => {
     // Fila bloqueada de una subasta YA vencida (endsAt en el pasado).
     const dueRow = { ...lockedRow, endsAt: new Date(now - 1000) };
@@ -313,6 +375,18 @@ describe('AuctionsService', () => {
       expect(gatewayMock.broadcastClosed).toHaveBeenCalledWith(
         'auction-1',
         expect.objectContaining({ amountCents: 5000 }),
+      );
+      // Aviso "has ganado" al ganador (tarea 08): WS + email, cierre normal.
+      expect(gatewayMock.notifyWon).toHaveBeenCalledWith('winner-1', {
+        auctionId: 'auction-1',
+        amountCents: 5000,
+        secondChance: false,
+      });
+      expect(mailMock.sendWon).toHaveBeenCalledWith(
+        'winner-1',
+        'auction-1',
+        5000,
+        false,
       );
     });
 
@@ -406,6 +480,20 @@ describe('AuctionsService', () => {
         'auction-1',
         expect.objectContaining({ amountCents: 5000 }),
       );
+      // Segunda oportunidad (tarea 08): "has ganado" al nuevo ganador y email de
+      // ban al moroso.
+      expect(gatewayMock.notifyWon).toHaveBeenCalledWith('user-2', {
+        auctionId: 'auction-1',
+        amountCents: 5000,
+        secondChance: true,
+      });
+      expect(mailMock.sendWon).toHaveBeenCalledWith(
+        'user-2',
+        'auction-1',
+        5000,
+        true,
+      );
+      expect(mailMock.sendBannedForNonPayment).toHaveBeenCalledWith('winner-1');
     });
 
     it('sin más pujadores, deja la subasta desierta (cancelada)', async () => {
@@ -457,6 +545,33 @@ describe('AuctionsService', () => {
       expect(result).toEqual({ outcome: 'not_due' });
       expect(prismaMock.user.updateMany).not.toHaveBeenCalled();
       expect(prismaMock.auction.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('notifyEndingSoon (tarea 08)', () => {
+    it('reclama el aviso y emite cuando la subasta entra en ventana', async () => {
+      // updateMany "gana" la reclamación (marcó 1 fila).
+      prismaMock.auction.updateMany.mockResolvedValue({ count: 1 });
+      prismaMock.auction.findUnique.mockResolvedValue({
+        endsAt: new Date(now + 60 * 1000),
+      });
+
+      const emitted = await service.notifyEndingSoon('auction-1');
+
+      expect(emitted).toBe(true);
+      expect(gatewayMock.broadcastEndingSoon).toHaveBeenCalledTimes(1);
+      expect(mailMock.sendEndingSoon).toHaveBeenCalledWith('auction-1');
+    });
+
+    it('no duplica: si otra pasada ya lo reclamó, no emite', async () => {
+      // count 0 = el guard del updateMany no marcó nada (ya avisado o fuera de ventana).
+      prismaMock.auction.updateMany.mockResolvedValue({ count: 0 });
+
+      const emitted = await service.notifyEndingSoon('auction-1');
+
+      expect(emitted).toBe(false);
+      expect(gatewayMock.broadcastEndingSoon).not.toHaveBeenCalled();
+      expect(mailMock.sendEndingSoon).not.toHaveBeenCalled();
     });
   });
 });
