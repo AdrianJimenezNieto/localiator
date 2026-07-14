@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
-import { getMyOrders, openInvoice, type OrderRecord } from '../lib/orders';
+import {
+  getMyOrders,
+  openInvoice,
+  payOrder,
+  type OrderRecord,
+} from '../lib/orders';
 import { formatPrice } from '../lib/format';
 import { OrderStatusBadge } from '../components/OrderStatusBadge';
 
@@ -11,6 +16,24 @@ export function MyOrdersPage() {
   const { user, token, ready } = useAuth();
   const [orders, setOrders] = useState<OrderRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Pedido cuyo pago se está lanzando: deshabilita el botón mientras se pide la
+  // URL de Stripe, para no crear dos sesiones de pago con doble clic.
+  const [payingId, setPayingId] = useState<string | null>(null);
+
+  // Lanza el pago de un pedido PENDING y redirige a la Checkout Session de Stripe
+  // (mismo flujo que la venta directa, tarea 09). Los pedidos de subasta llegan aquí
+  // ya creados al ganar; el comprador solo tiene que pagar.
+  async function handlePay(orderId: string) {
+    if (!token) return;
+    setPayingId(orderId);
+    try {
+      const { url } = await payOrder(orderId, token);
+      window.location.href = url;
+    } catch {
+      setError('No se pudo iniciar el pago. Inténtalo de nuevo.');
+      setPayingId(null);
+    }
+  }
 
   useEffect(() => {
     if (!ready || !token) return;
@@ -84,14 +107,26 @@ export function MyOrdersPage() {
               <span className="font-semibold">
                 {formatPrice(order.totalCents)}
               </span>
-              {order.invoice && token && (
+              {order.status === 'PENDING' ? (
                 <button
                   type="button"
-                  onClick={() => void openInvoice(order.id, token)}
-                  className="text-sm text-neutral-700 underline hover:text-neutral-900"
+                  onClick={() => void handlePay(order.id)}
+                  disabled={payingId === order.id}
+                  className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50"
                 >
-                  Factura {order.invoice.number}
+                  {payingId === order.id ? 'Redirigiendo…' : 'Pagar'}
                 </button>
+              ) : (
+                order.invoice &&
+                token && (
+                  <button
+                    type="button"
+                    onClick={() => void openInvoice(order.id, token)}
+                    className="text-sm text-neutral-700 underline hover:text-neutral-900"
+                  >
+                    Factura {order.invoice.number}
+                  </button>
+                )
               )}
             </div>
           </li>

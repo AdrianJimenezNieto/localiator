@@ -4,7 +4,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { OrderItemType, OrderStatus, Prisma } from '@prisma/client';
+import {
+  AuctionStatus,
+  OrderItemType,
+  OrderStatus,
+  Prisma,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrderMailService } from '../mail/order-mail.service';
 import { CreateOrderDto, CreateOrderLineDto } from './dto/create-order.dto';
@@ -223,6 +228,94 @@ export class OrdersService {
     });
   }
 
+  // Crea el pedido del GANADOR de una subasta (tarea 09). A diferencia de
+  // createOrder (venta directa), NO lleva reserva de stock ni descuento: el ganador
+  // ya es el único con derecho al artículo, no compite por él en un carrito. El
+  // precio es la puja ganadora (snapshot), no el precio de catálogo.
+  //
+  // Recibe el `tx` de la transacción de cierre/reasignación (tareas 06/07) para que
+  // "fijar ganador" y "crear su pedido" sean ATÓMICOS: nunca hay un ganador sin
+  // pedido ni un pedido sin ganador. Por eso vive aquí (cohesión: OrdersService es
+  // el dueño de Order/OrderLine) pero se ejecuta dentro de la tx de AuctionsService.
+  async createAuctionOrder(
+    tx: Prisma.TransactionClient,
+    params: {
+      userId: string;
+      auctionId: string;
+      amountCents: number;
+    },
+  ): Promise<{ id: string }> {
+    // El artículo subastado (tipo + id) lo toma de la propia subasta, así el llamador
+    // (AuctionsService) solo aporta ganador, subasta e importe.
+    const auction = await tx.auction.findUnique({
+      where: { id: params.auctionId },
+      select: { itemType: true, itemId: true },
+    });
+    if (!auction) {
+      throw new NotFoundException('Subasta no encontrada');
+    }
+
+    // Segunda oportunidad (tarea 07): si ya había un pedido PENDING de esta subasta
+    // (el del moroso que no pagó), lo cancelamos antes de crear el del nuevo ganador.
+    // Como el pedido de subasta no tiene reserva, basta con marcarlo CANCELLED. Que
+    // Order.auctionId NO sea @unique es justo lo que permite crear el nuevo aquí.
+    await tx.order.updateMany({
+      where: { auctionId: params.auctionId, status: OrderStatus.PENDING },
+      data: { status: OrderStatus.CANCELLED },
+    });
+
+    const nameSnapshot = await this.resolveItemName(
+      tx,
+      auction.itemType,
+      auction.itemId,
+    );
+
+    return tx.order.create({
+      data: {
+        userId: params.userId,
+        auctionId: params.auctionId,
+        status: OrderStatus.PENDING,
+        totalCents: params.amountCents,
+        currency: 'eur',
+        // Una sola línea, cantidad 1: el artículo subastado al precio de la puja.
+        lines: {
+          create: {
+            itemType: auction.itemType,
+            itemId: auction.itemId,
+            nameSnapshot,
+            unitPriceCents: params.amountCents,
+            quantity: 1,
+            lineTotalCents: params.amountCents,
+          },
+        },
+        // Sin `reservations`: no pasa por reserva de stock (ver arriba).
+      },
+      select: { id: true },
+    });
+  }
+
+  // Nombre actual del artículo para el snapshot de la línea. Sin lock (no hay
+  // concurrencia de stock aquí). Fallback defensivo si el artículo se borró tras
+  // crear la subasta: mejor un pedido con nombre genérico que romper el cierre.
+  private async resolveItemName(
+    tx: Prisma.TransactionClient,
+    itemType: OrderItemType,
+    itemId: string,
+  ): Promise<string> {
+    if (itemType === OrderItemType.PRODUCT) {
+      const product = await tx.product.findUnique({
+        where: { id: itemId },
+        select: { name: true },
+      });
+      return product?.name ?? 'Artículo de subasta';
+    }
+    const lot = await tx.lot.findUnique({
+      where: { id: itemId },
+      select: { name: true },
+    });
+    return lot?.name ?? 'Lote de subasta';
+  }
+
   // Carga un pedido que va a pagarse y valida que se puede: que es del usuario,
   // que sigue PENDING y que su reserva no ha expirado. Lo usa el pago (tarea 04).
   // Devuelve el pedido con sus líneas (para construir el line_items de Stripe).
@@ -238,16 +331,21 @@ export class OrdersService {
     if (order.status !== OrderStatus.PENDING) {
       throw new ConflictException('El pedido ya no está pendiente de pago');
     }
-    // La reserva expiró (aún sin barrer por el cron de la tarea 07): no se puede
-    // pagar; hay que rehacer el pedido para volver a reservar stock.
-    const now = Date.now();
-    const expired = order.reservations.some(
-      (r) => r.expiresAt.getTime() <= now,
-    );
-    if (expired || order.reservations.length === 0) {
-      throw new ConflictException(
-        'La reserva de stock ha expirado; vuelve a tramitar el pedido',
+    // Pedido de subasta (tarea 09): no tiene reserva de stock, así que no aplica la
+    // comprobación de reserva. Su plazo lo gobierna Auction.paymentDueAt (tarea 07):
+    // si vence, el barrido de impago banea y reasigna; aquí no lo bloqueamos.
+    if (!order.auctionId) {
+      // La reserva expiró (aún sin barrer por el cron de la tarea 07): no se puede
+      // pagar; hay que rehacer el pedido para volver a reservar stock.
+      const now = Date.now();
+      const expired = order.reservations.some(
+        (r) => r.expiresAt.getTime() <= now,
       );
+      if (expired || order.reservations.length === 0) {
+        throw new ConflictException(
+          'La reserva de stock ha expirado; vuelve a tramitar el pedido',
+        );
+      }
     }
     return order;
   }
@@ -289,36 +387,49 @@ export class OrdersService {
         return { outcome: 'not_payable' as const, orderId: order.id };
       }
 
-      // Coherencia con la liberación de reservas (tarea 07): si la reserva ya
-      // expiró (aunque el barrido aún no haya cancelado el pedido), NO confirmamos
-      // el cobro, porque ese stock pudo asignarse a otro comprador y descontarlo
-      // aquí provocaría sobreventa. Se marca como no pagable para revisión manual
-      // (reembolso fuera del MVP, CLAUDE.md).
-      const now = Date.now();
-      const reservationLive =
-        order.reservations.length > 0 &&
-        order.reservations.every((r) => r.expiresAt.getTime() > now);
-      if (!reservationLive) {
-        return { outcome: 'not_payable' as const, orderId: order.id };
-      }
-
-      // Descuento REAL del stock, una sola vez, ahora que el cobro está confirmado.
-      for (const line of order.lines) {
-        if (line.itemType === OrderItemType.PRODUCT) {
-          await tx.product.update({
-            where: { id: line.itemId },
-            data: { stock: { decrement: line.quantity } },
-          });
-        } else {
-          await tx.lot.update({
-            where: { id: line.itemId },
-            data: { stock: { decrement: line.quantity } },
-          });
+      // Pedido de SUBASTA (tarea 09): no hay reserva ni descuento de stock (el
+      // ganador ya tenía el artículo asignado, no compitió por él en un carrito).
+      // Además, al cobrarse, la subasta pasa a PAID: así sale del findUnpaidWinners
+      // (que busca CLOSED con plazo vencido) y se apaga el impago sin código extra.
+      if (order.auctionId) {
+        await tx.auction.updateMany({
+          // Guard idempotente: solo si sigue CLOSED. Si el impago ya la reasignó o
+          // cerró (carrera "paga justo al vencer el plazo"), no la pisamos.
+          where: { id: order.auctionId, status: AuctionStatus.CLOSED },
+          data: { status: AuctionStatus.PAID },
+        });
+      } else {
+        // Coherencia con la liberación de reservas (tarea 07): si la reserva ya
+        // expiró (aunque el barrido aún no haya cancelado el pedido), NO confirmamos
+        // el cobro, porque ese stock pudo asignarse a otro comprador y descontarlo
+        // aquí provocaría sobreventa. Se marca como no pagable para revisión manual
+        // (reembolso fuera del MVP, CLAUDE.md).
+        const now = Date.now();
+        const reservationLive =
+          order.reservations.length > 0 &&
+          order.reservations.every((r) => r.expiresAt.getTime() > now);
+        if (!reservationLive) {
+          return { outcome: 'not_payable' as const, orderId: order.id };
         }
-      }
 
-      // La reserva ya cumplió su función; se consume.
-      await tx.stockReservation.deleteMany({ where: { orderId: order.id } });
+        // Descuento REAL del stock, una sola vez, ahora que el cobro está confirmado.
+        for (const line of order.lines) {
+          if (line.itemType === OrderItemType.PRODUCT) {
+            await tx.product.update({
+              where: { id: line.itemId },
+              data: { stock: { decrement: line.quantity } },
+            });
+          } else {
+            await tx.lot.update({
+              where: { id: line.itemId },
+              data: { stock: { decrement: line.quantity } },
+            });
+          }
+        }
+
+        // La reserva ya cumplió su función; se consume.
+        await tx.stockReservation.deleteMany({ where: { orderId: order.id } });
+      }
 
       await tx.order.update({
         where: { id: order.id },

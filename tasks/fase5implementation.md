@@ -400,3 +400,76 @@ y **no** emite si otra pasada ya reclamó (`count === 0`).
 > **reclamar-antes-de-emitir** con `updateMany` condicional como guard idempotente;
 > y por qué la ventana de "a punto de cerrar" debe ser **más corta** que la del
 > antisniping para no reavisar en cada extensión.
+
+---
+
+## Tarea 09 · Cobro del ganador vía Stripe reutilizando el flujo de pedidos
+
+**Qué**: al ganar una subasta, el ganador obtiene un `Order` PENDING normal y paga
+por el **mismo flujo Stripe** que una venta directa (Checkout Session + webhook +
+factura + recogida). Cierra la Fase 5: aguas abajo, un pedido de subasta es
+indistinguible de una compra directa. Sustituye todos los `TODO(tarea 09)` que
+dejaron las tareas 06 y 07.
+
+**Modelo** (`Order.auctionId` + relación, migración):
+- `Order.auctionId String?` marca el **origen subasta** (conciliación) y permite
+  saltarse la reserva de stock en el cobro.
+- **NO es `@unique`** a propósito: en la segunda oportunidad (tarea 07) hay que poder
+  crear un pedido **nuevo** para el MISMO `auctionId` (el del moroso queda CANCELLED).
+  Con `@unique` el segundo `create` chocaría. Índice normal en su lugar.
+
+**Crear el pedido al fijar ganador** — `OrdersService.createAuctionOrder(tx, {...})`:
+- Recibe el **`tx` de la transacción de cierre/reasignación** (tareas 06/07), así
+  "fijar ganador" y "crear su pedido" son **atómicos**: nunca hay ganador sin pedido
+  ni pedido sin ganador. Vive en `OrdersService` (cohesión: es el dueño de
+  `Order`/`OrderLine`) pero corre dentro de la tx de `AuctionsService`.
+- **Sin reserva de stock ni descuento**: el ganador ya es el único con derecho al
+  artículo, no compite por él en un carrito. Precio = **puja ganadora** (snapshot),
+  no el precio de catálogo. Una `OrderLine`, cantidad 1.
+- **Segunda oportunidad**: antes de crear el nuevo, `updateMany` cancela el pedido
+  PENDING previo de esa subasta (el del moroso). En `cancelled_empty` (moroso sin
+  heredero) `AuctionsService` cancela ese PENDING directamente, para no dejarlo
+  huérfano.
+
+**Módulos**: `AuctionsModule` importa `OrdersModule` (sin ciclo: Orders solo importa
+Mail). Se pasó `createAuctionOrder` los datos mínimos (`userId`, `auctionId`,
+`amountCents`) y lee `itemType`/`itemId` de la propia subasta, para no propagar esos
+campos por las transacciones de subasta.
+
+**Reutilizar Stripe (sin código de pago nuevo)**:
+- El ganador paga con el **mismo** `createCheckoutSession(orderId)`: ya lee el importe
+  de BD, nunca del cliente.
+- **`getPayableOrder`**: los pedidos de subasta **saltan** la comprobación de reserva
+  (no tienen). Su plazo lo gobierna `Auction.paymentDueAt` (tarea 07): si vence, el
+  barrido de impago banea y reasigna; aquí no lo bloqueamos.
+- **`confirmOrderPaid`** (webhook, fuente de verdad): rama por `auctionId`:
+  - Pedido normal: como antes (comprueba reserva viva, descuenta stock, consume
+    reservas).
+  - Pedido de subasta: **sin reserva ni descuento**; además pone
+    `Auction.status = PAID` con guard idempotente `where: { status: CLOSED }`. Al
+    quedar PAID, la subasta **sale del `findUnpaidWinners()`** (que busca CLOSED con
+    plazo vencido): el "temporizador" de impago se apaga **sin código extra**. Ese es
+    el enganche clave con la tarea 07.
+  - El resto (marcar `Order` PAID, factura, email de confirmación) es **compartido**:
+    un pedido de subasta pagado hereda factura con IVA y recogida en almacén sin
+    tocar nada.
+
+**Frontend**: el email de "has ganado" (tarea 08) enlaza ahora a `/mis-pedidos`, y
+`MyOrdersPage` muestra un botón **"Pagar"** en los pedidos PENDING que reutiliza
+`POST /orders/:id/pay` → redirige a la Checkout Session de Stripe. `payingId`
+deshabilita el botón para no crear dos sesiones con doble clic.
+
+**Tests**:
+- `orders.spec`: `createAuctionOrder` crea PENDING con precio=puja, una línea y **sin
+  `reservations`**; segunda oportunidad cancela el PENDING previo; `confirmOrderPaid`
+  de subasta marca la subasta PAID sin tocar stock/reservas; `getPayableOrder` deja
+  pagar un pedido de subasta sin reserva pero sigue rechazando uno normal sin reserva.
+- `auctions.spec`: cierre con ganador y reasignación **crean el pedido** con
+  `createAuctionOrder(tx, ...)`; el `cancelled_empty` cancela el PENDING del moroso y
+  no crea pedido.
+- CI en verde: lint + 155 tests + build (API y web).
+
+> **Conceptos a repasar**: por qué `Order.auctionId` **no** es `@unique` (segunda
+> oportunidad); pasar el **mismo `tx`** entre servicios para atomicidad
+> cross-service; y cómo poner la subasta en PAID la saca del barrido de impago
+> (**apagar el temporizador con un cambio de estado**, no con código de cancelación).
