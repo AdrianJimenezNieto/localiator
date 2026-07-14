@@ -10,8 +10,8 @@ import { AuctionsGateway } from './auctions.gateway';
 import { PrismaService } from '../prisma/prisma.service';
 
 const prismaMock = {
-  user: { findUnique: jest.fn() },
-  auction: { findUnique: jest.fn(), update: jest.fn() },
+  user: { findUnique: jest.fn(), updateMany: jest.fn() },
+  auction: { findUnique: jest.fn(), findMany: jest.fn(), update: jest.fn() },
   bid: {
     findFirst: jest.fn(),
     create: jest.fn(),
@@ -40,7 +40,7 @@ const lockedRow = {
   minIncrementCents: 500,
 };
 
-const verifiedUser = { emailVerifiedAt: new Date() };
+const verifiedUser = { emailVerifiedAt: new Date(), bannedAt: null };
 
 // Subasta LIVE base: empezó hace una hora, cierra dentro de una hora. Cada test
 // la ajusta con un spread si necesita otro estado/ventana.
@@ -262,6 +262,21 @@ describe('AuctionsService', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
+  it('rechaza con BANNED a un usuario baneado por impago (tarea 07)', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({
+      emailVerifiedAt: new Date(),
+      bannedAt: new Date(),
+    });
+
+    const error = await service
+      .placeBid('auction-1', 'user-1', { amountCents: 4500 })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ConflictException);
+    expect(rejectCode(error)).toBe(BidRejectReason.BANNED);
+    expect(prismaMock.bid.create).not.toHaveBeenCalled();
+  });
+
   describe('closeAuction', () => {
     // Fila bloqueada de una subasta YA vencida (endsAt en el pasado).
     const dueRow = { ...lockedRow, endsAt: new Date(now - 1000) };
@@ -282,7 +297,10 @@ describe('AuctionsService', () => {
         winnerUserId: 'winner-1',
         winningBidId: 'bid-top',
       });
-      expect(prismaMock.auction.update).toHaveBeenCalledWith({
+      const closeCalls = prismaMock.auction.update.mock.calls as Array<
+        [{ data: Record<string, unknown> }]
+      >;
+      expect(closeCalls[0][0]).toMatchObject({
         where: { id: 'auction-1' },
         data: {
           status: AuctionStatus.CLOSED,
@@ -290,6 +308,8 @@ describe('AuctionsService', () => {
           winningBidId: 'bid-top',
         },
       });
+      // Con ganador arranca su plazo de pago (tarea 07).
+      expect(closeCalls[0][0].data.paymentDueAt).toBeInstanceOf(Date);
       expect(gatewayMock.broadcastClosed).toHaveBeenCalledWith(
         'auction-1',
         expect.objectContaining({ amountCents: 5000 }),
@@ -329,6 +349,113 @@ describe('AuctionsService', () => {
       const result = await service.closeAuction('auction-1');
 
       expect(result).toEqual({ outcome: 'not_due' });
+      expect(prismaMock.auction.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('handleUnpaidWinner', () => {
+    // Fila bloqueada de una subasta CERRADA con ganador y plazo de pago VENCIDO.
+    const unpaidRow = {
+      status: AuctionStatus.CLOSED,
+      winnerUserId: 'winner-1',
+      paymentDueAt: new Date(now - 1000),
+    };
+
+    it('banea al moroso y reasigna al siguiente pujador (segunda oportunidad)', async () => {
+      prismaMock.$queryRaw.mockResolvedValue([unpaidRow]);
+      // El siguiente pujador no baneado.
+      prismaMock.bid.findFirst.mockResolvedValue({
+        id: 'bid-2',
+        userId: 'user-2',
+        amountCents: 5000,
+      });
+      prismaMock.user.updateMany.mockResolvedValue({ count: 1 });
+      prismaMock.auction.update.mockResolvedValue({});
+
+      const result = await service.handleUnpaidWinner('auction-1');
+
+      expect(result).toMatchObject({
+        outcome: 'reassigned',
+        bannedUserId: 'winner-1',
+        winnerUserId: 'user-2',
+        winningBidId: 'bid-2',
+        amountCents: 5000,
+      });
+      // El ban es idempotente: solo si aún no estaba baneado.
+      const banCalls = prismaMock.user.updateMany.mock.calls as Array<
+        [{ where: object; data: { bannedAt: Date; banReason: string } }]
+      >;
+      expect(banCalls[0][0].where).toEqual({ id: 'winner-1', bannedAt: null });
+      expect(banCalls[0][0].data.bannedAt).toBeInstanceOf(Date);
+      expect(banCalls[0][0].data.banReason).toContain('auction-1');
+      // El siguiente se busca SOLO entre usuarios no baneados (salta al moroso).
+      expect(prismaMock.bid.findFirst).toHaveBeenCalledWith({
+        where: { auctionId: 'auction-1', user: { bannedAt: null } },
+        orderBy: { amountCents: 'desc' },
+      });
+      const calls = prismaMock.auction.update.mock.calls as Array<
+        [{ data: Record<string, unknown> }]
+      >;
+      expect(calls[0][0]).toMatchObject({
+        where: { id: 'auction-1' },
+        data: { winnerUserId: 'user-2', winningBidId: 'bid-2' },
+      });
+      // Plazo reiniciado para el nuevo ganador; sigue CLOSED.
+      expect(calls[0][0].data.paymentDueAt).toBeInstanceOf(Date);
+      expect(gatewayMock.broadcastClosed).toHaveBeenCalledWith(
+        'auction-1',
+        expect.objectContaining({ amountCents: 5000 }),
+      );
+    });
+
+    it('sin más pujadores, deja la subasta desierta (cancelada)', async () => {
+      prismaMock.$queryRaw.mockResolvedValue([unpaidRow]);
+      prismaMock.bid.findFirst.mockResolvedValue(null); // nadie sin banear.
+      prismaMock.user.updateMany.mockResolvedValue({ count: 1 });
+      prismaMock.auction.update.mockResolvedValue({});
+
+      const result = await service.handleUnpaidWinner('auction-1');
+
+      expect(result).toEqual({
+        outcome: 'cancelled_empty',
+        bannedUserId: 'winner-1',
+      });
+      expect(prismaMock.auction.update).toHaveBeenCalledWith({
+        where: { id: 'auction-1' },
+        data: {
+          status: AuctionStatus.CANCELLED,
+          winnerUserId: null,
+          winningBidId: null,
+          paymentDueAt: null,
+        },
+      });
+      expect(gatewayMock.broadcastClosed).toHaveBeenCalledWith('auction-1', {
+        winnerMasked: null,
+        amountCents: null,
+      });
+    });
+
+    it('es idempotente: no actúa si la subasta ya no está CLOSED', async () => {
+      prismaMock.$queryRaw.mockResolvedValue([
+        { ...unpaidRow, status: AuctionStatus.PAID },
+      ]);
+
+      const result = await service.handleUnpaidWinner('auction-1');
+
+      expect(result).toEqual({ outcome: 'noop' });
+      expect(prismaMock.user.updateMany).not.toHaveBeenCalled();
+      expect(prismaMock.auction.update).not.toHaveBeenCalled();
+    });
+
+    it('no actúa si el plazo de pago aún no ha vencido', async () => {
+      prismaMock.$queryRaw.mockResolvedValue([
+        { ...unpaidRow, paymentDueAt: new Date(now + 60 * 1000) },
+      ]);
+
+      const result = await service.handleUnpaidWinner('auction-1');
+
+      expect(result).toEqual({ outcome: 'not_due' });
+      expect(prismaMock.user.updateMany).not.toHaveBeenCalled();
       expect(prismaMock.auction.update).not.toHaveBeenCalled();
     });
   });
