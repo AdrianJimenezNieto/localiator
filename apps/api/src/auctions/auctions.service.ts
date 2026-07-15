@@ -13,6 +13,7 @@ import {
   OrderStatus,
   Prisma,
 } from '@prisma/client';
+import type { AuctionListItem, Paginated } from '@localiator/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuctionsGateway } from './auctions.gateway';
 import { maskBidder } from './auctions.mask';
@@ -26,6 +27,10 @@ import { OrdersService } from '../orders/orders.service';
 import { PlaceBidDto } from './dto/place-bid.dto';
 import { CreateAuctionDto } from './dto/create-auction.dto';
 import { UpdateAuctionDto } from './dto/update-auction.dto';
+import {
+  DEFAULT_AUCTION_PAGE_SIZE,
+  ListAuctionsDto,
+} from './dto/list-auctions.dto';
 
 // Motivos estables de rechazo de una puja. Se envían como `code` en el 409 para
 // que el front dé feedback útil sin parsear el mensaje (que es solo humano).
@@ -161,12 +166,12 @@ export class AuctionsService {
         winner: { select: { id: true, email: true } },
       },
     });
-    const names = await this.resolveItemNames(rows);
+    const items = await this.resolveItems(rows);
     return rows.map((row) => ({
       id: row.id,
       itemType: row.itemType,
       itemId: row.itemId,
-      itemName: names.get(this.itemKey(row)) ?? null,
+      itemName: items.get(this.itemKey(row))?.name ?? null,
       status: row.status,
       startingPriceCents: row.startingPriceCents,
       minIncrementCents: row.minIncrementCents,
@@ -360,12 +365,13 @@ export class AuctionsService {
     }
   }
 
-  // Resuelve los nombres de los artículos de un lote de subastas EN BLOQUE: dos
-  // consultas (una por tabla) en vez de una por subasta. Como no hay FK, Prisma no
-  // puede hacer el `include` y hay que cruzarlo a mano.
-  private async resolveItemNames(
+  // Resuelve nombre y portada de los artículos de un lote de subastas EN BLOQUE:
+  // dos consultas (una por tabla) en vez de una por subasta. Como itemType/itemId
+  // no tiene FK (tarea 01), Prisma no puede hacer el `include` y hay que cruzarlo a
+  // mano; hacerlo fila a fila sería un N+1 en el camino del listado.
+  private async resolveItems(
     rows: { itemType: OrderItemType; itemId: string }[],
-  ): Promise<Map<string, string>> {
+  ): Promise<Map<string, { name: string; photo: string | null }>> {
     const productIds = rows
       .filter((r) => r.itemType === OrderItemType.PRODUCT)
       .map((r) => r.itemId);
@@ -377,25 +383,31 @@ export class AuctionsService {
       productIds.length
         ? this.prisma.product.findMany({
             where: { id: { in: productIds } },
-            select: { id: true, name: true },
+            select: { id: true, name: true, photos: true },
           })
         : Promise.resolve([]),
       lotIds.length
         ? this.prisma.lot.findMany({
             where: { id: { in: lotIds } },
-            select: { id: true, name: true },
+            select: { id: true, name: true, photos: true },
           })
         : Promise.resolve([]),
     ]);
 
-    const names = new Map<string, string>();
+    const items = new Map<string, { name: string; photo: string | null }>();
     for (const p of products) {
-      names.set(`${OrderItemType.PRODUCT}:${p.id}`, p.name);
+      items.set(`${OrderItemType.PRODUCT}:${p.id}`, {
+        name: p.name,
+        photo: p.photos[0] ?? null,
+      });
     }
     for (const l of lots) {
-      names.set(`${OrderItemType.LOT}:${l.id}`, l.name);
+      items.set(`${OrderItemType.LOT}:${l.id}`, {
+        name: l.name,
+        photo: l.photos[0] ?? null,
+      });
     }
-    return names;
+    return items;
   }
 
   private itemKey(row: { itemType: OrderItemType; itemId: string }): string {
@@ -406,6 +418,82 @@ export class AuctionsService {
   // fechas incoherentes). Los conflictos de estado usan `reject` (409).
   private badRequest(code: string, message: string): BadRequestException {
     return new BadRequestException({ code, message });
+  }
+
+  // --- Lectura pública (tarea 12) -----------------------------------------
+
+  // Listado público y paginado de subastas: lo que permite DESCUBRIRLAS. Hasta
+  // esta tarea la única forma de llegar a una subasta era escribir su id en la URL.
+  //
+  // Por defecto solo salen LIVE y SCHEDULED (lo que se puede pujar o se va a poder).
+  // Las CLOSED se pueden pedir explícitamente; PAID y CANCELLED no salen nunca (el
+  // DTO las rechaza): son estado interno que no aporta a quien mira el listado.
+  //
+  // NO devuelve identidades de pujadores, ni siquiera enmascaradas: la tarjeta no
+  // las necesita y un listado público es el peor sitio para filtrar datos de más.
+  async listPublicAuctions(
+    dto: ListAuctionsDto,
+  ): Promise<Paginated<AuctionListItem>> {
+    const page = dto.page ?? 1;
+    const pageSize = dto.pageSize ?? DEFAULT_AUCTION_PAGE_SIZE;
+    const skip = (page - 1) * pageSize;
+
+    const where: Prisma.AuctionWhereInput = {
+      status: {
+        in: dto.status ?? [AuctionStatus.LIVE, AuctionStatus.SCHEDULED],
+      },
+    };
+
+    // findMany + count en la MISMA transacción → el `total` es coherente con la
+    // página devuelta aunque entren escrituras concurrentes entre ambas consultas.
+    // Mismo criterio que el catálogo (catalog.service.ts).
+    const [rows, total] = await this.prisma.$transaction([
+      this.prisma.auction.findMany({
+        where,
+        // "Cierra antes" primero: es el orden útil en subastas (lo que urge) y es
+        // estable, así que la paginación no baila entre páginas.
+        orderBy: { endsAt: 'asc' },
+        skip,
+        take: pageSize,
+        include: {
+          // La puja más alta da el precio actual sin una consulta por fila (N+1).
+          // Se apoya en el índice [auctionId, amountCents] de la tarea 01.
+          bids: { orderBy: { amountCents: 'desc' }, take: 1 },
+          _count: { select: { bids: true } },
+        },
+      }),
+      this.prisma.auction.count({ where }),
+    ]);
+
+    const items = await this.resolveItems(rows);
+    return {
+      items: rows.map((row) => {
+        const item = items.get(this.itemKey(row));
+        return {
+          id: row.id,
+          status: row.status,
+          // Literales y no la constante ItemKind de shared: la API solo puede
+          // importar TIPOS de shared, no valores en runtime (ts-jest no transforma
+          // node_modules). Mismo criterio que itemPath en seo.service.ts. El tipo
+          // AuctionListItem obliga a que estos literales sigan siendo válidos.
+          itemKind: row.itemType === OrderItemType.PRODUCT ? 'product' : 'lot',
+          itemId: row.itemId,
+          // El artículo debería existir siempre (el alta lo valida, tarea 11);
+          // el fallback evita que una fila huérfana tumbe el listado entero.
+          name: item?.name ?? 'Artículo no disponible',
+          photo: item?.photo ?? null,
+          currentPriceCents: row.bids[0]?.amountCents ?? row.startingPriceCents,
+          startingPriceCents: row.startingPriceCents,
+          minIncrementCents: row.minIncrementCents,
+          bidCount: row._count.bids,
+          startsAt: row.startsAt.toISOString(),
+          endsAt: row.endsAt.toISOString(),
+        };
+      }),
+      total,
+      page,
+      pageSize,
+    };
   }
 
   // Estado inicial que se envía a un socket al unirse a la subasta (evento

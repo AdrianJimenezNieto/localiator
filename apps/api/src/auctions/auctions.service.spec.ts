@@ -22,6 +22,7 @@ const prismaMock = {
     findUnique: jest.fn(),
     findFirst: jest.fn(),
     findMany: jest.fn(),
+    count: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
     updateMany: jest.fn(),
@@ -361,6 +362,108 @@ describe('AuctionsService', () => {
     // El update del antisniping también pone endingSoonNotifiedAt a null (reevaluar).
     expect(updateCalls[0][0].data).toMatchObject({
       endingSoonNotifiedAt: null,
+    });
+  });
+
+  // Listado público (tarea 12): lo que permite descubrir las subastas. Hasta esta
+  // tarea la única forma de llegar a una era escribir su id en la URL.
+  describe('listPublicAuctions', () => {
+    // Fila tal y como la devuelve el findMany con sus includes.
+    const row = {
+      ...liveAuction,
+      bids: [] as { amountCents: number }[],
+      _count: { bids: 0 },
+    };
+
+    beforeEach(() => {
+      // $transaction con ARRAY de promesas (no callback): el listado lo usa para
+      // que findMany y count sean coherentes. El default del suite es la versión
+      // callback, así que aquí se sobreescribe.
+      prismaMock.$transaction.mockImplementation((ops: unknown) =>
+        Array.isArray(ops) ? Promise.all(ops) : Promise.resolve([]),
+      );
+      prismaMock.auction.findMany.mockResolvedValue([row]);
+      prismaMock.auction.count.mockResolvedValue(1);
+      prismaMock.product.findMany.mockResolvedValue([
+        { id: 'product-1', name: 'Taladro', photos: ['foto.jpg'] },
+      ]);
+      prismaMock.lot.findMany.mockResolvedValue([]);
+    });
+
+    it('por defecto solo devuelve subastas LIVE y SCHEDULED', async () => {
+      await service.listPublicAuctions({});
+
+      const [call] = prismaMock.auction.findMany.mock.calls as Array<
+        [{ where: { status: { in: string[] } } }]
+      >;
+      expect(call[0].where.status.in).toEqual([
+        AuctionStatus.LIVE,
+        AuctionStatus.SCHEDULED,
+      ]);
+    });
+
+    it('muestra el precio de salida cuando aún no hay pujas', async () => {
+      const result = await service.listPublicAuctions({});
+
+      expect(result.items[0]).toMatchObject({
+        name: 'Taladro',
+        photo: 'foto.jpg',
+        currentPriceCents: 4500, // el precio de salida.
+        bidCount: 0,
+      });
+      expect(result.total).toBe(1);
+    });
+
+    it('muestra la puja más alta como precio actual', async () => {
+      prismaMock.auction.findMany.mockResolvedValue([
+        { ...row, bids: [{ amountCents: 7000 }], _count: { bids: 3 } },
+      ]);
+
+      const result = await service.listPublicAuctions({});
+
+      expect(result.items[0]).toMatchObject({
+        currentPriceCents: 7000,
+        bidCount: 3,
+      });
+    });
+
+    // Un listado público es el peor sitio para filtrar datos de usuario. La tarjeta
+    // no necesita saber QUIÉN puja, así que no se devuelve ni enmascarado.
+    it('no devuelve ningún dato de los pujadores', async () => {
+      prismaMock.auction.findMany.mockResolvedValue([
+        { ...row, bids: [{ amountCents: 7000 }], _count: { bids: 3 } },
+      ]);
+
+      const result = await service.listPublicAuctions({});
+
+      const serialized = JSON.stringify(result);
+      expect(serialized).not.toContain('userId');
+      expect(serialized).not.toContain('winner');
+    });
+
+    // Dos consultas (una por tabla), no una por subasta: el N+1 aquí sería el
+    // camino caliente del listado.
+    it('resuelve los artículos en bloque, sin N+1', async () => {
+      prismaMock.auction.findMany.mockResolvedValue([
+        row,
+        { ...row, id: 'auction-2', itemId: 'product-2' },
+        { ...row, id: 'auction-3', itemType: 'LOT', itemId: 'lot-1' },
+      ]);
+
+      await service.listPublicAuctions({});
+
+      expect(prismaMock.product.findMany).toHaveBeenCalledTimes(1);
+      expect(prismaMock.lot.findMany).toHaveBeenCalledTimes(1);
+      expect(prismaMock.product.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('pagina con skip/take y respeta el tamaño de página', async () => {
+      await service.listPublicAuctions({ page: 3, pageSize: 10 });
+
+      const [call] = prismaMock.auction.findMany.mock.calls as Array<
+        [{ skip: number; take: number }]
+      >;
+      expect(call[0]).toMatchObject({ skip: 20, take: 10 });
     });
   });
 

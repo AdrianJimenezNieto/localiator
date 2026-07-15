@@ -127,7 +127,7 @@ Objetivo: pujas en tiempo real sobre productos/lotes.
 - [x] Cobro del ganador vía Stripe reutilizando el flujo de pedidos
 - [x] Apertura automática de subastas (`SCHEDULED` → `LIVE`)
 - [x] CRUD de subastas (solo admin)
-- [ ] Listado público de subastas (API)
+- [x] Listado público de subastas (API)
 - [ ] Listado de subastas en la web + enlaces desde el catálogo
 - [ ] Backoffice de subastas (alta, listado, cancelación)
 
