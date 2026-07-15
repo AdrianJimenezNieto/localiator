@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Inject,
@@ -6,7 +7,12 @@ import {
   NotFoundException,
   forwardRef,
 } from '@nestjs/common';
-import { AuctionStatus, OrderStatus, Prisma } from '@prisma/client';
+import {
+  AuctionStatus,
+  OrderItemType,
+  OrderStatus,
+  Prisma,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuctionsGateway } from './auctions.gateway';
 import { maskBidder } from './auctions.mask';
@@ -18,6 +24,8 @@ import {
 import { AuctionMailService } from '../mail/auction-mail.service';
 import { OrdersService } from '../orders/orders.service';
 import { PlaceBidDto } from './dto/place-bid.dto';
+import { CreateAuctionDto } from './dto/create-auction.dto';
+import { UpdateAuctionDto } from './dto/update-auction.dto';
 
 // Motivos estables de rechazo de una puja. Se envían como `code` en el 409 para
 // que el front dé feedback útil sin parsear el mensaje (que es solo humano).
@@ -39,6 +47,17 @@ interface BiddableAuction {
   startingPriceCents: number;
   minIncrementCents: number;
 }
+
+// Motivos estables de rechazo de las operaciones de admin (tarea 11). Se envían
+// como `code`, igual que BidRejectReason, para que el backoffice traduzca a
+// lenguaje humano sin parsear el mensaje.
+export const AuctionAdminReason = {
+  ITEM_NOT_FOUND: 'ITEM_NOT_FOUND', // el Product/Lot del itemId no existe.
+  INVALID_DATES: 'INVALID_DATES', // startsAt >= endsAt, o endsAt ya pasado.
+  AUCTION_ALREADY_ACTIVE: 'AUCTION_ALREADY_ACTIVE', // ya hay una viva sobre el artículo.
+  INVALID_TRANSITION: 'INVALID_TRANSITION', // la operación no cabe en este estado.
+  AUCTION_HAS_BIDS: 'AUCTION_HAS_BIDS', // hay pujas: las reglas ya no se tocan.
+} as const;
 
 // Resultado de intentar abrir una subasta programada (tarea 10). Mismo criterio
 // que CloseResult: los outcomes "no apertura" hacen la idempotencia explícita.
@@ -94,6 +113,300 @@ export class AuctionsService {
     // de cierre/reasignación, para que ganador y pedido sean atómicos.
     private readonly orders: OrdersService,
   ) {}
+
+  // --- Gestión de admin (tarea 11) ---------------------------------------
+  // Hasta aquí las subastas solo nacían del seed: no había forma de crearlas. Lo
+  // que sigue es la puerta de alta/edición/cancelación, solo para ADMIN (el guard
+  // lo pone el controlador).
+
+  // Crea una subasta programada sobre un producto o lote existente.
+  //
+  // Nace SIEMPRE `SCHEDULED`, aunque su `startsAt` ya haya pasado: abrirla es
+  // competencia del cron de apertura (tarea 10), que lo hará en la siguiente
+  // pasada. Así hay UN solo sitio que decide cuándo una subasta está viva, en vez
+  // de dos criterios que pueden divergir.
+  async createAuction(dto: CreateAuctionDto) {
+    const startsAt = new Date(dto.startsAt);
+    const endsAt = new Date(dto.endsAt);
+    this.assertValidWindow(startsAt, endsAt);
+    await this.assertItemExists(dto.itemType, dto.itemId);
+    await this.assertNoActiveAuction(dto.itemType, dto.itemId);
+
+    return this.prisma.auction.create({
+      data: {
+        itemType: dto.itemType,
+        itemId: dto.itemId,
+        startingPriceCents: dto.startingPriceCents,
+        minIncrementCents: dto.minIncrementCents,
+        startsAt,
+        endsAt,
+        status: AuctionStatus.SCHEDULED,
+      },
+    });
+  }
+
+  // Listado de subastas para el backoffice, con el nombre del artículo y el precio
+  // actual ya resueltos. A diferencia del listado público (tarea 12) incluye todos
+  // los estados y el ganador sin enmascarar: es una vista interna.
+  async listAuctionsForAdmin(status?: AuctionStatus) {
+    const rows = await this.prisma.auction.findMany({
+      where: status ? { status } : undefined,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        // La puja más alta trae el precio actual sin una consulta por fila (N+1).
+        bids: { orderBy: { amountCents: 'desc' }, take: 1 },
+        // El backoffice necesita saber si hay pujas para deshabilitar los campos
+        // que ya no se pueden tocar (ver updateAuction).
+        _count: { select: { bids: true } },
+        winner: { select: { id: true, email: true } },
+      },
+    });
+    const names = await this.resolveItemNames(rows);
+    return rows.map((row) => ({
+      id: row.id,
+      itemType: row.itemType,
+      itemId: row.itemId,
+      itemName: names.get(this.itemKey(row)) ?? null,
+      status: row.status,
+      startingPriceCents: row.startingPriceCents,
+      minIncrementCents: row.minIncrementCents,
+      currentPriceCents: row.bids[0]?.amountCents ?? row.startingPriceCents,
+      bidCount: row._count.bids,
+      startsAt: row.startsAt,
+      endsAt: row.endsAt,
+      winner: row.winner,
+      paymentDueAt: row.paymentDueAt,
+    }));
+  }
+
+  // Edita una subasta. Qué se puede tocar depende del estado, y es la regla
+  // interesante de esta tarea:
+  //  - SCHEDULED: todo. Nadie ha pujado ni podía hacerlo.
+  //  - LIVE sin pujas: todo. Está abierta, pero nadie se ha comprometido aún.
+  //  - LIVE con pujas: solo ALARGAR `endsAt`. Cambiar el precio de salida o el
+  //    incremento cambiaría las reglas a mitad de partida e invalidaría pujas ya
+  //    hechas bajo las reglas viejas; acortar el cierre sería un sniping legal del
+  //    propio admin. Alargar no perjudica a nadie que ya pujó.
+  //  - CLOSED/PAID/CANCELLED: nada. Ya no es una subasta en curso.
+  async updateAuction(auctionId: string, dto: UpdateAuctionDto) {
+    const auction = await this.prisma.auction.findUnique({
+      where: { id: auctionId },
+    });
+    if (!auction) {
+      throw new NotFoundException('Subasta no encontrada');
+    }
+    if (
+      auction.status !== AuctionStatus.SCHEDULED &&
+      auction.status !== AuctionStatus.LIVE
+    ) {
+      throw this.reject(
+        AuctionAdminReason.INVALID_TRANSITION,
+        'Solo se puede editar una subasta programada o en curso',
+      );
+    }
+
+    const startsAt = dto.startsAt ? new Date(dto.startsAt) : auction.startsAt;
+    const endsAt = dto.endsAt ? new Date(dto.endsAt) : auction.endsAt;
+    this.assertValidWindow(startsAt, endsAt);
+
+    const hasBids = (await this.highestBid(this.prisma, auctionId)) !== null;
+    if (hasBids) {
+      const touchesRules =
+        (dto.startingPriceCents !== undefined &&
+          dto.startingPriceCents !== auction.startingPriceCents) ||
+        (dto.minIncrementCents !== undefined &&
+          dto.minIncrementCents !== auction.minIncrementCents) ||
+        (dto.startsAt !== undefined &&
+          startsAt.getTime() !== auction.startsAt.getTime());
+      if (touchesRules) {
+        throw this.reject(
+          AuctionAdminReason.AUCTION_HAS_BIDS,
+          'La subasta ya tiene pujas: no se pueden cambiar sus reglas ni su inicio',
+        );
+      }
+      if (dto.endsAt && endsAt.getTime() < auction.endsAt.getTime()) {
+        throw this.reject(
+          AuctionAdminReason.AUCTION_HAS_BIDS,
+          'La subasta ya tiene pujas: el cierre solo se puede alargar',
+        );
+      }
+    }
+
+    const updated = await this.prisma.auction.update({
+      where: { id: auctionId },
+      data: {
+        startingPriceCents: dto.startingPriceCents,
+        minIncrementCents: dto.minIncrementCents,
+        startsAt: dto.startsAt ? startsAt : undefined,
+        endsAt: dto.endsAt ? endsAt : undefined,
+        // Si se mueve el cierre, el aviso de "a punto de cerrar" ya no vale y hay
+        // que poder reavisar con la nueva fecha. Mismo criterio que el antisniping.
+        endingSoonNotifiedAt: dto.endsAt ? null : undefined,
+      },
+    });
+
+    // Si el cierre cambió, los relojes del front deben enterarse: la verdad del
+    // endsAt está en el servidor. Se reutiliza el evento del antisniping.
+    if (dto.endsAt && endsAt.getTime() !== auction.endsAt.getTime()) {
+      this.gateway.broadcastExtended(auctionId, endsAt);
+    }
+    return updated;
+  }
+
+  // Cancela una subasta. Una CLOSED con ganador NO se cancela por aquí: ese camino
+  // es el del impago (tarea 07), que además banea y ofrece segunda oportunidad;
+  // permitir cancelarla a mano se saltaría esa lógica y dejaría el pedido del
+  // ganador huérfano.
+  async cancelAuction(auctionId: string) {
+    const auction = await this.prisma.auction.findUnique({
+      where: { id: auctionId },
+      select: { status: true },
+    });
+    if (!auction) {
+      throw new NotFoundException('Subasta no encontrada');
+    }
+    if (
+      auction.status !== AuctionStatus.SCHEDULED &&
+      auction.status !== AuctionStatus.LIVE
+    ) {
+      throw this.reject(
+        AuctionAdminReason.INVALID_TRANSITION,
+        'Solo se puede cancelar una subasta programada o en curso',
+      );
+    }
+
+    const cancelled = await this.prisma.auction.update({
+      where: { id: auctionId },
+      data: { status: AuctionStatus.CANCELLED },
+    });
+
+    // Quien esté mirando la ficha se entera al momento: puede haber gente con
+    // pujas puestas. Se reutiliza `auction:closed` sin ganador (el front ya lo
+    // pinta como "cerrada sin ganador") en vez de añadir un evento nuevo.
+    this.gateway.broadcastClosed(auctionId, {
+      winnerMasked: null,
+      amountCents: null,
+    });
+    return cancelled;
+  }
+
+  // La ventana temporal tiene que tener sentido: no se puede cerrar antes de
+  // empezar, ni programar una subasta que nace ya vencida.
+  private assertValidWindow(startsAt: Date, endsAt: Date): void {
+    if (startsAt.getTime() >= endsAt.getTime()) {
+      throw this.badRequest(
+        AuctionAdminReason.INVALID_DATES,
+        'La subasta debe cerrar después de empezar',
+      );
+    }
+    if (endsAt.getTime() <= Date.now()) {
+      throw this.badRequest(
+        AuctionAdminReason.INVALID_DATES,
+        'La fecha de cierre debe estar en el futuro',
+      );
+    }
+  }
+
+  // `itemType`/`itemId` es polimórfico y NO hay FK real (tarea 01), así que Prisma
+  // no puede garantizar que el artículo exista: si no se comprueba aquí, se crearía
+  // una subasta apuntando al vacío y reventaría al cerrar, buscando el nombre para
+  // el pedido del ganador. Este es el precio del diseño polimórfico.
+  private async assertItemExists(
+    itemType: OrderItemType,
+    itemId: string,
+  ): Promise<void> {
+    const exists =
+      itemType === OrderItemType.PRODUCT
+        ? await this.prisma.product.findUnique({
+            where: { id: itemId },
+            select: { id: true },
+          })
+        : await this.prisma.lot.findUnique({
+            where: { id: itemId },
+            select: { id: true },
+          });
+    if (!exists) {
+      throw this.badRequest(
+        AuctionAdminReason.ITEM_NOT_FOUND,
+        'El artículo que quieres subastar no existe',
+      );
+    }
+  }
+
+  // Un artículo no puede estar en dos subastas vivas a la vez: se vendería dos
+  // veces. Se aprovecha el índice [itemType, itemId] de la tarea 01.
+  //
+  // Es un check-then-insert, así que en teoría dos altas simultáneas del mismo
+  // artículo podrían colarse. No se blinda con un índice único parcial porque el
+  // alta es una acción de admin (un puñado al día, sin concurrencia real) y la
+  // subasta duplicada se ve y se cancela; el coste de la migración no se paga.
+  private async assertNoActiveAuction(
+    itemType: OrderItemType,
+    itemId: string,
+  ): Promise<void> {
+    const active = await this.prisma.auction.findFirst({
+      where: {
+        itemType,
+        itemId,
+        status: { in: [AuctionStatus.SCHEDULED, AuctionStatus.LIVE] },
+      },
+      select: { id: true },
+    });
+    if (active) {
+      throw this.reject(
+        AuctionAdminReason.AUCTION_ALREADY_ACTIVE,
+        'Ese artículo ya tiene una subasta programada o en curso',
+      );
+    }
+  }
+
+  // Resuelve los nombres de los artículos de un lote de subastas EN BLOQUE: dos
+  // consultas (una por tabla) en vez de una por subasta. Como no hay FK, Prisma no
+  // puede hacer el `include` y hay que cruzarlo a mano.
+  private async resolveItemNames(
+    rows: { itemType: OrderItemType; itemId: string }[],
+  ): Promise<Map<string, string>> {
+    const productIds = rows
+      .filter((r) => r.itemType === OrderItemType.PRODUCT)
+      .map((r) => r.itemId);
+    const lotIds = rows
+      .filter((r) => r.itemType === OrderItemType.LOT)
+      .map((r) => r.itemId);
+
+    const [products, lots] = await Promise.all([
+      productIds.length
+        ? this.prisma.product.findMany({
+            where: { id: { in: productIds } },
+            select: { id: true, name: true },
+          })
+        : Promise.resolve([]),
+      lotIds.length
+        ? this.prisma.lot.findMany({
+            where: { id: { in: lotIds } },
+            select: { id: true, name: true },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const names = new Map<string, string>();
+    for (const p of products) {
+      names.set(`${OrderItemType.PRODUCT}:${p.id}`, p.name);
+    }
+    for (const l of lots) {
+      names.set(`${OrderItemType.LOT}:${l.id}`, l.name);
+    }
+    return names;
+  }
+
+  private itemKey(row: { itemType: OrderItemType; itemId: string }): string {
+    return `${row.itemType}:${row.itemId}`;
+  }
+
+  // 400 con motivo estable en `code`, para entrada inválida (artículo inexistente,
+  // fechas incoherentes). Los conflictos de estado usan `reject` (409).
+  private badRequest(code: string, message: string): BadRequestException {
+    return new BadRequestException({ code, message });
+  }
 
   // Estado inicial que se envía a un socket al unirse a la subasta (evento
   // `auction:state`), para que el front pinte sin un GET REST aparte. Solo datos
