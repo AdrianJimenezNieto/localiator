@@ -1,6 +1,15 @@
 import { Transform, Type } from 'class-transformer';
-import { IsArray, IsEnum, IsInt, IsOptional, Max, Min } from 'class-validator';
-import { AuctionStatus } from '@prisma/client';
+import {
+  IsArray,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
+import { AuctionStatus, OrderItemType } from '@prisma/client';
 
 // Tope de página: impide que alguien pida miles de subastas de golpe (coste/DoS).
 // Mismos valores que el catálogo (list-catalog.dto.ts), a propósito.
@@ -47,4 +56,17 @@ export class ListAuctionsDto {
     message: 'Estado de subasta no válido',
   })
   status?: (typeof PUBLIC_AUCTION_STATUSES)[number][];
+
+  // Filtro por artículo: lo usa la FICHA del catálogo para saber si su producto o
+  // lote tiene una subasta viva y enlazarla (tarea 13). Se resuelve reutilizando
+  // este listado en vez de que CatalogDetail incluya datos de subasta, que
+  // acoplaría el módulo de catálogo a las pujas y los estados de subasta.
+  @IsOptional()
+  @IsEnum(OrderItemType, { message: 'Tipo de artículo no válido' })
+  itemType?: OrderItemType;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  itemId?: string;
 }

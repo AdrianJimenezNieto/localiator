@@ -442,6 +442,12 @@ export class AuctionsService {
       status: {
         in: dto.status ?? [AuctionStatus.LIVE, AuctionStatus.SCHEDULED],
       },
+      // Filtro por artículo (lo usa la ficha del catálogo para enlazar su subasta).
+      // Ambos o ninguno: un itemId sin su tipo sería ambiguo, porque Product y Lot
+      // son tablas distintas y sus ids no comparten espacio de nombres.
+      ...(dto.itemType && dto.itemId
+        ? { itemType: dto.itemType, itemId: dto.itemId }
+        : {}),
     };
 
     // findMany + count en la MISMA transacción → el `total` es coherente con la

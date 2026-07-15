@@ -20,6 +20,12 @@ function App() {
           </Link>
 
           <nav className="flex items-center gap-5 text-sm font-medium text-neutral-700">
+            {/* Entrada a las subastas desde toda la web: sin este enlace solo se
+                llegaba a una subasta escribiendo su id en la URL. */}
+            <Link to="/subastas" className="hover:text-neutral-900">
+              Subastas
+            </Link>
+
             <Link
               to="/carrito"
               className="relative flex items-center gap-2 hover:text-neutral-900"
