@@ -31,6 +31,8 @@ import { AdminLayout } from './pages/admin/AdminLayout.tsx'
 import { ItemsAdminPage } from './pages/admin/ItemsAdminPage.tsx'
 import { ItemFormPage } from './pages/admin/ItemFormPage.tsx'
 import { CategoriesAdminPage } from './pages/admin/CategoriesAdminPage.tsx'
+import { AuctionsAdminPage } from './pages/admin/AuctionsAdminPage.tsx'
+import { AuctionFormPage } from './pages/admin/AuctionFormPage.tsx'
 
 // Rutas de la web: catálogo público (home + fichas) y backoffice /admin protegido
 // por rol (ProtectedAdmin en el frontend + @Roles(ADMIN) en el backend).
@@ -75,6 +77,9 @@ const router = createBrowserRouter([
           { path: 'lotes/nuevo', element: <ItemFormPage kind="lot" /> },
           { path: 'lotes/:id', element: <ItemFormPage kind="lot" /> },
           { path: 'categorias', element: <CategoriesAdminPage /> },
+          { path: 'subastas', element: <AuctionsAdminPage /> },
+          { path: 'subastas/nueva', element: <AuctionFormPage /> },
+          { path: 'subastas/:id', element: <AuctionFormPage /> },
           { path: 'pedidos', element: <OrdersAdminPage /> },
         ],
       },

@@ -129,7 +129,7 @@ Objetivo: pujas en tiempo real sobre productos/lotes.
 - [x] CRUD de subastas (solo admin)
 - [x] Listado público de subastas (API)
 - [x] Listado de subastas en la web + enlaces desde el catálogo
-- [ ] Backoffice de subastas (alta, listado, cancelación)
+- [x] Backoffice de subastas (alta, listado, cancelación)
 
 ## Backlog / futuro (sin fase asignada)
 - [ ] Envíos con transportista (ahora solo recogida en almacén)
