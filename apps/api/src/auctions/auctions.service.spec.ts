@@ -39,6 +39,8 @@ const gatewayMock = {
   broadcastExtended: jest.fn(),
   broadcastClosed: jest.fn(),
   broadcastEndingSoon: jest.fn(),
+  // Apertura automática (tarea 10): la room ve pasar la subasta a "en directo".
+  broadcastOpened: jest.fn(),
   notifyOutbid: jest.fn(),
   notifyWon: jest.fn(),
 };
@@ -348,6 +350,101 @@ describe('AuctionsService', () => {
     // El update del antisniping también pone endingSoonNotifiedAt a null (reevaluar).
     expect(updateCalls[0][0].data).toMatchObject({
       endingSoonNotifiedAt: null,
+    });
+  });
+
+  // Apertura automática (tarea 10). Sin esto una subasta creada desde el admin se
+  // quedaría SCHEDULED para siempre y toda puja se rechazaría con AUCTION_CLOSED.
+  describe('openAuction', () => {
+    // Subasta programada cuyo `startsAt` ya llegó: candidata a abrirse.
+    const scheduledDue = {
+      ...liveAuction,
+      status: AuctionStatus.SCHEDULED,
+      startsAt: new Date(now - 1000),
+      endsAt: new Date(now + 60 * 60 * 1000),
+    };
+
+    it('abre (LIVE) la subasta programada cuyo startsAt ya llegó', async () => {
+      prismaMock.auction.findUnique.mockResolvedValue(scheduledDue);
+      prismaMock.auction.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await service.openAuction('auction-1');
+
+      expect(result).toEqual({ outcome: 'opened' });
+      const [call] = prismaMock.auction.updateMany.mock.calls as Array<
+        [{ data: Record<string, unknown> }]
+      >;
+      expect(call[0].data).toEqual({ status: AuctionStatus.LIVE });
+      expect(gatewayMock.broadcastOpened).toHaveBeenCalledWith(
+        'auction-1',
+        scheduledDue.endsAt,
+      );
+    });
+
+    it('no toca la subasta programada cuyo startsAt aún no ha llegado', async () => {
+      prismaMock.auction.findUnique.mockResolvedValue({
+        ...scheduledDue,
+        startsAt: new Date(now + 60 * 60 * 1000),
+      });
+
+      const result = await service.openAuction('auction-1');
+
+      expect(result).toEqual({ outcome: 'not_due' });
+      expect(prismaMock.auction.updateMany).not.toHaveBeenCalled();
+      expect(gatewayMock.broadcastOpened).not.toHaveBeenCalled();
+    });
+
+    // Caso borde: la API estuvo caída todo el intervalo de la subasta. No se abre
+    // para cerrarla al minuto siguiente; se cierra directa y desierta.
+    it('cierra sin abrir la subasta cuyo intervalo pasó entero', async () => {
+      prismaMock.auction.findUnique.mockResolvedValue({
+        ...scheduledDue,
+        startsAt: new Date(now - 2 * 60 * 60 * 1000),
+        endsAt: new Date(now - 1000),
+      });
+      prismaMock.auction.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await service.openAuction('auction-1');
+
+      expect(result).toEqual({ outcome: 'closed_expired' });
+      const [call] = prismaMock.auction.updateMany.mock.calls as Array<
+        [{ data: Record<string, unknown> }]
+      >;
+      expect(call[0].data).toEqual({ status: AuctionStatus.CLOSED });
+      // Desierta: se avisa a la room sin ganador, y nunca pasó por LIVE.
+      expect(gatewayMock.broadcastClosed).toHaveBeenCalledWith('auction-1', {
+        winnerMasked: null,
+        amountCents: null,
+      });
+      expect(gatewayMock.broadcastOpened).not.toHaveBeenCalled();
+    });
+
+    it('no reabre una subasta que ya está LIVE (idempotencia)', async () => {
+      prismaMock.auction.findUnique.mockResolvedValue(liveAuction);
+
+      const result = await service.openAuction('auction-1');
+
+      expect(result).toEqual({ outcome: 'noop' });
+      expect(prismaMock.auction.updateMany).not.toHaveBeenCalled();
+    });
+
+    // Dos pasadas del cron solapadas: el updateMany condicional solo lo gana una.
+    it('no abre dos veces si otra pasada la reclamó primero', async () => {
+      prismaMock.auction.findUnique.mockResolvedValue(scheduledDue);
+      prismaMock.auction.updateMany.mockResolvedValue({ count: 0 });
+
+      const result = await service.openAuction('auction-1');
+
+      expect(result).toEqual({ outcome: 'noop' });
+      expect(gatewayMock.broadcastOpened).not.toHaveBeenCalled();
+    });
+
+    it('devuelve not_found si la subasta no existe', async () => {
+      prismaMock.auction.findUnique.mockResolvedValue(null);
+
+      expect(await service.openAuction('nope')).toEqual({
+        outcome: 'not_found',
+      });
     });
   });
 

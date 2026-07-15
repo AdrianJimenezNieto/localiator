@@ -4,14 +4,14 @@ import { ConfigService } from '@nestjs/config';
 import { AuctionsController } from './auctions.controller';
 import { AuctionsService } from './auctions.service';
 import { AuctionsGateway } from './auctions.gateway';
-import { AuctionsCloserService } from './auctions.closer.service';
+import { AuctionsLifecycleService } from './auctions.lifecycle.service';
 import { MailModule } from '../mail/mail.module';
 import { OrdersModule } from '../orders/orders.module';
 
 // Módulo de subastas (Fase 5). Reglas de puja (tarea 02) + canal en vivo (tarea
 // 03); en tareas siguientes suma la concurrencia (04), el antisniping (05), el
-// cierre automático (06), el impago (07) y el cobro (09). Exporta AuctionsService
-// para que los jobs lo reutilicen.
+// cierre automático (06), el impago (07), el cobro (09) y la apertura automática
+// (10). Exporta AuctionsService para que los jobs lo reutilicen.
 //
 // JwtModule: el gateway verifica a mano el token del handshake del WebSocket
 // (los guards HTTP no ven el handshake). Mismo secreto que el auth HTTP.
@@ -31,7 +31,7 @@ import { OrdersModule } from '../orders/orders.module';
     OrdersModule,
   ],
   controllers: [AuctionsController],
-  providers: [AuctionsService, AuctionsGateway, AuctionsCloserService],
+  providers: [AuctionsService, AuctionsGateway, AuctionsLifecycleService],
   exports: [AuctionsService],
 })
 export class AuctionsModule {}

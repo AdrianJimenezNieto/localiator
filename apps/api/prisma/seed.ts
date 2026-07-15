@@ -205,11 +205,29 @@ async function main() {
     },
   });
 
+  // Subasta de ejemplo PROGRAMADA (tarea 10), para ver en vivo cómo el cron de
+  // apertura la pasa a LIVE sola. Arranca en 2 minutos, así que basta con recargar
+  // la ficha un rato después de sembrar. Sin pujas: aún no ha empezado.
+  await prisma.auction.upsert({
+    where: { id: 'seed-auction-programada' },
+    update: {},
+    create: {
+      id: 'seed-auction-programada',
+      itemType: OrderItemType.LOT,
+      itemId: 'seed-lot-herramientas-taller',
+      startingPriceCents: 12000,
+      minIncrementCents: 1000,
+      startsAt: new Date(ahora + 2 * 60 * 1000), // abre en 2 min (la abre el cron).
+      endsAt: new Date(ahora + 24 * 60 * 60 * 1000), // cierra en 24 h.
+      status: AuctionStatus.SCHEDULED,
+    },
+  });
+
   console.log('Seed completado:', {
     usuarios: [admin.email, buyer.email],
     categorias: [electronica.slug, herramientas.slug, hogar.slug],
     pedidos: ['seed-order-buyer-pagado'],
-    subastas: ['seed-auction-taladro'],
+    subastas: ['seed-auction-taladro', 'seed-auction-programada'],
   });
 }
 
