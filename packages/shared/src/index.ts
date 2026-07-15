@@ -42,6 +42,20 @@ export const ItemCondition = {
 
 export type ItemCondition = (typeof ItemCondition)[keyof typeof ItemCondition];
 
+// Ciclo de vida de una subasta. Reflejo del enum `AuctionStatus` de Prisma, por la
+// misma razón que ItemCondition: el frontend necesita los valores sin depender del
+// cliente de Prisma. PAID y CANCELLED no salen del listado público, pero el tipo
+// los incluye porque el backoffice sí los muestra.
+export const AuctionStatus = {
+  SCHEDULED: "SCHEDULED",
+  LIVE: "LIVE",
+  CLOSED: "CLOSED",
+  PAID: "PAID",
+  CANCELLED: "CANCELLED",
+} as const;
+
+export type AuctionStatus = (typeof AuctionStatus)[keyof typeof AuctionStatus];
+
 // Respuesta paginada genérica (offset pagination). La comparten backend y frontend
 // para no divergir en la forma de la paginación.
 export interface Paginated<T> {
@@ -63,6 +77,27 @@ export interface CatalogItem {
   // Primera foto (portada) o null si el artículo no tiene fotos aún.
   photo: string | null;
   category: { id: string; name: string };
+}
+
+// Lo justo que necesita una TARJETA del listado público de subastas (tarea 12).
+// No lleva identidades de pujadores: el listado es público y los datos de postor
+// solo salen enmascarados y en la ficha (RGPD, ver auctions.mask.ts).
+export interface AuctionListItem {
+  id: string;
+  status: AuctionStatus;
+  // El artículo subastado, ya resuelto: la subasta apunta a un Product o un Lot
+  // por itemType/itemId, pero quien pinta la tarjeta necesita nombre y foto.
+  itemKind: ItemKind;
+  itemId: string;
+  name: string;
+  photo: string | null;
+  // Puja más alta, o el precio de salida si aún no hay pujas.
+  currentPriceCents: number;
+  startingPriceCents: number;
+  minIncrementCents: number;
+  bidCount: number;
+  startsAt: string;
+  endsAt: string;
 }
 
 // Detalle completo para la FICHA pública (todos los datos visibles al público).
