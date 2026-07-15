@@ -94,6 +94,30 @@ export class AuctionMailService {
     }
   }
 
+  // La subasta se canceló porque alguien compró el artículo directamente y lo agotó
+  // (tarea 15). Se avisa a todos los que pujaron: llevaban días detrás del artículo
+  // y se quedan sin él, así que enterarse solo si tienen la ficha abierta no basta.
+  // Se les dice el motivo real, no un "cancelada" a secas.
+  async sendAuctionCancelled(auctionId: string): Promise<void> {
+    const bidders = await this.prisma.bid.findMany({
+      where: { auctionId, user: { bannedAt: null } },
+      distinct: ['userId'],
+      select: { user: { select: { email: true } } },
+    });
+    for (const b of bidders) {
+      await this.safeSend(
+        b.user.email,
+        'Una subasta en la que pujabas se ha cancelado',
+        `<p>La subasta en la que participabas se ha cancelado: otro cliente ha
+          comprado el artículo directamente y ya no queda ninguno.</p>
+         <p>Tu puja queda anulada y no se te cobrará nada.</p>
+         <p>Sentimos el contratiempo. Puedes ver el resto de subastas abiertas
+          aquí:</p>
+         <p><a href="${this.auctionsUrl()}">Ver subastas</a></p>`,
+      );
+    }
+  }
+
   private async emailOf(userId: string): Promise<string | null> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -104,6 +128,12 @@ export class AuctionMailService {
 
   private auctionUrl(auctionId: string): string {
     return `${this.appUrl()}/subastas/${auctionId}`;
+  }
+
+  // Listado público de subastas (tarea 13). Enlazar a la subasta cancelada no
+  // serviría de nada; al listado, sí.
+  private auctionsUrl(): string {
+    return `${this.appUrl()}/subastas`;
   }
 
   // Página "mis pedidos": ahí el ganador ve su pedido de subasta PENDING y lo paga

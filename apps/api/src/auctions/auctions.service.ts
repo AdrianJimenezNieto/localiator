@@ -295,6 +295,23 @@ export class AuctionsService {
     return cancelled;
   }
 
+  // Avisa de que una subasta se canceló porque una venta directa agotó su artículo
+  // (tarea 15). La cancelación en BD ya la hizo OrdersService dentro de la
+  // transacción del cobro (no puede llamarnos: AuctionsModule ya importa
+  // OrdersModule y sería un ciclo); esto es solo el aviso.
+  //
+  // Los pujadores llevan días pujando y se quedan sin nada, así que además del WS
+  // (que solo ve quien esté mirando la ficha) va un email, que es el canal fiable.
+  async notifyAuctionCancelled(auctionId: string): Promise<void> {
+    // Se reutiliza `auction:closed` sin ganador en vez de un evento nuevo: el front
+    // ya lo pinta como "cerrada sin ganador", que es exactamente lo que ha pasado.
+    this.gateway.broadcastClosed(auctionId, {
+      winnerMasked: null,
+      amountCents: null,
+    });
+    await this.mail.sendAuctionCancelled(auctionId);
+  }
+
   // La ventana temporal tiene que tener sentido: no se puede cerrar antes de
   // empezar, ni programar una subasta que nace ya vencida.
   private assertValidWindow(startsAt: Date, endsAt: Date): void {
@@ -685,6 +702,12 @@ export class AuctionsService {
         }
 
         const highest = await this.highestBid(tx, auctionId);
+        // Un ÚNICO instante para el plazo de pago: lo comparten la subasta y la
+        // reserva de stock del ganador (tarea 15). Calcularlo dos veces daría dos
+        // fechas con milisegundos distintos y dos relojes que pueden divergir.
+        const paymentDueAt = highest
+          ? new Date(Date.now() + PAYMENT_WINDOW_MS)
+          : null;
         await tx.auction.update({
           where: { id: auctionId },
           data: {
@@ -693,19 +716,20 @@ export class AuctionsService {
             winningBidId: highest?.id ?? null,
             // Con ganador arranca su plazo de pago (tarea 07): si vence sin pagar,
             // el barrido lo banea y ofrece la subasta al siguiente. Desierta: null.
-            paymentDueAt: highest
-              ? new Date(Date.now() + PAYMENT_WINDOW_MS)
-              : null,
+            paymentDueAt,
           },
         });
 
-        if (highest) {
+        if (highest && paymentDueAt) {
           // Cobro (tarea 09): crea el pedido PENDING del ganador en ESTA misma
-          // transacción, para que fijar-ganador y crear-pedido sean atómicos.
+          // transacción, para que fijar-ganador y crear-pedido sean atómicos. El
+          // pedido reserva el artículo hasta `paymentDueAt` (tarea 15), para que la
+          // venta directa no pueda llevárselo mientras el ganador paga.
           await this.orders.createAuctionOrder(tx, {
             userId: highest.userId,
             auctionId,
             amountCents: highest.amountCents,
+            paymentDueAt,
           });
         }
 
@@ -820,21 +844,27 @@ export class AuctionsService {
         });
 
         if (next) {
+          // Mismo instante para el plazo de la subasta y para la reserva del nuevo
+          // ganador (tarea 15): dos relojes separados podrían divergir.
+          const paymentDueAt = new Date(now.getTime() + PAYMENT_WINDOW_MS);
           await tx.auction.update({
             where: { id: auctionId },
             data: {
               winnerUserId: next.userId,
               winningBidId: next.id,
               // Reinicia el plazo para el nuevo ganador. Sigue CLOSED (aún sin pago).
-              paymentDueAt: new Date(now.getTime() + PAYMENT_WINDOW_MS),
+              paymentDueAt,
             },
           });
           // Cobro (tarea 09): pedido del nuevo ganador. createAuctionOrder cancela
-          // primero el pedido PENDING del moroso, así solo hay un pedido vivo.
+          // primero el pedido PENDING del moroso —y BORRA su reserva, que si no
+          // seguiría bloqueando el stock 48 h (tarea 15)—, así solo hay un pedido y
+          // una reserva vivos.
           await this.orders.createAuctionOrder(tx, {
             userId: next.userId,
             auctionId,
             amountCents: next.amountCents,
+            paymentDueAt,
           });
           return {
             outcome: 'reassigned',
@@ -856,11 +886,25 @@ export class AuctionsService {
           },
         });
         // Cobro (tarea 09): el moroso no pagó y no hay quien herede la subasta, así
-        // que su pedido PENDING se cancela para no dejarlo huérfano.
-        await tx.order.updateMany({
+        // que su pedido PENDING se cancela para no dejarlo huérfano. Se BORRA además
+        // su reserva de stock (tarea 15): sin esto el artículo seguiría bloqueado
+        // hasta que venciera la reserva, aunque ya no haya subasta ni ganador que lo
+        // espere. Al liberarla vuelve al catálogo, que es lo correcto: la subasta
+        // quedó desierta.
+        const orphan = await tx.order.findMany({
           where: { auctionId, status: OrderStatus.PENDING },
-          data: { status: OrderStatus.CANCELLED },
+          select: { id: true },
         });
+        if (orphan.length > 0) {
+          const ids = orphan.map((o) => o.id);
+          await tx.stockReservation.deleteMany({
+            where: { orderId: { in: ids } },
+          });
+          await tx.order.updateMany({
+            where: { id: { in: ids } },
+            data: { status: OrderStatus.CANCELLED },
+          });
+        }
         return { outcome: 'cancelled_empty', bannedUserId };
       },
     );

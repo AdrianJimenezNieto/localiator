@@ -8,6 +8,7 @@ import { STRIPE_CLIENT } from './stripe.provider';
 import { OrdersService } from '../orders/orders.service';
 import { InvoicingService } from '../invoicing/invoicing.service';
 import { OrderMailService } from '../mail/order-mail.service';
+import { AuctionsService } from '../auctions/auctions.service';
 
 const constructEvent = jest.fn();
 const stripeMock = { webhooks: { constructEvent } };
@@ -19,6 +20,9 @@ const ordersMock = {
 
 const invoicingMock = { generateForOrder: jest.fn() };
 const orderMailMock = { sendOrderConfirmation: jest.fn() };
+// Tarea 15: si el cobro de una venta directa agota el artículo de una subasta, el
+// webhook avisa a los pujadores (OrdersService cancela pero no puede notificar).
+const auctionsMock = { notifyAuctionCancelled: jest.fn() };
 
 const configMock = {
   get: jest.fn((key: string) =>
@@ -43,6 +47,7 @@ describe('WebhookController', () => {
         { provide: OrdersService, useValue: ordersMock },
         { provide: InvoicingService, useValue: invoicingMock },
         { provide: OrderMailService, useValue: orderMailMock },
+        { provide: AuctionsService, useValue: auctionsMock },
         { provide: ConfigService, useValue: configMock },
       ],
     }).compile();
@@ -82,6 +87,30 @@ describe('WebhookController', () => {
       paymentIntentId: 'pi_123',
       orderId: 'o1',
     });
+    // Sin subastas afectadas no se avisa a nadie.
+    expect(auctionsMock.notifyAuctionCancelled).not.toHaveBeenCalled();
+  });
+
+  // Tarea 15: la venta directa agotó el artículo y su subasta se canceló dentro de
+  // la transacción del cobro. Avisar a los pujadores es cosa de aquí: OrdersService
+  // no puede depender de AuctionsService (AuctionsModule ya importa OrdersModule).
+  it('avisa a los pujadores si el cobro canceló una subasta por falta de stock', async () => {
+    constructEvent.mockReturnValue({
+      type: 'checkout.session.completed',
+      data: {
+        object: { payment_intent: 'pi_123', metadata: { orderId: 'o1' } },
+      },
+    });
+    ordersMock.confirmOrderPaid.mockResolvedValue({
+      outcome: 'paid',
+      orderId: 'o1',
+      cancelledAuctionIds: ['a1', 'a2'],
+    });
+
+    await controller.handle(reqWith(Buffer.from('{}')), 'sig');
+
+    expect(auctionsMock.notifyAuctionCancelled).toHaveBeenCalledWith('a1');
+    expect(auctionsMock.notifyAuctionCancelled).toHaveBeenCalledWith('a2');
   });
 
   it('libera la reserva en payment_intent.payment_failed', async () => {

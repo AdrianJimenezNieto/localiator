@@ -228,10 +228,18 @@ export class OrdersService {
     });
   }
 
-  // Crea el pedido del GANADOR de una subasta (tarea 09). A diferencia de
-  // createOrder (venta directa), NO lleva reserva de stock ni descuento: el ganador
-  // ya es el único con derecho al artículo, no compite por él en un carrito. El
-  // precio es la puja ganadora (snapshot), no el precio de catálogo.
+  // Crea el pedido del GANADOR de una subasta (tarea 09). El precio es la puja
+  // ganadora (snapshot), no el precio de catálogo.
+  //
+  // SÍ lleva reserva de stock (tarea 15), al contrario de lo que decidió la tarea 09.
+  // El razonamiento de entonces era que el ganador "no compite por el artículo en un
+  // carrito", y es cierto, pero la venta directa del mismo artículo NO está
+  // bloqueada mientras la subasta vive (regla de negocio: gana quien paga primero).
+  // Sin reserva, un comprador directo y el ganador podían pagar a la vez y acabar
+  // dos personas pagando por el mismo artículo, con reembolso manual (y los
+  // reembolsos están fuera del MVP). La reserva vence con el PLAZO DE PAGO del
+  // ganador (48 h), no con el TTL de 15 min de la venta directa: si no paga, muere
+  // sola y el artículo vuelve al catálogo.
   //
   // Recibe el `tx` de la transacción de cierre/reasignación (tareas 06/07) para que
   // "fijar ganador" y "crear su pedido" sean ATÓMICOS: nunca hay un ganador sin
@@ -243,6 +251,10 @@ export class OrdersService {
       userId: string;
       auctionId: string;
       amountCents: number;
+      // Cuándo vence el plazo de pago del ganador: lo fija quien cierra/reasigna
+      // (AuctionsService) y aquí se reutiliza como caducidad de la reserva, para que
+      // reserva y plazo mueran a la vez y no haya dos relojes que puedan divergir.
+      paymentDueAt: Date;
     },
   ): Promise<{ id: string }> {
     // El artículo subastado (tipo + id) lo toma de la propia subasta, así el llamador
@@ -257,12 +269,25 @@ export class OrdersService {
 
     // Segunda oportunidad (tarea 07): si ya había un pedido PENDING de esta subasta
     // (el del moroso que no pagó), lo cancelamos antes de crear el del nuevo ganador.
-    // Como el pedido de subasta no tiene reserva, basta con marcarlo CANCELLED. Que
-    // Order.auctionId NO sea @unique es justo lo que permite crear el nuevo aquí.
-    await tx.order.updateMany({
+    // Que Order.auctionId NO sea @unique es justo lo que permite crear el nuevo aquí.
+    //
+    // Hay que BORRAR SUS RESERVAS, no solo marcar el pedido CANCELLED (tarea 15):
+    // liveReservedQuantity cuenta las reservas por `expiresAt` y NO mira el estado
+    // del pedido, así que la reserva del moroso seguiría bloqueando el stock 48 h
+    // aunque su pedido esté cancelado. Mismo orden que cancelPriorPending: borrar
+    // reservas y luego cancelar.
+    const priorIds = await tx.order.findMany({
       where: { auctionId: params.auctionId, status: OrderStatus.PENDING },
-      data: { status: OrderStatus.CANCELLED },
+      select: { id: true },
     });
+    if (priorIds.length > 0) {
+      const ids = priorIds.map((o) => o.id);
+      await tx.stockReservation.deleteMany({ where: { orderId: { in: ids } } });
+      await tx.order.updateMany({
+        where: { id: { in: ids } },
+        data: { status: OrderStatus.CANCELLED },
+      });
+    }
 
     const nameSnapshot = await this.resolveItemName(
       tx,
@@ -288,7 +313,16 @@ export class OrdersService {
             lineTotalCents: params.amountCents,
           },
         },
-        // Sin `reservations`: no pasa por reserva de stock (ver arriba).
+        // Reserva del ganador: bloquea la unidad frente a la venta directa durante
+        // su plazo de pago (ver arriba).
+        reservations: {
+          create: {
+            itemType: auction.itemType,
+            itemId: auction.itemId,
+            quantity: 1,
+            expiresAt: params.paymentDueAt,
+          },
+        },
       },
       select: { id: true },
     });
@@ -368,8 +402,12 @@ export class OrdersService {
   }): Promise<{
     outcome: 'paid' | 'already_paid' | 'not_payable' | 'not_found';
     orderId?: string;
+    // Subastas canceladas porque esta venta directa agotó su artículo (tarea 15).
+    // El llamador avisa a los pujadores; aquí solo se cambian los datos.
+    cancelledAuctionIds?: string[];
   }> {
     return this.prisma.$transaction(async (tx) => {
+      let cancelledAuctionIds: string[] = [];
       const order = await tx.order.findFirst({
         where: params.paymentIntentId
           ? { stripePaymentIntentId: params.paymentIntentId }
@@ -387,11 +425,45 @@ export class OrdersService {
         return { outcome: 'not_payable' as const, orderId: order.id };
       }
 
-      // Pedido de SUBASTA (tarea 09): no hay reserva ni descuento de stock (el
-      // ganador ya tenía el artículo asignado, no compitió por él en un carrito).
-      // Además, al cobrarse, la subasta pasa a PAID: así sale del findUnpaidWinners
-      // (que busca CLOSED con plazo vencido) y se apaga el impago sin código extra.
+      // Coherencia con la liberación de reservas (tarea 07): si la reserva ya
+      // expiró (aunque el barrido aún no haya cancelado el pedido), NO confirmamos
+      // el cobro, porque ese stock pudo asignarse a otro comprador y descontarlo
+      // aquí provocaría sobreventa. Se marca como no pagable para revisión manual
+      // (reembolso fuera del MVP, CLAUDE.md). Desde la tarea 15 esto aplica TAMBIÉN
+      // al pedido de subasta: su reserva vence con el plazo de pago del ganador, así
+      // que pagar tarde entra por el mismo camino que un checkout caducado.
+      const now = Date.now();
+      const reservationLive =
+        order.reservations.length > 0 &&
+        order.reservations.every((r) => r.expiresAt.getTime() > now);
+      if (!reservationLive) {
+        return { outcome: 'not_payable' as const, orderId: order.id };
+      }
+
+      // Descuento REAL del stock, una sola vez, ahora que el cobro está confirmado.
+      // El pedido de subasta descuenta igual que la venta directa (tarea 15): antes
+      // no lo hacía y un artículo subastado, ganado y pagado se quedaba en el
+      // catálogo, listo para venderse otra vez.
+      for (const line of order.lines) {
+        if (line.itemType === OrderItemType.PRODUCT) {
+          await tx.product.update({
+            where: { id: line.itemId },
+            data: { stock: { decrement: line.quantity } },
+          });
+        } else {
+          await tx.lot.update({
+            where: { id: line.itemId },
+            data: { stock: { decrement: line.quantity } },
+          });
+        }
+      }
+
+      // La reserva ya cumplió su función; se consume.
+      await tx.stockReservation.deleteMany({ where: { orderId: order.id } });
+
       if (order.auctionId) {
+        // Al cobrarse, la subasta pasa a PAID: así sale del findUnpaidWinners (que
+        // busca CLOSED con plazo vencido) y se apaga el impago sin código extra.
         await tx.auction.updateMany({
           // Guard idempotente: solo si sigue CLOSED. Si el impago ya la reasignó o
           // cerró (carrera "paga justo al vencer el plazo"), no la pisamos.
@@ -399,36 +471,18 @@ export class OrdersService {
           data: { status: AuctionStatus.PAID },
         });
       } else {
-        // Coherencia con la liberación de reservas (tarea 07): si la reserva ya
-        // expiró (aunque el barrido aún no haya cancelado el pedido), NO confirmamos
-        // el cobro, porque ese stock pudo asignarse a otro comprador y descontarlo
-        // aquí provocaría sobreventa. Se marca como no pagable para revisión manual
-        // (reembolso fuera del MVP, CLAUDE.md).
-        const now = Date.now();
-        const reservationLive =
-          order.reservations.length > 0 &&
-          order.reservations.every((r) => r.expiresAt.getTime() > now);
-        if (!reservationLive) {
-          return { outcome: 'not_payable' as const, orderId: order.id };
-        }
-
-        // Descuento REAL del stock, una sola vez, ahora que el cobro está confirmado.
-        for (const line of order.lines) {
-          if (line.itemType === OrderItemType.PRODUCT) {
-            await tx.product.update({
-              where: { id: line.itemId },
-              data: { stock: { decrement: line.quantity } },
-            });
-          } else {
-            await tx.lot.update({
-              where: { id: line.itemId },
-              data: { stock: { decrement: line.quantity } },
-            });
-          }
-        }
-
-        // La reserva ya cumplió su función; se consume.
-        await tx.stockReservation.deleteMany({ where: { orderId: order.id } });
+        // Venta directa que AGOTA el artículo: gana quien paga primero, así que la
+        // subasta viva sobre ese artículo se queda sin nada que entregar y se
+        // cancela (regla de negocio, tarea 15). Solo al llegar a stock 0: con stock
+        // 5, vender 1 no mata la subasta, todavía quedan 4.
+        //
+        // Aquí solo pueden aparecer subastas LIVE/SCHEDULED: una CLOSED con ganador
+        // tiene su propia reserva, que impide a un comprador directo llevarse la
+        // última unidad.
+        cancelledAuctionIds = await this.cancelAuctionsWithoutStock(
+          tx,
+          order.lines,
+        );
       }
 
       await tx.order.update({
@@ -444,7 +498,11 @@ export class OrdersService {
         },
       });
 
-      return { outcome: 'paid' as const, orderId: order.id };
+      return {
+        outcome: 'paid' as const,
+        orderId: order.id,
+        cancelledAuctionIds,
+      };
     });
   }
 
@@ -482,7 +540,12 @@ export class OrdersService {
     const expired = await this.prisma.stockReservation.findMany({
       where: {
         expiresAt: { lt: new Date() },
-        order: { status: OrderStatus.PENDING },
+        // Los pedidos de SUBASTA quedan fuera (tarea 15): su reserva vence a la vez
+        // que el plazo de pago del ganador, y de ese vencimiento ya se encarga
+        // handleUnpaidWinner (banea al moroso y ofrece la segunda oportunidad,
+        // borrando la reserva). Dos dueños para el mismo ciclo de vida es pedir una
+        // carrera entre ambos crons.
+        order: { status: OrderStatus.PENDING, auctionId: null },
       },
       select: { orderId: true },
       distinct: ['orderId'],
@@ -540,12 +603,71 @@ export class OrdersService {
     return [...byKey.values()];
   }
 
+  // Cancela las subastas vivas de los artículos que se han quedado SIN STOCK tras
+  // una venta directa pagada (tarea 15). Devuelve los ids cancelados para que el
+  // llamador avise a los pujadores (WS + email): OrdersService no puede depender de
+  // AuctionsService —AuctionsModule ya importa OrdersModule y sería un ciclo—, así
+  // que hace el cambio de datos, que es lo suyo, y delega el aviso hacia arriba.
+  //
+  // El `updateMany` filtra por estado LIVE/SCHEDULED, así que es idempotente y no
+  // pisa una subasta ya cerrada o cancelada.
+  private async cancelAuctionsWithoutStock(
+    tx: Prisma.TransactionClient,
+    lines: { itemType: OrderItemType; itemId: string }[],
+  ): Promise<string[]> {
+    const cancelled: string[] = [];
+
+    for (const line of lines) {
+      // El stock ya está descontado en esta misma transacción: si llega a 0, la
+      // subasta se queda sin artículo que entregar.
+      const item =
+        line.itemType === OrderItemType.PRODUCT
+          ? await tx.product.findUnique({
+              where: { id: line.itemId },
+              select: { stock: true },
+            })
+          : await tx.lot.findUnique({
+              where: { id: line.itemId },
+              select: { stock: true },
+            });
+      if (!item || item.stock > 0) continue;
+
+      const live = await tx.auction.findMany({
+        where: {
+          itemType: line.itemType,
+          itemId: line.itemId,
+          status: { in: [AuctionStatus.SCHEDULED, AuctionStatus.LIVE] },
+        },
+        select: { id: true },
+      });
+      if (live.length === 0) continue;
+
+      await tx.auction.updateMany({
+        where: { id: { in: live.map((a) => a.id) } },
+        data: { status: AuctionStatus.CANCELLED },
+      });
+      cancelled.push(...live.map((a) => a.id));
+    }
+
+    return cancelled;
+  }
+
   private async cancelPriorPending(
     tx: Prisma.TransactionClient,
     userId: string,
   ): Promise<void> {
     const prior = await tx.order.findMany({
-      where: { userId, status: OrderStatus.PENDING },
+      where: {
+        userId,
+        status: OrderStatus.PENDING,
+        // NO tocar los pedidos de SUBASTA (tarea 15). Su ciclo de vida lo gobierna
+        // el flujo de impago (tarea 07) y viven PENDING hasta 48 h, no minutos.
+        // Sin este filtro, el ganador de una subasta que compra cualquier otra cosa
+        // se autocancelaba el pedido de la subasta al entrar al checkout y acababa
+        // BANEADO por impago a las 48 h. La intención de este método es "que nadie
+        // acapare stock reentrando al checkout", y un pedido de subasta no es eso.
+        auctionId: null,
+      },
       select: { id: true },
     });
     if (prior.length === 0) return;
