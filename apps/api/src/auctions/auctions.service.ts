@@ -40,6 +40,15 @@ interface BiddableAuction {
   minIncrementCents: number;
 }
 
+// Resultado de intentar abrir una subasta programada (tarea 10). Mismo criterio
+// que CloseResult: los outcomes "no apertura" hacen la idempotencia explícita.
+export type OpenResult =
+  | { outcome: 'not_found' }
+  | { outcome: 'noop' } // ya no estaba SCHEDULED (otra pasada la abrió).
+  | { outcome: 'not_due' } // aún no ha llegado su `startsAt`.
+  | { outcome: 'opened' } // SCHEDULED → LIVE: ya acepta pujas.
+  | { outcome: 'closed_expired' }; // se le pasó la hora entera: SCHEDULED → CLOSED.
+
 // Resultado de intentar cerrar una subasta (tarea 06). Los outcomes "no cierre"
 // (not_found/noop/not_due) hacen que la idempotencia sea explícita y testeable.
 export type CloseResult =
@@ -116,8 +125,77 @@ export class AuctionsService {
     };
   }
 
+  // Subastas programadas a las que ya les ha llegado su hora: candidatas a abrirse
+  // (tarea 10). Lo consulta el cron (AuctionsLifecycle), simétrico a findDueAuctions.
+  async findStartingAuctions(): Promise<string[]> {
+    const rows = await this.prisma.auction.findMany({
+      where: { status: AuctionStatus.SCHEDULED, startsAt: { lte: new Date() } },
+      select: { id: true },
+    });
+    return rows.map((a) => a.id);
+  }
+
+  // Abre una subasta programada (SCHEDULED → LIVE) para que empiece a aceptar pujas.
+  // Sin esto, `assertOpen` rechazaría toda puja con AUCTION_CLOSED y una subasta
+  // creada desde el admin (tarea 11) no despertaría nunca.
+  //
+  // A diferencia del cierre, aquí NO hace falta lock de fila (SELECT ... FOR UPDATE):
+  // no leemos-modificamos datos en disputa (no hay pujas ni ganador que calcular),
+  // solo movemos el estado. Basta un `updateMany` CONDICIONAL por `status: SCHEDULED`,
+  // que es atómico: si dos pasadas del cron coinciden, solo una obtiene count === 1 y
+  // la otra ve `noop`. Mismo patrón de "reclamar de forma atómica" que notifyEndingSoon.
+  //
+  // Caso borde: una subasta puede llegar aquí con `startsAt` Y `endsAt` ya pasados (la
+  // API estuvo caída todo su intervalo). No se abre para cerrarla al minuto siguiente
+  // —sería mentir a quien la mire y permitiría pujas en una subasta que ya debía estar
+  // cerrada—: pasa directa a CLOSED y desierta. No puede tener pujas (nunca estuvo
+  // LIVE), así que no hay ganador que fijar ni pedido que crear.
+  async openAuction(auctionId: string): Promise<OpenResult> {
+    const now = new Date();
+    const auction = await this.prisma.auction.findUnique({
+      where: { id: auctionId },
+      select: { status: true, startsAt: true, endsAt: true },
+    });
+    if (!auction) {
+      return { outcome: 'not_found' };
+    }
+    // Idempotencia: solo se abre lo que sigue programado.
+    if (auction.status !== AuctionStatus.SCHEDULED) {
+      return { outcome: 'noop' };
+    }
+    if (auction.startsAt.getTime() > now.getTime()) {
+      return { outcome: 'not_due' };
+    }
+
+    const expired = auction.endsAt.getTime() <= now.getTime();
+    const claimed = await this.prisma.auction.updateMany({
+      where: {
+        id: auctionId,
+        status: AuctionStatus.SCHEDULED,
+        startsAt: { lte: now },
+      },
+      data: expired
+        ? { status: AuctionStatus.CLOSED }
+        : { status: AuctionStatus.LIVE },
+    });
+    if (claimed.count === 0) {
+      return { outcome: 'noop' }; // otra pasada la reclamó primero.
+    }
+
+    if (expired) {
+      this.gateway.broadcastClosed(auctionId, {
+        winnerMasked: null,
+        amountCents: null,
+      });
+      return { outcome: 'closed_expired' };
+    }
+    // Quien ya estuviera mirando la ficha ve abrirse la subasta sin recargar.
+    this.gateway.broadcastOpened(auctionId, auction.endsAt);
+    return { outcome: 'opened' };
+  }
+
   // Subastas vencidas que aún siguen LIVE: candidatas a cerrarse. Lo consulta el
-  // cron (AuctionsCloser). `endsAt <= now` respeta el antisniping porque una
+  // cron (AuctionsLifecycle). `endsAt <= now` respeta el antisniping porque una
   // extensión ya habría movido `endsAt` al futuro y no saldría aquí.
   async findDueAuctions(): Promise<string[]> {
     const due = await this.prisma.auction.findMany({

@@ -2,21 +2,51 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { AuctionsService } from './auctions.service';
 
-// Cierre automático de subastas vencidas (tarea 06). Cada minuto busca las
-// subastas LIVE cuyo `endsAt` ya pasó y las cierra, fijando ganador o dejándolas
-// desiertas.
+// Ciclo de vida automático de las subastas: las abre al llegar su `startsAt`
+// (tarea 10) y las cierra al pasar su `endsAt` (tarea 06), además de los avisos de
+// cierre próximo (tarea 08) y el barrido de impagos (tarea 07). Abrir y cerrar son
+// la misma preocupación —mover el estado según el reloj— y comparten cron, gateway
+// y criterio de idempotencia, así que viven en el mismo servicio.
 //
 // Se elige un cron periódico frente a un timer por subasta porque **sobrevive a
 // reinicios del proceso**: un timer en memoria se perdería al reiniciar y la
-// subasta no se cerraría nunca. El cron, en cambio, vuelve a encontrar las
-// vencidas en la siguiente pasada. Para el volumen del MVP, cada minuto es
+// subasta no se abriría/cerraría nunca. El cron, en cambio, vuelve a encontrar las
+// pendientes en la siguiente pasada. Para el volumen del MVP, cada minuto es
 // proporcionado (mismo criterio que el barrido de reservas de la Fase 3).
 // Requiere ScheduleModule.forRoot() en AppModule (ya habilitado).
 @Injectable()
-export class AuctionsCloserService {
-  private readonly logger = new Logger(AuctionsCloserService.name);
+export class AuctionsLifecycleService {
+  private readonly logger = new Logger(AuctionsLifecycleService.name);
 
   constructor(private readonly auctions: AuctionsService) {}
+
+  // Apertura automática (tarea 10). Cada minuto busca subastas SCHEDULED cuyo
+  // `startsAt` ya llegó y las pone LIVE. openAuction reclama la subasta con un
+  // updateMany condicional, así que pasadas solapadas no abren dos veces.
+  @Cron(CronExpression.EVERY_MINUTE)
+  async handleOpen(): Promise<void> {
+    const startingIds = await this.auctions.findStartingAuctions();
+    let opened = 0;
+    let expired = 0;
+    for (const id of startingIds) {
+      const result = await this.auctions.openAuction(id);
+      if (result.outcome === 'opened') {
+        opened++;
+      } else if (result.outcome === 'closed_expired') {
+        expired++;
+      }
+    }
+    if (opened > 0) {
+      this.logger.log(`Subastas abiertas automáticamente: ${opened}.`);
+    }
+    // Una subasta que nace y muere sin abrirse es señal de que la API estuvo caída
+    // todo su intervalo: conviene que se vea en los logs, no solo en la BD.
+    if (expired > 0) {
+      this.logger.warn(
+        `Subastas cerradas sin llegar a abrirse (su intervalo pasó entero): ${expired}.`,
+      );
+    }
+  }
 
   @Cron(CronExpression.EVERY_MINUTE)
   async handleClose(): Promise<void> {

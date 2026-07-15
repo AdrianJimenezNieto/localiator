@@ -147,6 +147,13 @@ export class AuctionsGateway implements OnGatewayConnection {
     this.server.to(this.room(auctionId)).emit('bid:accepted', payload);
   }
 
+  // Avisa a la room de que la subasta acaba de abrirse (tarea 10). Quien estuviera
+  // esperando en la ficha de una subasta programada la ve pasar a "en directo" sin
+  // recargar. Lo llama AuctionsService.openAuction.
+  broadcastOpened(auctionId: string, endsAt: Date): void {
+    this.server.to(this.room(auctionId)).emit('auction:opened', { endsAt });
+  }
+
   // Avisa a la room de que el antisniping (tarea 05) movió el cierre. Lo llama
   // AuctionsService.placeBid tras extender `endsAt` dentro de la transacción, para
   // que todos los relojes del front actualicen la cuenta atrás.

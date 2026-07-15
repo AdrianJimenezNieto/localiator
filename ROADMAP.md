@@ -125,6 +125,11 @@ Objetivo: pujas en tiempo real sobre productos/lotes.
 - [x] Impago del ganador: segunda oportunidad al siguiente + ban automático
 - [x] Notificaciones en tiempo real (superado, ganado, a punto de cerrar)
 - [x] Cobro del ganador vía Stripe reutilizando el flujo de pedidos
+- [x] Apertura automática de subastas (`SCHEDULED` → `LIVE`)
+- [ ] CRUD de subastas (solo admin)
+- [ ] Listado público de subastas (API)
+- [ ] Listado de subastas en la web + enlaces desde el catálogo
+- [ ] Backoffice de subastas (alta, listado, cancelación)
 
 ## Backlog / futuro (sin fase asignada)
 - [ ] Envíos con transportista (ahora solo recogida en almacén)
