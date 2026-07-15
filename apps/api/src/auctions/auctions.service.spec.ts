@@ -35,9 +35,12 @@ const prismaMock = {
     findFirst: jest.fn(),
     create: jest.fn(),
   },
-  // order.updateMany: lo usa la rama "moroso baneado y sin siguiente" para cancelar
-  // su pedido PENDING huérfano (tarea 09).
-  order: { updateMany: jest.fn() },
+  // order: la rama "moroso baneado y sin siguiente" busca su pedido PENDING
+  // huérfano para cancelarlo (tarea 09) y borrar su reserva (tarea 15).
+  order: { findMany: jest.fn(), updateMany: jest.fn() },
+  // stockReservation: la reserva del ganador se borra al quedar la subasta desierta,
+  // para que el artículo vuelva al catálogo (tarea 15).
+  stockReservation: { deleteMany: jest.fn() },
   $queryRaw: jest.fn(),
   $transaction: jest.fn(),
 };
@@ -921,6 +924,8 @@ describe('AuctionsService', () => {
       prismaMock.bid.findFirst.mockResolvedValue(null); // nadie sin banear.
       prismaMock.user.updateMany.mockResolvedValue({ count: 1 });
       prismaMock.auction.update.mockResolvedValue({});
+      // El pedido PENDING del moroso, con su reserva de stock (tarea 15).
+      prismaMock.order.findMany.mockResolvedValue([{ id: 'order-moroso' }]);
 
       const result = await service.handleUnpaidWinner('auction-1');
 
@@ -942,9 +947,14 @@ describe('AuctionsService', () => {
         amountCents: null,
       });
       // Cobro (tarea 09): sin heredero, el pedido PENDING del moroso se cancela y no
-      // se crea ninguno nuevo.
+      // se crea ninguno nuevo. Y su reserva se BORRA (tarea 15): la subasta quedó
+      // desierta, así que el artículo debe volver al catálogo en vez de seguir
+      // bloqueado hasta que venza la reserva.
+      expect(prismaMock.stockReservation.deleteMany).toHaveBeenCalledWith({
+        where: { orderId: { in: ['order-moroso'] } },
+      });
       expect(prismaMock.order.updateMany).toHaveBeenCalledWith({
-        where: { auctionId: 'auction-1', status: 'PENDING' },
+        where: { id: { in: ['order-moroso'] } },
         data: { status: 'CANCELLED' },
       });
       expect(ordersMock.createAuctionOrder).not.toHaveBeenCalled();

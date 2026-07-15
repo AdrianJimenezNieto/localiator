@@ -25,8 +25,13 @@ const prismaMock = {
   product: { update: jest.fn(), findUnique: jest.fn() },
   lot: { update: jest.fn(), findUnique: jest.fn() },
   // auction: el pedido de subasta lee itemType/itemId de ella y, al cobrarse, la
-  // pasa a PAID (tarea 09).
-  auction: { findUnique: jest.fn(), updateMany: jest.fn() },
+  // pasa a PAID (tarea 09). findMany: buscar las subastas vivas de un artículo que
+  // se acaba de agotar en una venta directa, para cancelarlas (tarea 15).
+  auction: {
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    updateMany: jest.fn(),
+  },
   stockReservation: {
     aggregate: jest.fn(),
     deleteMany: jest.fn(),
@@ -198,6 +203,40 @@ describe('OrdersService', () => {
     });
   });
 
+  // Regresión (tarea 15). Este bug era real y estaba en main: un pedido de subasta
+  // vive PENDING hasta 48 h, así que al entrar al checkout de OTRA cosa se cancelaba
+  // solo, y a las 48 h el cron de impago BANEABA al ganador por no pagar algo que el
+  // sistema le había cancelado. La intención de cancelPriorPending es "que nadie
+  // acapare stock reentrando al checkout", y un pedido de subasta no es eso.
+  it('NO cancela el pedido de subasta del usuario al crear un pedido normal', async () => {
+    prismaMock.order.findMany.mockResolvedValue([]);
+    prismaMock.$queryRaw.mockResolvedValue([
+      { id: 'p1', stock: 5, name: 'X', priceCents: 1000, discountCents: 0 },
+    ]);
+    prismaMock.order.create.mockResolvedValue({
+      id: 'o2',
+      status: 'PENDING',
+      totalCents: 1000,
+      currency: 'eur',
+      createdAt: new Date(),
+      lines: [],
+    });
+
+    await service.createOrder('u1', {
+      items: [{ itemType: OrderItemType.PRODUCT, itemId: 'p1', quantity: 1 }],
+    });
+
+    // La búsqueda de pedidos previos EXCLUYE los de subasta.
+    const [findCall] = prismaMock.order.findMany.mock.calls as Array<
+      [{ where: Record<string, unknown> }]
+    >;
+    expect(findCall[0].where).toMatchObject({
+      userId: 'u1',
+      status: 'PENDING',
+      auctionId: null,
+    });
+  });
+
   describe('confirmOrderPaid', () => {
     it('descuenta stock, consume reservas y marca PAID un pedido PENDING', async () => {
       const future = new Date(Date.now() + 60_000);
@@ -284,14 +323,19 @@ describe('OrdersService', () => {
       expect(prismaMock.product.update).not.toHaveBeenCalled();
     });
 
-    it('pedido de SUBASTA: marca la subasta PAID sin tocar stock ni reservas (tarea 09)', async () => {
+    // Tarea 15: el pedido de subasta SÍ descuenta stock. Antes no lo hacía y un
+    // artículo subastado, ganado y pagado se quedaba en el catálogo, listo para
+    // venderse otra vez.
+    it('pedido de SUBASTA: marca la subasta PAID y descuenta stock (tarea 15)', async () => {
       prismaMock.order.findFirst.mockResolvedValue({
         id: 'o1',
         status: 'PENDING',
-        auctionId: 'a1', // origen subasta: rama sin reserva.
+        auctionId: 'a1',
         stripePaymentIntentId: 'pi_1',
         lines: [{ itemType: 'PRODUCT', itemId: 'p1', quantity: 1 }],
-        reservations: [],
+        // Desde la tarea 15 el pedido del ganador lleva reserva, que vence con su
+        // plazo de pago (48 h).
+        reservations: [{ expiresAt: new Date(Date.now() + 48 * 3600_000) }],
       });
 
       const result = await service.confirmOrderPaid({
@@ -304,19 +348,73 @@ describe('OrdersService', () => {
         where: { id: 'a1', status: 'CLOSED' },
         data: { status: 'PAID' },
       });
-      // NO se descuenta stock ni se borran reservas (el ganador ya tenía el artículo).
-      expect(prismaMock.product.update).not.toHaveBeenCalled();
-      expect(prismaMock.stockReservation.deleteMany).not.toHaveBeenCalled();
-      // El pedido se marca PAID igual que uno normal.
+      // El artículo sale del inventario y su reserva se consume.
+      expect(prismaMock.product.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { stock: { decrement: 1 } },
+      });
+      expect(prismaMock.stockReservation.deleteMany).toHaveBeenCalledWith({
+        where: { orderId: 'o1' },
+      });
       const updateCalls = prismaMock.order.update.mock.calls as Array<
         [{ data: Record<string, unknown> }]
       >;
       expect(updateCalls[0][0].data).toMatchObject({ status: 'PAID' });
     });
+
+    // La regla de negocio de la tarea 15: gana quien paga primero.
+    it('venta directa que AGOTA el artículo cancela su subasta viva (tarea 15)', async () => {
+      prismaMock.order.findFirst.mockResolvedValue({
+        id: 'o1',
+        status: 'PENDING',
+        auctionId: null, // venta directa.
+        stripePaymentIntentId: 'pi_1',
+        lines: [{ itemType: 'PRODUCT', itemId: 'p1', quantity: 1 }],
+        reservations: [{ expiresAt: new Date(Date.now() + 60_000) }],
+      });
+      // Tras descontar, el artículo se queda sin stock.
+      prismaMock.product.findUnique.mockResolvedValue({ stock: 0 });
+      prismaMock.auction.findMany.mockResolvedValue([{ id: 'a1' }]);
+
+      const result = await service.confirmOrderPaid({
+        paymentIntentId: 'pi_1',
+      });
+
+      expect(result.outcome).toBe('paid');
+      expect(prismaMock.auction.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['a1'] } },
+        data: { status: 'CANCELLED' },
+      });
+      // Se devuelven los ids para que el llamador avise a los pujadores: este
+      // servicio no puede depender de AuctionsService (ciclo de módulos).
+      expect(result.cancelledAuctionIds).toEqual(['a1']);
+    });
+
+    // Con stock de sobra, vender una unidad no puede matar la subasta: todavía
+    // quedan artículos que entregar.
+    it('venta directa que NO agota el artículo respeta su subasta (tarea 15)', async () => {
+      prismaMock.order.findFirst.mockResolvedValue({
+        id: 'o1',
+        status: 'PENDING',
+        auctionId: null,
+        stripePaymentIntentId: 'pi_1',
+        lines: [{ itemType: 'PRODUCT', itemId: 'p1', quantity: 1 }],
+        reservations: [{ expiresAt: new Date(Date.now() + 60_000) }],
+      });
+      prismaMock.product.findUnique.mockResolvedValue({ stock: 4 });
+
+      const result = await service.confirmOrderPaid({
+        paymentIntentId: 'pi_1',
+      });
+
+      expect(result.outcome).toBe('paid');
+      expect(prismaMock.auction.findMany).not.toHaveBeenCalled();
+      expect(result.cancelledAuctionIds).toEqual([]);
+    });
   });
 
   describe('createAuctionOrder (tarea 09)', () => {
-    it('crea un pedido PENDING con la puja como precio, sin reserva de stock', async () => {
+    it('crea un pedido PENDING con la puja como precio y reserva el artículo', async () => {
       prismaMock.auction.findUnique.mockResolvedValue({
         itemType: 'PRODUCT',
         itemId: 'p1',
@@ -325,10 +423,12 @@ describe('OrdersService', () => {
       prismaMock.order.updateMany.mockResolvedValue({ count: 0 });
       prismaMock.order.create.mockResolvedValue({ id: 'order-new' });
 
+      const dueAt = new Date(Date.now() + 48 * 3600_000);
       const result = await service.createAuctionOrder(prismaMock as never, {
         userId: 'winner-1',
         auctionId: 'a1',
         amountCents: 5000,
+        paymentDueAt: dueAt,
       });
 
       expect(result).toEqual({ id: 'order-new' });
@@ -337,14 +437,25 @@ describe('OrdersService', () => {
           [{ data: Record<string, unknown> }]
         >
       )[0][0];
-      // Pedido con auctionId, precio = puja, una línea cantidad 1 y SIN reservations.
+      // Pedido con auctionId, precio = puja y una línea cantidad 1.
       expect(createArg.data).toMatchObject({
         userId: 'winner-1',
         auctionId: 'a1',
         status: 'PENDING',
         totalCents: 5000,
       });
-      expect(createArg.data).not.toHaveProperty('reservations');
+      // Tarea 15: reserva el artículo hasta que venza el plazo de pago del ganador,
+      // para que la venta directa no pueda llevárselo mientras paga. La caducidad es
+      // su paymentDueAt (48 h), NO el TTL de 15 min de la venta directa.
+      const reservation = (
+        createArg.data.reservations as { create: Record<string, unknown> }
+      ).create;
+      expect(reservation).toMatchObject({
+        itemType: 'PRODUCT',
+        itemId: 'p1',
+        quantity: 1,
+        expiresAt: dueAt,
+      });
       const line = (createArg.data.lines as { create: Record<string, unknown> })
         .create;
       expect(line).toMatchObject({
@@ -363,6 +474,7 @@ describe('OrdersService', () => {
         itemId: 'l1',
       });
       prismaMock.lot.findUnique.mockResolvedValue({ name: 'Lote 12' });
+      prismaMock.order.findMany.mockResolvedValue([{ id: 'order-moroso' }]);
       prismaMock.order.updateMany.mockResolvedValue({ count: 1 });
       prismaMock.order.create.mockResolvedValue({ id: 'order-2' });
 
@@ -370,12 +482,19 @@ describe('OrdersService', () => {
         userId: 'user-2',
         auctionId: 'a1',
         amountCents: 4000,
+        paymentDueAt: new Date(Date.now() + 48 * 3600_000),
       });
 
       // Antes de crear el nuevo, cancela cualquier PENDING de esa subasta (el moroso).
       expect(prismaMock.order.updateMany).toHaveBeenCalledWith({
-        where: { auctionId: 'a1', status: 'PENDING' },
+        where: { id: { in: ['order-moroso'] } },
         data: { status: 'CANCELLED' },
+      });
+      // Y BORRA su reserva (tarea 15): liveReservedQuantity cuenta por expiresAt sin
+      // mirar el estado del pedido, así que una reserva huérfana bloquearía el stock
+      // 48 h aunque su pedido esté cancelado.
+      expect(prismaMock.stockReservation.deleteMany).toHaveBeenCalledWith({
+        where: { orderId: { in: ['order-moroso'] } },
       });
     });
   });

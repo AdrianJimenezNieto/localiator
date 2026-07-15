@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { OrdersModule } from '../orders/orders.module';
+import { AuctionsModule } from '../auctions/auctions.module';
 import { InvoicingModule } from '../invoicing/invoicing.module';
 import { MailModule } from '../mail/mail.module';
 import { PaymentsController } from './payments.controller';
@@ -13,7 +14,10 @@ import { stripeProvider } from './stripe.provider';
 // el webhook que confirma el cobro. Importa OrdersModule para reutilizar
 // OrdersService (validación y enlace pedido ↔ PaymentIntent).
 @Module({
-  imports: [OrdersModule, InvoicingModule, MailModule],
+  // AuctionsModule: el webhook avisa a los pujadores si el cobro canceló una
+  // subasta por agotarse el artículo (tarea 15). No hay ciclo: AuctionsModule
+  // importa OrdersModule, y a PaymentsModule no lo importa nadie.
+  imports: [OrdersModule, InvoicingModule, MailModule, AuctionsModule],
   controllers: [
     PaymentsController,
     WebhookController,

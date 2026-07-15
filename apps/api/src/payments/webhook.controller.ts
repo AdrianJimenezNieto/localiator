@@ -18,6 +18,7 @@ import { Public } from '../auth/public.decorator';
 import { OrdersService } from '../orders/orders.service';
 import { InvoicingService } from '../invoicing/invoicing.service';
 import { OrderMailService } from '../mail/order-mail.service';
+import { AuctionsService } from '../auctions/auctions.service';
 import { STRIPE_CLIENT, type StripeClient } from './stripe.provider';
 
 // Webhook de Stripe: FUENTE DE VERDAD del pago. El usuario puede cerrar la
@@ -37,6 +38,11 @@ export class WebhookController {
     private readonly orders: OrdersService,
     private readonly invoicing: InvoicingService,
     private readonly orderMail: OrderMailService,
+    // Aviso a los pujadores si el cobro canceló una subasta por falta de stock
+    // (tarea 15). OrdersService hace la cancelación en su transacción pero no puede
+    // avisar (sería un ciclo de módulos), así que el aviso se orquesta aquí, donde
+    // ya se disparan los demás efectos secundarios del cobro.
+    private readonly auctions: AuctionsService,
     private readonly config: ConfigService,
   ) {}
 
@@ -131,6 +137,14 @@ export class WebhookController {
           }
           // Email de confirmación: tolerante a fallos (no revierte el pedido).
           await this.orderMail.sendOrderConfirmation(result.orderId);
+        }
+        // Esta venta directa agotó el artículo de una subasta viva: ya se canceló
+        // en la transacción del cobro; aquí se avisa a quienes pujaban (tarea 15).
+        for (const auctionId of result.cancelledAuctionIds ?? []) {
+          this.logger.log(
+            `Subasta ${auctionId} cancelada: el artículo se agotó en una venta directa`,
+          );
+          await this.auctions.notifyAuctionCancelled(auctionId);
         }
         break;
       case 'already_paid':
