@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { AuctionStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { slugify } from '../catalog/slug.util';
 
@@ -43,26 +44,38 @@ export class SeoService {
     );
   }
 
-  // Genera el sitemap con SOLO contenido público: la home y las fichas de
-  // productos/lotes vendibles (stock > 0, mismo criterio de visibilidad que el
-  // catálogo). Se construye desde la BD para que refleje el catálogo real sin
-  // recompilar.
+  // Genera el sitemap con SOLO contenido público: la home, el listado de subastas
+  // y las fichas de productos/lotes vendibles (stock > 0, mismo criterio de
+  // visibilidad que el catálogo). Se construye desde la BD para que refleje el
+  // catálogo real sin recompilar.
   async buildSitemap(): Promise<string> {
     const base = this.webBase();
     const select = { id: true, name: true, updatedAt: true } as const;
     const where = { stock: { gt: 0 } };
 
-    const [products, lots] = await this.prisma.$transaction([
+    const [products, lots, auctions] = await this.prisma.$transaction([
       this.prisma.product.findMany({ where, select }),
       this.prisma.lot.findMany({ where, select }),
+      // Subastas indexables: las que se pueden pujar o se van a poder. Las cerradas
+      // se quedan fuera para no llenar el sitemap de páginas sin acción posible
+      // (mismo criterio que el default del listado público, tarea 12).
+      this.prisma.auction.findMany({
+        where: {
+          status: { in: [AuctionStatus.LIVE, AuctionStatus.SCHEDULED] },
+        },
+        select: { id: true, updatedAt: true },
+      }),
     ]);
 
-    const urls: string[] = [urlEntry(base, '/')];
+    const urls: string[] = [urlEntry(base, '/'), urlEntry(base, '/subastas')];
     for (const p of products) {
       urls.push(urlEntry(base, itemPath('product', p.id, p.name), p.updatedAt));
     }
     for (const l of lots) {
       urls.push(urlEntry(base, itemPath('lot', l.id, l.name), l.updatedAt));
+    }
+    for (const a of auctions) {
+      urls.push(urlEntry(base, `/subastas/${a.id}`, a.updatedAt));
     }
 
     return (

@@ -1,6 +1,14 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { itemPath, type CatalogDetail, type ItemKind } from '@localiator/shared';
+import {
+  AuctionStatus,
+  itemPath,
+  type AuctionListItem,
+  type CatalogDetail,
+  type ItemKind,
+  type Paginated,
+} from '@localiator/shared';
+import { toQuery } from '../lib/api';
 import { useApi } from '../lib/useApi';
 import { useCart } from '../lib/cart';
 import { useSeo } from '../lib/useSeo';
@@ -98,6 +106,11 @@ export function DetailPage({ kind }: { kind: ItemKind }) {
             )}
           </div>
 
+          {/* Si este artículo está subastándose, hay que decirlo: comprarlo aquí y
+              pujar por él son dos caminos distintos y quien mira la ficha debe
+              poder elegir. */}
+          <AuctionNotice kind={data.kind} id={data.id} />
+
           <p className="whitespace-pre-line text-neutral-700">{data.description}</p>
 
           {/* El estado y los desperfectos descritos arriba forman parte de lo
@@ -169,6 +182,38 @@ function AddToCart({
     >
       {added ? '✓ Añadido al carrito' : 'Añadir al carrito'}
     </button>
+  );
+}
+
+// Aviso de "este artículo está en subasta", con enlace a ella. Reutiliza el listado
+// público filtrando por artículo (tarea 12) en vez de que CatalogDetail traiga datos
+// de subasta, que acoplaría el catálogo a las pujas.
+//
+// Si la petición falla o no hay subasta, no pinta nada: es información
+// complementaria y no debe romper la ficha ni meter ruido.
+function AuctionNotice({ kind, id }: { kind: ItemKind; id: string }) {
+  const itemType = kind === 'lot' ? 'LOT' : 'PRODUCT';
+  const { data } = useApi<Paginated<AuctionListItem>>(
+    `/auctions${toQuery({ itemType, itemId: id, pageSize: 1 })}`,
+  );
+
+  const auction = data?.items[0];
+  if (!auction) return null;
+
+  const live = auction.status === AuctionStatus.LIVE;
+  return (
+    <Link
+      to={`/subastas/${auction.id}`}
+      className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 hover:bg-amber-100"
+    >
+      <span className="font-medium">
+        {live ? '● Este artículo está en subasta' : 'Este artículo saldrá a subasta'}
+      </span>
+      <br />
+      {live
+        ? `Puja actual: ${formatPrice(auction.currentPriceCents)}. Pujar →`
+        : `Salida: ${formatPrice(auction.startingPriceCents)}. Ver subasta →`}
+    </Link>
   );
 }
 
