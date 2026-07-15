@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { AuctionsController } from './auctions.controller';
+import { AuctionsAdminController } from './auctions.admin.controller';
 import { AuctionsService } from './auctions.service';
 import { AuctionsGateway } from './auctions.gateway';
 import { AuctionsLifecycleService } from './auctions.lifecycle.service';
@@ -30,7 +31,7 @@ import { OrdersModule } from '../orders/orders.module';
     // del ganador y que pague por el flujo Stripe existente.
     OrdersModule,
   ],
-  controllers: [AuctionsController],
+  controllers: [AuctionsController, AuctionsAdminController],
   providers: [AuctionsService, AuctionsGateway, AuctionsLifecycleService],
   exports: [AuctionsService],
 })

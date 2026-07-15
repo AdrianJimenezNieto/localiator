@@ -1,11 +1,16 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { AuctionStatus } from '@prisma/client';
-import { AuctionsService, BidRejectReason } from './auctions.service';
+import {
+  AuctionAdminReason,
+  AuctionsService,
+  BidRejectReason,
+} from './auctions.service';
 import { AuctionsGateway } from './auctions.gateway';
 import { AuctionMailService } from '../mail/auction-mail.service';
 import { OrdersService } from '../orders/orders.service';
@@ -15,10 +20,16 @@ const prismaMock = {
   user: { findUnique: jest.fn(), updateMany: jest.fn() },
   auction: {
     findUnique: jest.fn(),
+    findFirst: jest.fn(),
     findMany: jest.fn(),
+    create: jest.fn(),
     update: jest.fn(),
     updateMany: jest.fn(),
   },
+  // Gestión de admin (tarea 11): el alta comprueba a mano que el Product/Lot del
+  // itemId existe, porque el polimórfico no tiene FK que lo garantice.
+  product: { findUnique: jest.fn(), findMany: jest.fn() },
+  lot: { findUnique: jest.fn(), findMany: jest.fn() },
   bid: {
     findFirst: jest.fn(),
     create: jest.fn(),
@@ -350,6 +361,194 @@ describe('AuctionsService', () => {
     // El update del antisniping también pone endingSoonNotifiedAt a null (reevaluar).
     expect(updateCalls[0][0].data).toMatchObject({
       endingSoonNotifiedAt: null,
+    });
+  });
+
+  // Gestión de admin (tarea 11). El interés está en las validaciones: sin ellas se
+  // podría subastar un artículo inexistente (el itemType/itemId es polimórfico y no
+  // hay FK que lo impida) o cambiar las reglas con pujas ya puestas.
+  describe('gestión de admin', () => {
+    const validDto = {
+      itemType: 'PRODUCT' as const,
+      itemId: 'product-1',
+      startingPriceCents: 4500,
+      minIncrementCents: 500,
+      startsAt: new Date(now + 60 * 60 * 1000).toISOString(),
+      endsAt: new Date(now + 2 * 60 * 60 * 1000).toISOString(),
+    };
+
+    beforeEach(() => {
+      // Por defecto: el artículo existe y no hay ninguna subasta viva sobre él.
+      prismaMock.product.findUnique.mockResolvedValue({ id: 'product-1' });
+      prismaMock.lot.findUnique.mockResolvedValue(null);
+      prismaMock.auction.findFirst.mockResolvedValue(null);
+      prismaMock.auction.create.mockImplementation(({ data }) =>
+        Promise.resolve({ id: 'auction-new', ...data }),
+      );
+    });
+
+    describe('createAuction', () => {
+      // Nace SCHEDULED aunque su startsAt ya haya pasado: abrirla es competencia
+      // del cron (tarea 10), para que un solo sitio decida cuándo está viva.
+      it('crea la subasta programada y deja que el cron la abra', async () => {
+        const created = await service.createAuction(validDto);
+
+        expect(created).toMatchObject({ status: AuctionStatus.SCHEDULED });
+      });
+
+      it('rechaza subastar un artículo que no existe', async () => {
+        prismaMock.product.findUnique.mockResolvedValue(null);
+
+        await expect(service.createAuction(validDto)).rejects.toBeInstanceOf(
+          BadRequestException,
+        );
+        expect(prismaMock.auction.create).not.toHaveBeenCalled();
+      });
+
+      it('rechaza un artículo que ya tiene una subasta viva', async () => {
+        prismaMock.auction.findFirst.mockResolvedValue({ id: 'auction-old' });
+
+        await expect(service.createAuction(validDto)).rejects.toMatchObject({
+          response: { code: AuctionAdminReason.AUCTION_ALREADY_ACTIVE },
+        });
+      });
+
+      it('rechaza una ventana que cierra antes de empezar', async () => {
+        await expect(
+          service.createAuction({
+            ...validDto,
+            startsAt: new Date(now + 2 * 60 * 60 * 1000).toISOString(),
+            endsAt: new Date(now + 60 * 60 * 1000).toISOString(),
+          }),
+        ).rejects.toMatchObject({
+          response: { code: AuctionAdminReason.INVALID_DATES },
+        });
+      });
+
+      it('rechaza una subasta que nace ya vencida', async () => {
+        await expect(
+          service.createAuction({
+            ...validDto,
+            startsAt: new Date(now - 2 * 60 * 60 * 1000).toISOString(),
+            endsAt: new Date(now - 60 * 60 * 1000).toISOString(),
+          }),
+        ).rejects.toMatchObject({
+          response: { code: AuctionAdminReason.INVALID_DATES },
+        });
+      });
+    });
+
+    describe('updateAuction', () => {
+      it('permite editarlo todo mientras está programada y sin pujas', async () => {
+        prismaMock.auction.findUnique.mockResolvedValue({
+          ...liveAuction,
+          status: AuctionStatus.SCHEDULED,
+        });
+        prismaMock.bid.findFirst.mockResolvedValue(null);
+        prismaMock.auction.update.mockResolvedValue({});
+
+        await service.updateAuction('auction-1', {
+          startingPriceCents: 9900,
+        });
+
+        const [call] = prismaMock.auction.update.mock.calls as Array<
+          [{ data: Record<string, unknown> }]
+        >;
+        expect(call[0].data).toMatchObject({ startingPriceCents: 9900 });
+      });
+
+      // La regla interesante: con pujas puestas, cambiar el precio de salida o el
+      // incremento invalidaría pujas hechas bajo las reglas viejas.
+      it('congela las reglas de una subasta en curso con pujas', async () => {
+        prismaMock.auction.findUnique.mockResolvedValue(liveAuction);
+        prismaMock.bid.findFirst.mockResolvedValue({
+          id: 'bid-1',
+          userId: 'user-1',
+          amountCents: 5000,
+        });
+
+        await expect(
+          service.updateAuction('auction-1', { startingPriceCents: 9900 }),
+        ).rejects.toMatchObject({
+          response: { code: AuctionAdminReason.AUCTION_HAS_BIDS },
+        });
+      });
+
+      it('deja alargar el cierre de una subasta con pujas, pero no acortarlo', async () => {
+        prismaMock.auction.findUnique.mockResolvedValue(liveAuction);
+        prismaMock.bid.findFirst.mockResolvedValue({
+          id: 'bid-1',
+          userId: 'user-1',
+          amountCents: 5000,
+        });
+        prismaMock.auction.update.mockResolvedValue({});
+
+        // Acortar: sería un sniping legal del propio admin.
+        await expect(
+          service.updateAuction('auction-1', {
+            endsAt: new Date(now + 10 * 60 * 1000).toISOString(),
+          }),
+        ).rejects.toMatchObject({
+          response: { code: AuctionAdminReason.AUCTION_HAS_BIDS },
+        });
+
+        // Alargar: no perjudica a nadie que ya pujó.
+        const longer = new Date(now + 3 * 60 * 60 * 1000);
+        await service.updateAuction('auction-1', {
+          endsAt: longer.toISOString(),
+        });
+        // Los relojes del front deben enterarse del nuevo cierre.
+        expect(gatewayMock.broadcastExtended).toHaveBeenCalledWith(
+          'auction-1',
+          longer,
+        );
+      });
+
+      it('no deja editar una subasta ya cerrada', async () => {
+        prismaMock.auction.findUnique.mockResolvedValue({
+          ...liveAuction,
+          status: AuctionStatus.CLOSED,
+        });
+
+        await expect(
+          service.updateAuction('auction-1', { minIncrementCents: 100 }),
+        ).rejects.toMatchObject({
+          response: { code: AuctionAdminReason.INVALID_TRANSITION },
+        });
+      });
+    });
+
+    describe('cancelAuction', () => {
+      it('cancela una subasta en curso y avisa a la room', async () => {
+        prismaMock.auction.findUnique.mockResolvedValue({
+          status: AuctionStatus.LIVE,
+        });
+        prismaMock.auction.update.mockResolvedValue({});
+
+        await service.cancelAuction('auction-1');
+
+        const [call] = prismaMock.auction.update.mock.calls as Array<
+          [{ data: Record<string, unknown> }]
+        >;
+        expect(call[0].data).toEqual({ status: AuctionStatus.CANCELLED });
+        // Puede haber gente con pujas puestas mirando la ficha.
+        expect(gatewayMock.broadcastClosed).toHaveBeenCalledWith('auction-1', {
+          winnerMasked: null,
+          amountCents: null,
+        });
+      });
+
+      // Cancelar a mano una CLOSED se saltaría el flujo de impago (tarea 07), que
+      // banea y ofrece segunda oportunidad, y dejaría huérfano el pedido del ganador.
+      it('no cancela una subasta ya cerrada con ganador', async () => {
+        prismaMock.auction.findUnique.mockResolvedValue({
+          status: AuctionStatus.CLOSED,
+        });
+
+        await expect(service.cancelAuction('auction-1')).rejects.toMatchObject({
+          response: { code: AuctionAdminReason.INVALID_TRANSITION },
+        });
+      });
     });
   });
 
