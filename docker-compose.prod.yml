@@ -74,6 +74,8 @@ services:
         # URL pública de la API (se inyecta en el build de Vite). Debe apuntar al
         # dominio real de la API en producción (https://api.localiator.com).
         VITE_API_URL: ${VITE_API_URL}
+        # Sitekey de Cloudflare Turnstile (build-arg de Vite). Vacío = sin widget.
+        VITE_TURNSTILE_SITE_KEY: ${VITE_TURNSTILE_SITE_KEY}
     container_name: localiator-web
     restart: unless-stopped
     depends_on:

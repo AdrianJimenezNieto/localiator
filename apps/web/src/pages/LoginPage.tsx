@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { TurnstileWidget } from '../components/TurnstileWidget';
 
 // Login de COMPRADOR. Igual que el de admin pero vuelve a donde el usuario quería
 // ir (?redirect=…), para no perder el checkout tras iniciar sesión. El carrito
@@ -16,18 +17,23 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Token del CAPTCHA: null bloquea el envío; '' en dev sin sitekey. resetKey
+  // fuerza un nuevo CAPTCHA tras un fallo (el token es de un solo uso).
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileReset, setTurnstileReset] = useState(0);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
     try {
-      await login(email, password);
+      await login(email, password, turnstileToken);
       navigate(redirect, { replace: true });
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : 'No se pudo iniciar sesión',
       );
+      setTurnstileReset((n) => n + 1);
     } finally {
       setSubmitting(false);
     }
@@ -64,6 +70,11 @@ export function LoginPage() {
           />
         </div>
 
+        <TurnstileWidget
+          onVerify={setTurnstileToken}
+          resetKey={turnstileReset}
+        />
+
         {error && (
           <p className="rounded-md bg-red-50 p-3 text-sm text-red-700" role="alert">
             {error}
@@ -72,7 +83,7 @@ export function LoginPage() {
 
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || turnstileToken === null}
           className="min-h-11 rounded-md bg-neutral-900 px-4 py-2 font-medium text-white disabled:opacity-50"
         >
           {submitting ? 'Entrando…' : 'Entrar'}

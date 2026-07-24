@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { TurnstileWidget } from '../components/TurnstileWidget';
 
 // Registro de COMPRADOR. Tras registrarse NO se inicia sesión: el backend envía
 // un email de verificación y hasta verificar no se puede comprar (política de la
@@ -13,19 +14,32 @@ export function RegisterPage() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  // Token del CAPTCHA: null mientras no esté resuelto (bloquea el envío); '' en
+  // dev sin sitekey (no bloquea). resetKey fuerza un nuevo CAPTCHA tras un fallo.
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileReset, setTurnstileReset] = useState(0);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    // Coincidencia de contraseñas: solo en el frontend (evita erratas); el backend
+    // no necesita el campo de confirmación.
+    if (password !== confirmPassword) {
+      setError('Las contraseñas no coinciden');
+      return;
+    }
     setSubmitting(true);
     try {
-      await register(email, password);
+      await register(email, password, turnstileToken);
       setDone(true);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo registrar');
+      // El token de Turnstile es de un solo uso: tras un fallo, pide otro.
+      setTurnstileReset((n) => n + 1);
     } finally {
       setSubmitting(false);
     }
@@ -79,9 +93,31 @@ export function RegisterPage() {
             className="w-full rounded-md border border-neutral-300 px-3 py-2 focus:border-neutral-900 focus:outline-none"
           />
           <p className="mt-1 text-xs text-neutral-500">
-            Mínimo 8 caracteres, con mayúscula, minúscula y número.
+            Mínimo 10 caracteres, con al menos una letra, un número y un carácter
+            especial.
           </p>
         </div>
+        <div>
+          <label
+            htmlFor="confirmPassword"
+            className="mb-1 block text-sm font-medium"
+          >
+            Repetir contraseña
+          </label>
+          <input
+            id="confirmPassword"
+            type="password"
+            required
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            className="w-full rounded-md border border-neutral-300 px-3 py-2 focus:border-neutral-900 focus:outline-none"
+          />
+        </div>
+
+        <TurnstileWidget
+          onVerify={setTurnstileToken}
+          resetKey={turnstileReset}
+        />
 
         {error && (
           <p className="rounded-md bg-red-50 p-3 text-sm text-red-700" role="alert">
@@ -91,7 +127,7 @@ export function RegisterPage() {
 
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || turnstileToken === null}
           className="min-h-11 rounded-md bg-neutral-900 px-4 py-2 font-medium text-white disabled:opacity-50"
         >
           {submitting ? 'Creando…' : 'Crear cuenta'}

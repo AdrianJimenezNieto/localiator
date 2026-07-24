@@ -6,6 +6,15 @@ packages:
 # a la parcheada en toda la resolución. Revisar/retirar cuando Nest actualice.
 overrides:
   multer: "^2.2.0"
+  # brace-expansion (GHSA DoS por expansión de {} en tiempo exponencial): jest y
+  # eslint arrastran versiones vulnerables en ambas líneas (1.x <1.1.16 y 2.x
+  # <2.1.2). Forzamos la parcheada de cada línea por separado para no romper a los
+  # consumidores que esperan la API de la 1.x. Revisar/retirar cuando actualicen.
+  "brace-expansion@1": "^1.1.16"
+  "brace-expansion@2": "^2.1.2"
+  # fast-uri (host confusion vía URL literal): dependencia transitiva; subimos a la
+  # parcheada. Revisar/retirar cuando el árbol la actualice.
+  fast-uri: "^3.1.4"
 allowBuilds:
   '@prisma/client': true
   '@prisma/engines': true
