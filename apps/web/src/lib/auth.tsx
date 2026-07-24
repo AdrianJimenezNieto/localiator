@@ -21,8 +21,16 @@ interface AuthContextValue {
   // parpadeos y redirecciones antes de saber si hay sesión.
   ready: boolean;
   isAdmin: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
+  login: (
+    email: string,
+    password: string,
+    turnstileToken?: string | null,
+  ) => Promise<void>;
+  register: (
+    email: string,
+    password: string,
+    turnstileToken?: string | null,
+  ) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -61,14 +69,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  async function login(email: string, password: string) {
-    // `website: ''` es el honeypot vacío que espera el AntiBotGuard. En dev sin
-    // TURNSTILE_SECRET_KEY el CAPTCHA no bloquea; en producción habría que añadir
-    // el widget de Turnstile (pendiente del frontend de auth de Fase 1).
+  async function login(
+    email: string,
+    password: string,
+    turnstileToken?: string | null,
+  ) {
+    // `website: ''` es el honeypot vacío que espera el AntiBotGuard; el
+    // `turnstileToken` lo produce el widget de Turnstile (vacío/undefined en dev,
+    // donde el backend no lo exige).
     const { accessToken } = await apiSend<{ accessToken: string }>(
       'POST',
       '/auth/login',
-      { email, password, website: '' },
+      { email, password, website: '', turnstileToken: turnstileToken || undefined },
     );
     const me = await apiGet<AuthUser>('/auth/me', accessToken);
     setToken(accessToken);
@@ -78,8 +90,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Registro de comprador. NO inicia sesión: el backend crea la cuenta y envía el
   // email de verificación; hasta verificar no se puede comprar (política de la
   // Fase 3). `website: ''` es el honeypot vacío que espera el AntiBotGuard.
-  async function register(email: string, password: string) {
-    await apiSend('POST', '/auth/register', { email, password, website: '' });
+  async function register(
+    email: string,
+    password: string,
+    turnstileToken?: string | null,
+  ) {
+    await apiSend('POST', '/auth/register', {
+      email,
+      password,
+      website: '',
+      turnstileToken: turnstileToken || undefined,
+    });
   }
 
   async function logout() {

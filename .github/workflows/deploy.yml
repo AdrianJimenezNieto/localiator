@@ -68,6 +68,7 @@ jobs:
           push: true
           build-args: |
             VITE_API_URL=${{ vars.VITE_API_URL }}
+            VITE_TURNSTILE_SITE_KEY=${{ vars.VITE_TURNSTILE_SITE_KEY }}
           tags: |
             ${{ env.IMAGE_PREFIX }}/localiator-web:${{ steps.vars.outputs.sha }}
             ${{ env.IMAGE_PREFIX }}/localiator-web:latest

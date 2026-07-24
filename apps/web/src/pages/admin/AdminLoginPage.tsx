@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ApiError } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { TurnstileWidget } from '../../components/TurnstileWidget';
 
 export function AdminLoginPage() {
   const { login, isAdmin, ready } = useAuth();
@@ -10,6 +11,10 @@ export function AdminLoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Token del CAPTCHA: null bloquea el envío; '' en dev sin sitekey. resetKey
+  // fuerza un nuevo CAPTCHA tras un fallo (el token es de un solo uso).
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileReset, setTurnstileReset] = useState(0);
 
   // Si ya hay un admin logueado, no tiene sentido el login: al panel.
   if (ready && isAdmin) {
@@ -21,12 +26,13 @@ export function AdminLoginPage() {
     setError(null);
     setSubmitting(true);
     try {
-      await login(email, password);
+      await login(email, password, turnstileToken);
       navigate('/admin/productos', { replace: true });
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : 'No se pudo iniciar sesión',
       );
+      setTurnstileReset((n) => n + 1);
     } finally {
       setSubmitting(false);
     }
@@ -63,6 +69,11 @@ export function AdminLoginPage() {
           />
         </div>
 
+        <TurnstileWidget
+          onVerify={setTurnstileToken}
+          resetKey={turnstileReset}
+        />
+
         {error && (
           <p className="rounded-md bg-red-50 p-3 text-sm text-red-700" role="alert">
             {error}
@@ -71,7 +82,7 @@ export function AdminLoginPage() {
 
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || turnstileToken === null}
           className="min-h-11 rounded-md bg-neutral-900 px-4 py-2 font-medium text-white disabled:opacity-50"
         >
           {submitting ? 'Entrando…' : 'Entrar'}
