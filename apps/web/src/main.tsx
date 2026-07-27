@@ -23,6 +23,10 @@ import { TermsPage } from './pages/TermsPage.tsx'
 import { CookiesPage } from './pages/CookiesPage.tsx'
 import { PrivacyPage } from './pages/PrivacyPage.tsx'
 import { AccountPage } from './pages/AccountPage.tsx'
+import { VerifyEmailPage } from './pages/VerifyEmailPage.tsx'
+import { ResendVerificationPage } from './pages/ResendVerificationPage.tsx'
+import { NotFoundPage } from './pages/NotFoundPage.tsx'
+import { ErrorPage } from './pages/ErrorPage.tsx'
 import { OrdersAdminPage } from './pages/admin/OrdersAdminPage.tsx'
 import { AdminLoginPage } from './pages/admin/AdminLoginPage.tsx'
 import { ProtectedAdmin } from './pages/admin/ProtectedAdmin.tsx'
@@ -37,6 +41,9 @@ const router = createBrowserRouter([
   {
     path: '/',
     element: <App />,
+    // errorElement: pantalla genérica de error (equivalente al 500 del servidor)
+    // si algo revienta al renderizar cualquier ruta hija.
+    errorElement: <ErrorPage />,
     children: [
       { index: true, element: <CatalogPage /> },
       { path: 'productos/:id', element: <DetailPage kind="product" /> },
@@ -55,6 +62,10 @@ const router = createBrowserRouter([
       { path: 'cookies', element: <CookiesPage /> },
       { path: 'privacidad', element: <PrivacyPage /> },
       { path: 'cuenta', element: <AccountPage /> },
+      { path: 'verificar-email', element: <VerifyEmailPage /> },
+      { path: 'reenviar-verificacion', element: <ResendVerificationPage /> },
+      // Comodín: cualquier URL no reconocida cae en el 404 (dentro del layout).
+      { path: '*', element: <NotFoundPage /> },
     ],
   },
   { path: '/admin/login', element: <AdminLoginPage /> },

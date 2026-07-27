@@ -1,4 +1,8 @@
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { VerificationTokenType } from '@prisma/client';
 import { AuthService } from './auth.service';
@@ -157,6 +161,80 @@ describe('AuthService', () => {
       await expect(
         service.login({ email: 'a@b.com', password: 'whatever12' }),
       ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+
+    it('permite login sin verificar dentro del día de gracia', async () => {
+      prismaMock.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        email: 'a@b.com',
+        passwordHash: 'stored',
+        role: 'BUYER',
+        emailVerifiedAt: null,
+        createdAt: new Date(Date.now() - 60 * 60 * 1000), // hace 1 h
+      });
+      passwordMock.verify.mockResolvedValue(true);
+
+      const res = await service.login({
+        email: 'a@b.com',
+        password: 'password123',
+      });
+
+      expect(res.emailVerified).toBe(false);
+    });
+
+    it('bloquea el login sin verificar pasado el día de gracia', async () => {
+      prismaMock.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        email: 'a@b.com',
+        passwordHash: 'stored',
+        role: 'BUYER',
+        emailVerifiedAt: null,
+        createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // hace 2 días
+      });
+      passwordMock.verify.mockResolvedValue(true);
+
+      await expect(
+        service.login({ email: 'a@b.com', password: 'password123' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+  });
+
+  describe('resendVerification', () => {
+    it('emite un nuevo token si la cuenta existe y no está verificada', async () => {
+      prismaMock.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        email: 'a@b.com',
+        emailVerifiedAt: null,
+      });
+      prismaMock.verificationToken.create.mockResolvedValue({});
+
+      const res = await service.resendVerification('A@B.com');
+
+      expect(prismaMock.verificationToken.create).toHaveBeenCalledTimes(1);
+      expect(mailMock.sendEmailVerification).toHaveBeenCalledTimes(1);
+      expect(res.message).toContain('Si tu cuenta');
+    });
+
+    it('no envía nada si la cuenta ya está verificada (respuesta neutra)', async () => {
+      prismaMock.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        email: 'a@b.com',
+        emailVerifiedAt: new Date(),
+      });
+
+      const res = await service.resendVerification('a@b.com');
+
+      expect(mailMock.sendEmailVerification).not.toHaveBeenCalled();
+      expect(res.message).toContain('Si tu cuenta');
+    });
+
+    it('no envía nada si la cuenta no existe (respuesta neutra, anti-enumeración)', async () => {
+      prismaMock.user.findUnique.mockResolvedValue(null);
+
+      const res = await service.resendVerification('nope@b.com');
+
+      expect(mailMock.sendEmailVerification).not.toHaveBeenCalled();
+      expect(res.message).toContain('Si tu cuenta');
     });
   });
 
