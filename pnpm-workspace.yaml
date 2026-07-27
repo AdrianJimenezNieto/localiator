@@ -6,15 +6,38 @@ packages:
 # a la parcheada en toda la resolución. Revisar/retirar cuando Nest actualice.
 overrides:
   multer: "^2.2.0"
-  # brace-expansion (GHSA DoS por expansión de {} en tiempo exponencial): jest y
-  # eslint arrastran versiones vulnerables en ambas líneas (1.x <1.1.16 y 2.x
-  # <2.1.2). Forzamos la parcheada de cada línea por separado para no romper a los
-  # consumidores que esperan la API de la 1.x. Revisar/retirar cuando actualicen.
+  # brace-expansion (DoS, GHSA-mh99-v99m-4gvg / CVE-2025-5889): fijamos cada línea a
+  # su release parcheada. NO se puede unificar a 5.x: su export dejó de ser una
+  # función CommonJS y rompe a minimatch@3 (`require('brace-expansion')()`).
   "brace-expansion@1": "^1.1.16"
   "brace-expansion@2": "^2.1.2"
+  "brace-expansion@5": "^5.0.8"
   # fast-uri (host confusion vía URL literal): dependencia transitiva; subimos a la
   # parcheada. Revisar/retirar cuando el árbol la actualice.
   fast-uri: "^3.1.4"
+  # postcss (GHSA-r28c-9q8g-f849, path traversal en source maps): lo arrastra
+  # vite (@tailwindcss/vite). Parche menor no disruptivo. Retirar cuando vite suba.
+  postcss: "^8.5.18"
+
+# Silenciado JUSTIFICADO de advisories que no aplican a nuestro uso (ver
+# docs/dependencies.md). No se silencia nada sin motivo ni sin fix disponible.
+auditConfig:
+  ignoreGhsas:
+    # react-router GHSA-qwww-vcr4-c8h2: CSRF en RSC Mode (React Server Components).
+    # Localiator es un SPA cliente con createBrowserRouter y NO usa RSC, así que el
+    # vector no existe aquí. Además no hay fix aplicable: el parche está en
+    # react-router >=8.3.0, pero react-router-dom sigue en 7.x (subir el core a 8
+    # con el -dom en 7 rompe). Retirar cuando react-router-dom publique una 8.x.
+    - GHSA-qwww-vcr4-c8h2
+    # brace-expansion GHSA-mh99-v99m-4gvg / CVE-2025-5889 (ReDoS): el único parche
+    # es 5.0.8 (no hay release parcheada en 1.x/2.x) y 5.0.8 rompe minimatch@3, que
+    # espera el export función de CommonJS. Aun así NO aplica a producción:
+    # brace-expansion solo entra por tooling de build (minimatch@3 vía eslint, jest
+    # y tailwind) operando sobre globs de NUESTRO propio código; se ha verificado
+    # con `pnpm why --prod` que no está en ningún árbol de runtime (api, web ni
+    # raíz). Los overrides de arriba ya llevan cada línea a su release más alta.
+    # Retirar cuando el tooling actualice minimatch a una versión compatible con 5.x.
+    - GHSA-mh99-v99m-4gvg
 allowBuilds:
   '@prisma/client': true
   '@prisma/engines': true
