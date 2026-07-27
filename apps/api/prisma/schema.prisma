@@ -26,6 +26,28 @@ model User {
   passwordHash    String? // nullable: un usuario de Google puede no tener contraseña local.
   role            Role      @default(BUYER)
 
+  // Datos personales del comprador. Se piden en el registro local para poder
+  // FACTURAR con el IVA correcto (dirección de facturación) e identificar/contactar
+  // al cliente. Todos NULLABLE en BD a propósito: las cuentas ya existentes y las
+  // creadas por Google (que no pasan por este formulario) no los tienen. La
+  // obligatoriedad real se valida en RegisterDto; aquí el nullable evita romper
+  // esos casos y deja completar el perfil más adelante (p. ej. antes del checkout).
+  // RGPD: son datos personales → se limpian al ejercer el derecho al olvido
+  // (ver UsersService.anonymizeOwnAccount).
+  firstName String?
+  lastName  String?
+  birthDate DateTime? @db.Date // solo fecha (sin hora ni zona); se valida ≥18 años.
+  phone     String? // opcional (lo pidió Adrián como no obligatorio).
+
+  // Dirección de FACTURACIÓN (no de envío: la recogida es en el almacén). Se
+  // guarda desglosada en campos para poder validar y componer la factura.
+  addressLine1 String? // calle y número.
+  addressLine2 String? // piso, puerta, etc. (opcional).
+  postalCode   String?
+  city         String? // localidad.
+  province     String?
+  country      String? @default("ES") // ISO-3166 alpha-2; por defecto España.
+
   // Derecho al olvido (RGPD, Fase 4 tarea 02): no se puede borrar la fila de un
   // usuario con facturas (deber de conservación fiscal), así que se ANONIMIZA:
   // email/contraseña se sustituyen por valores neutros y se marca aquí la fecha.

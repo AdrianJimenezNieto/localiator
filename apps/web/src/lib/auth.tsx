@@ -14,6 +14,24 @@ export interface AuthUser {
   role: string;
 }
 
+// Datos que recoge el formulario de registro. Coinciden con los que valida el
+// RegisterDto del backend (identidad, contacto y dirección de facturación).
+// `phone` y `addressLine2` son opcionales; `birthDate` viaja como 'YYYY-MM-DD'.
+export interface RegisterData {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  birthDate: string;
+  phone?: string;
+  addressLine1: string;
+  addressLine2?: string;
+  postalCode: string;
+  city: string;
+  province: string;
+  country: string;
+}
+
 interface AuthContextValue {
   user: AuthUser | null;
   token: string | null;
@@ -27,8 +45,7 @@ interface AuthContextValue {
     turnstileToken?: string | null,
   ) => Promise<void>;
   register: (
-    email: string,
-    password: string,
+    data: RegisterData,
     turnstileToken?: string | null,
   ) => Promise<void>;
   logout: () => Promise<void>;
@@ -91,13 +108,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // email de verificación; hasta verificar no se puede comprar (política de la
   // Fase 3). `website: ''` es el honeypot vacío que espera el AntiBotGuard.
   async function register(
-    email: string,
-    password: string,
+    data: RegisterData,
     turnstileToken?: string | null,
   ) {
     await apiSend('POST', '/auth/register', {
-      email,
-      password,
+      ...data,
       website: '',
       turnstileToken: turnstileToken || undefined,
     });

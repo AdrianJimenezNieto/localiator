@@ -38,6 +38,19 @@ export class UsersService {
           email: anonymizedEmail,
           passwordHash: null,
           emailVerifiedAt: null,
+          // RGPD: borramos también los datos personales recogidos en el registro
+          // (identidad, contacto y dirección). Las facturas ya emitidas conservan
+          // los datos que la ley obliga a guardar; el perfil del usuario no.
+          firstName: null,
+          lastName: null,
+          birthDate: null,
+          phone: null,
+          addressLine1: null,
+          addressLine2: null,
+          postalCode: null,
+          city: null,
+          province: null,
+          country: null,
           anonymizedAt: new Date(),
         },
       }),

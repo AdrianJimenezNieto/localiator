@@ -98,9 +98,25 @@ export class AuthService {
     const passwordHash = await this.password.hash(dto.password);
     // emailVerifiedAt queda null: la cuenta existe pero no está verificada. Podrá
     // loguear (07) pero no comprar/pujar hasta verificar (política a aplicar en
-    // los flujos de compra de Fase 3).
+    // los flujos de compra de Fase 3). Junto a las credenciales guardamos los
+    // datos personales del registro (identidad, contacto y dirección de
+    // facturación); phone y addressLine2 son opcionales.
     const user = await this.prisma.user.create({
-      data: { email, passwordHash, emailVerifiedAt: null },
+      data: {
+        email,
+        passwordHash,
+        emailVerifiedAt: null,
+        firstName: dto.firstName.trim(),
+        lastName: dto.lastName.trim(),
+        birthDate: new Date(dto.birthDate), // 'YYYY-MM-DD' → Date (campo @db.Date).
+        phone: dto.phone?.trim() || null,
+        addressLine1: dto.addressLine1.trim(),
+        addressLine2: dto.addressLine2?.trim() || null,
+        postalCode: dto.postalCode.trim(),
+        city: dto.city.trim(),
+        province: dto.province.trim(),
+        country: dto.country,
+      },
     });
 
     await this.issueEmailVerification(user.id, email);
