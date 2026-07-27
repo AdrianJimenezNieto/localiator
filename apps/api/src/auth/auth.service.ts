@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   UnauthorizedException,
@@ -30,13 +31,24 @@ export interface AuthenticatedUser {
 const NEUTRAL_REGISTER_MESSAGE =
   'Si el email es válido, te hemos enviado un correo para verificar tu cuenta.';
 
-const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000; // 24 h
+const EMAIL_VERIFICATION_TTL_MS = 2 * 24 * 60 * 60 * 1000; // 2 días
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000; // 1 h (ventana corta: más seguro)
+
+// Periodo de gracia para iniciar sesión SIN verificar el email: 1 día desde el
+// alta. Pasado ese plazo, el login queda bloqueado hasta verificar. Es más corto
+// que el TTL del enlace (2 días) a propósito: entre el día 1 y el 2 el usuario no
+// puede loguear pero el enlace original sigue valiendo; después, pide otro.
+const EMAIL_VERIFICATION_GRACE_MS = 24 * 60 * 60 * 1000; // 1 día
 
 // Igual que en el registro: respuesta única, exista o no la cuenta, para no
 // revelar qué emails están registrados (anti-enumeración).
 const NEUTRAL_FORGOT_MESSAGE =
   'Si el email corresponde a una cuenta, te hemos enviado un enlace para restablecer la contraseña.';
+
+// Respuesta única del reenvío de verificación: la misma exista la cuenta o no, y
+// esté verificada o no, para no filtrar ni la existencia ni el estado de la cuenta.
+const NEUTRAL_RESEND_MESSAGE =
+  'Si tu cuenta existe y aún no está verificada, te hemos enviado un nuevo enlace de verificación.';
 
 // Mensaje ÚNICO ante cualquier fallo de login (email inexistente, contraseña
 // incorrecta, cuenta sin contraseña local): no revelar cuál de los tres falló
@@ -78,10 +90,24 @@ export class AuthService {
       throw new UnauthorizedException(INVALID_CREDENTIALS);
     }
 
-    // Política (decisión de 06): un usuario NO verificado puede iniciar sesión,
-    // pero no podrá comprar/pujar hasta verificar el email. El flag viaja al
-    // cliente para que la UI lo refleje; la restricción real se aplicará en los
-    // endpoints de compra (Fase 3).
+    // Política: un usuario NO verificado puede iniciar sesión durante un periodo
+    // de gracia (1 día desde el alta) para no fastidiar la primera experiencia.
+    // Pasado ese plazo, se bloquea el login hasta verificar el email. Aquí el
+    // usuario YA ha demostrado la contraseña, así que un mensaje específico no
+    // facilita la enumeración de cuentas. El frontend puede ofrecer "reenviar
+    // verificación" ante este error.
+    if (!user.emailVerifiedAt) {
+      const graceExpired =
+        user.createdAt.getTime() + EMAIL_VERIFICATION_GRACE_MS < Date.now();
+      if (graceExpired) {
+        throw new ForbiddenException(
+          'Debes verificar tu email antes de iniciar sesión. Revisa tu correo o solicita un nuevo enlace de verificación.',
+        );
+      }
+    }
+
+    // El flag emailVerified viaja al cliente para que la UI lo refleje; la
+    // restricción de compra/puja se aplica además en los endpoints de compra.
     return this.toAuthenticatedUser(user);
   }
 
@@ -203,6 +229,22 @@ export class AuthService {
     return {
       message: 'Email verificado correctamente. Ya puedes iniciar sesión.',
     };
+  }
+
+  // Reenvía el email de verificación. SIEMPRE responde igual (anti-enumeración):
+  // solo si existe una cuenta sin verificar se emite un nuevo token. Reutiliza
+  // issueEmailVerification, que genera un token nuevo con su TTL de 2 días. No
+  // invalidamos los tokens previos: cada uno es de un solo uso y caduca por su
+  // cuenta, así que basta con que el usuario use el más reciente.
+  async resendVerification(rawEmail: string): Promise<{ message: string }> {
+    const email = rawEmail.toLowerCase().trim();
+    const user = await this.prisma.user.findUnique({ where: { email } });
+
+    if (user && !user.emailVerifiedAt) {
+      await this.issueEmailVerification(user.id, email);
+    }
+
+    return { message: NEUTRAL_RESEND_MESSAGE };
   }
 
   // "Olvidé mi contraseña": SIEMPRE responde igual (exista o no la cuenta). Solo

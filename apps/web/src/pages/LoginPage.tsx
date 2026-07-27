@@ -16,6 +16,9 @@ export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // El backend bloquea con 403 el login de una cuenta sin verificar pasado el día
+  // de gracia; en ese caso ofrecemos el enlace para reenviar la verificación.
+  const [needsVerification, setNeedsVerification] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   // Token del CAPTCHA: null bloquea el envío; '' en dev sin sitekey. resetKey
   // fuerza un nuevo CAPTCHA tras un fallo (el token es de un solo uso).
@@ -25,6 +28,7 @@ export function LoginPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    setNeedsVerification(false);
     setSubmitting(true);
     try {
       await login(email, password, turnstileToken);
@@ -33,6 +37,9 @@ export function LoginPage() {
       setError(
         err instanceof ApiError ? err.message : 'No se pudo iniciar sesión',
       );
+      if (err instanceof ApiError && err.status === 403) {
+        setNeedsVerification(true);
+      }
       setTurnstileReset((n) => n + 1);
     } finally {
       setSubmitting(false);
@@ -76,9 +83,17 @@ export function LoginPage() {
         />
 
         {error && (
-          <p className="rounded-md bg-red-50 p-3 text-sm text-red-700" role="alert">
-            {error}
-          </p>
+          <div className="rounded-md bg-red-50 p-3 text-sm text-red-700" role="alert">
+            <p>{error}</p>
+            {needsVerification && (
+              <Link
+                to="/reenviar-verificacion"
+                className="mt-1 inline-block font-medium underline"
+              >
+                Reenviar email de verificación
+              </Link>
+            )}
+          </div>
         )}
 
         <button

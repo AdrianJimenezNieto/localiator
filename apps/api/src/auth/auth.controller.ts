@@ -22,6 +22,7 @@ import { CurrentUser } from './current-user.decorator';
 import type { RequestUser } from './jwt.strategy';
 import { RegisterDto } from './dto/register.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
+import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -62,6 +63,18 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   verifyEmail(@Body() dto: VerifyEmailDto) {
     return this.authService.verifyEmail(dto.token);
+  }
+
+  // Reenvío del email de verificación (cuando el enlace ha caducado o no llegó).
+  // Respuesta neutra siempre (no revela existencia ni estado de la cuenta); rate
+  // limit estricto porque dispara envío de email (posible vector de spam).
+  @Public()
+  @Throttle(STRICT_THROTTLE)
+  @UseGuards(AntiBotGuard)
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.OK)
+  resendVerification(@Body() dto: ResendVerificationDto) {
+    return this.authService.resendVerification(dto.email);
   }
 
   // Respuesta neutra siempre (no revela si el email existe).

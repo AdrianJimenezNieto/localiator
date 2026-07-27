@@ -28,7 +28,7 @@ export class MailService {
       to,
       'Verifica tu email en Localiator',
       `<p>Bienvenido a Localiator.</p>
-       <p>Confirma tu dirección de email pulsando en el enlace (caduca en 24 h):</p>
+       <p>Confirma tu dirección de email pulsando en el enlace (caduca en 2 días):</p>
        <p><a href="${verifyUrl}">Verificar mi email</a></p>`,
     );
   }

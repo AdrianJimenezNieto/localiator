@@ -129,7 +129,7 @@ model VerificationToken {
   type      VerificationTokenType
   tokenHash String                @unique // SHA-256 del token; se busca por aquí.
 
-  expiresAt DateTime // caducidad corta (email 24 h, reset 1 h).
+  expiresAt DateTime // caducidad corta (email 2 días, reset 1 h).
   usedAt    DateTime? // un solo uso: al verificar se marca y ya no vale.
 
   createdAt DateTime @default(now())
