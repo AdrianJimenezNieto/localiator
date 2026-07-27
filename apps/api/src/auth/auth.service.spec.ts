@@ -53,24 +53,49 @@ describe('AuthService', () => {
   });
 
   describe('register', () => {
-    it('crea usuario no verificado y envía email cuando el email es nuevo', async () => {
+    // Payload de registro válido reutilizable: además de credenciales, los datos
+    // personales que ahora exige el DTO. Los tests lo clonan y ajustan lo que toque.
+    const validRegister = {
+      email: 'A@B.com',
+      password: 'password123',
+      firstName: '  Ada  ',
+      lastName: '  Lovelace  ',
+      birthDate: '1990-05-10',
+      phone: '  600123123  ',
+      addressLine1: '  Calle Mayor 1  ',
+      addressLine2: '',
+      postalCode: '28001',
+      city: '  Madrid  ',
+      province: '  Madrid  ',
+      country: 'ES',
+    };
+
+    it('crea usuario no verificado con sus datos y envía email cuando el email es nuevo', async () => {
       prismaMock.user.findUnique.mockResolvedValue(null);
       passwordMock.hash.mockResolvedValue('hashed');
       prismaMock.user.create.mockResolvedValue({ id: 'u1' });
       prismaMock.verificationToken.create.mockResolvedValue({});
 
-      const res = await service.register({
-        email: 'A@B.com',
-        password: 'password123',
-      });
+      const res = await service.register(validRegister);
 
       expect(passwordMock.hash).toHaveBeenCalledWith('password123');
-      // Email normalizado a minúsculas y sin passwordHash en claro.
+      // Email en minúsculas, datos personales saneados (trim) y campos opcionales
+      // vacíos normalizados a null.
       expect(prismaMock.user.create).toHaveBeenCalledWith({
         data: {
           email: 'a@b.com',
           passwordHash: 'hashed',
           emailVerifiedAt: null,
+          firstName: 'Ada',
+          lastName: 'Lovelace',
+          birthDate: new Date('1990-05-10'),
+          phone: '600123123',
+          addressLine1: 'Calle Mayor 1',
+          addressLine2: null,
+          postalCode: '28001',
+          city: 'Madrid',
+          province: 'Madrid',
+          country: 'ES',
         },
       });
       expect(mailMock.sendEmailVerification).toHaveBeenCalledTimes(1);
@@ -80,10 +105,7 @@ describe('AuthService', () => {
     it('respuesta neutra sin crear ni enviar si el email ya existe (anti-enumeración)', async () => {
       prismaMock.user.findUnique.mockResolvedValue({ id: 'existing' });
 
-      const res = await service.register({
-        email: 'a@b.com',
-        password: 'password123',
-      });
+      const res = await service.register(validRegister);
 
       expect(prismaMock.user.create).not.toHaveBeenCalled();
       expect(mailMock.sendEmailVerification).not.toHaveBeenCalled();
