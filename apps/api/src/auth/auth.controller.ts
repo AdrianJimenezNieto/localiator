@@ -26,6 +26,7 @@ import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 // Nombre de la cookie del refresh token. Path acotado a /auth: la cookie solo se
 // envía a los endpoints de sesión (refresh, logout), no a toda la API → menos
@@ -141,6 +142,31 @@ export class AuthController {
     }
     this.clearRefreshCookie(res);
     return { message: 'Sesión cerrada' };
+  }
+
+  // Cambio de contraseña estando logueado. SIN @Public: el JwtAuthGuard global
+  // exige access token válido. El servicio reautentica con la contraseña actual;
+  // tras el cambio revocamos TODAS las sesiones (por si estaba comprometida) y
+  // re-emitimos una para ESTE dispositivo, para no echar al usuario que hace el
+  // cambio a propósito (decisión 2). Devuelve el nuevo accessToken + set-cookie,
+  // igual que login. Rate limit estricto para frenar el bruteforce de currentPassword.
+  @Throttle(STRICT_THROTTLE)
+  @Post('change-password')
+  @HttpCode(HttpStatus.OK)
+  async changePassword(
+    @CurrentUser() user: RequestUser,
+    @Body() dto: ChangePasswordDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const authUser = await this.authService.changePassword(
+      user.userId,
+      dto.currentPassword,
+      dto.newPassword,
+    );
+    await this.session.revokeAllForUser(authUser.id);
+    const session = await this.session.issue(authUser, this.meta(req));
+    return this.respondWithSession(res, session);
   }
 
   // Ruta protegida: NO lleva @Public, así que el JwtAuthGuard global exige un
