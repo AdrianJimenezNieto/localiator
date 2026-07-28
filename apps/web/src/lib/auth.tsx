@@ -48,6 +48,15 @@ interface AuthContextValue {
     data: RegisterData,
     turnstileToken?: string | null,
   ) => Promise<void>;
+  // Cambio de contraseña estando logueado. Vive en el contexto (y no en la página
+  // con apiSend directo, como el reset por email) PRECISAMENTE porque toca el
+  // estado de sesión: el backend revoca las sesiones y re-emite una nueva para
+  // este dispositivo, devolviendo un accessToken nuevo que hay que guardar en
+  // memoria para que los siguientes refresh funcionen.
+  changePassword: (
+    currentPassword: string,
+    newPassword: string,
+  ) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -118,6 +127,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }
 
+  async function changePassword(
+    currentPassword: string,
+    newPassword: string,
+  ) {
+    // Endpoint privado: no lleva honeypot ni Turnstile (a diferencia de los de
+    // auth públicos). Mandamos el access token actual en la cabecera; el backend
+    // reautentica con currentPassword. En éxito devuelve un accessToken nuevo
+    // (la sesión anterior queda revocada) que guardamos en memoria.
+    const { accessToken } = await apiSend<{ accessToken: string }>(
+      'POST',
+      '/auth/change-password',
+      { currentPassword, newPassword },
+      token ?? undefined,
+    );
+    setToken(accessToken);
+  }
+
   async function logout() {
     try {
       await apiSend('POST', '/auth/logout');
@@ -132,7 +158,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, token, ready, isAdmin, login, register, logout }}
+      value={{
+        user,
+        token,
+        ready,
+        isAdmin,
+        login,
+        register,
+        changePassword,
+        logout,
+      }}
     >
       {children}
     </AuthContext.Provider>

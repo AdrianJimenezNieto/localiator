@@ -44,6 +44,18 @@ export class MailService {
     );
   }
 
+  // Aviso de seguridad tras un cambio de contraseña estando logueado. Si no lo
+  // hizo el titular, se entera y puede reaccionar (usar el reset). Es best-effort:
+  // quien lo llama captura el error para no romper el cambio ya aplicado.
+  async sendPasswordChangedNotice(to: string): Promise<void> {
+    await this.send(
+      to,
+      'Tu contraseña de Localiator ha cambiado',
+      `<p>Te confirmamos que la contraseña de tu cuenta se ha cambiado correctamente.</p>
+       <p>Si no has sido tú, restablece tu contraseña cuanto antes y revisa la seguridad de tu cuenta.</p>`,
+    );
+  }
+
   // Público para que OrderMailService (mismo módulo) envíe correos de pedido con
   // sus propias plantillas sin duplicar la lógica de transporte de Resend.
   async send(to: string, subject: string, html: string): Promise<void> {

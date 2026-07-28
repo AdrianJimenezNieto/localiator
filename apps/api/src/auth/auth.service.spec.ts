@@ -27,6 +27,7 @@ const prismaMock = {
 const mailMock = {
   sendEmailVerification: jest.fn(),
   sendPasswordReset: jest.fn(),
+  sendPasswordChangedNotice: jest.fn(),
 };
 const passwordMock = { hash: jest.fn(), verify: jest.fn() };
 const sessionMock = { revokeAllForUser: jest.fn() };
@@ -448,6 +449,82 @@ describe('AuthService', () => {
       await expect(
         service.resetPassword('raw', 'newpassword1'),
       ).rejects.toBeInstanceOf(BadRequestException);
+    });
+  });
+
+  describe('changePassword', () => {
+    const localUser = {
+      id: 'u1',
+      email: 'a@b.com',
+      passwordHash: 'stored',
+      role: 'BUYER',
+      emailVerifiedAt: new Date(),
+    };
+
+    it('actualiza el hash y devuelve el usuario cuando la contraseña actual es correcta', async () => {
+      prismaMock.user.findUnique.mockResolvedValue(localUser);
+      passwordMock.verify.mockResolvedValue(true);
+      passwordMock.hash.mockResolvedValue('newhash');
+      prismaMock.user.update.mockResolvedValue({});
+
+      const res = await service.changePassword('u1', 'Current-1!', 'NewPass-1!');
+
+      expect(passwordMock.verify).toHaveBeenCalledWith('stored', 'Current-1!');
+      expect(passwordMock.hash).toHaveBeenCalledWith('NewPass-1!');
+      expect(prismaMock.user.update).toHaveBeenCalledWith({
+        where: { id: 'u1' },
+        data: { passwordHash: 'newhash' },
+      });
+      expect(res).toEqual({
+        id: 'u1',
+        email: 'a@b.com',
+        role: 'BUYER',
+        emailVerified: true,
+      });
+    });
+
+    it('rechaza con 401 si la contraseña actual es incorrecta (sin actualizar nada)', async () => {
+      prismaMock.user.findUnique.mockResolvedValue(localUser);
+      passwordMock.verify.mockResolvedValue(false);
+
+      await expect(
+        service.changePassword('u1', 'wrong', 'NewPass-1!'),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(prismaMock.user.update).not.toHaveBeenCalled();
+    });
+
+    it('remite al reset si la cuenta es solo-Google (sin contraseña local)', async () => {
+      prismaMock.user.findUnique.mockResolvedValue({
+        ...localUser,
+        passwordHash: null,
+      });
+
+      await expect(
+        service.changePassword('u1', 'whatever', 'NewPass-1!'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(passwordMock.verify).not.toHaveBeenCalled();
+    });
+
+    it('rechaza si la nueva contraseña coincide con la actual', async () => {
+      prismaMock.user.findUnique.mockResolvedValue(localUser);
+      passwordMock.verify.mockResolvedValue(true);
+
+      await expect(
+        service.changePassword('u1', 'Same-pass-1!', 'Same-pass-1!'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prismaMock.user.update).not.toHaveBeenCalled();
+    });
+
+    it('no rompe si el aviso por email falla (best-effort)', async () => {
+      prismaMock.user.findUnique.mockResolvedValue(localUser);
+      passwordMock.verify.mockResolvedValue(true);
+      passwordMock.hash.mockResolvedValue('newhash');
+      prismaMock.user.update.mockResolvedValue({});
+      mailMock.sendPasswordChangedNotice.mockRejectedValue(new Error('down'));
+
+      const res = await service.changePassword('u1', 'Current-1!', 'NewPass-1!');
+
+      expect(res.id).toBe('u1');
     });
   });
 });

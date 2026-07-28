@@ -333,6 +333,70 @@ export class AuthService {
     return { message: 'Contraseña actualizada. Vuelve a iniciar sesión.' };
   }
 
+  // Cambio de contraseña ESTANDO logueado (desde "Mi cuenta"). A diferencia del
+  // reset por email, aquí reautenticamos con la contraseña ACTUAL en vez de con un
+  // token de email: protege ante secuestro de sesión y CSRF (decisión 1 del plan).
+  //
+  // Devuelve el AuthenticatedUser actualizado; la estrategia de sesión (revocar
+  // todo + re-emitir la sesión de este dispositivo) la maneja el controller,
+  // porque necesita la request/response (cookie + meta), igual que login/refresh.
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<AuthenticatedUser> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    // El JwtAuthGuard ya garantiza que el token es válido; si el usuario no está
+    // en BD (borrado, por ejemplo) tratamos como no autorizado.
+    if (!user) {
+      throw new UnauthorizedException('Sesión no válida');
+    }
+
+    // Cuenta solo-Google: no hay contraseña local que cambiar. Le remitimos al
+    // flujo de recuperación, que sirve para ESTABLECER una por primera vez.
+    if (!user.passwordHash) {
+      throw new BadRequestException(
+        'Tu cuenta no tiene contraseña local. Usa "recuperar contraseña" para establecer una.',
+      );
+    }
+
+    const currentOk = await this.password.verify(
+      user.passwordHash,
+      currentPassword,
+    );
+    if (!currentOk) {
+      throw new UnauthorizedException('La contraseña actual no es correcta');
+    }
+
+    // Rechazamos que la nueva sea idéntica a la actual (comparación en claro sobre
+    // lo que llega en el body; no hace falta re-hashear para esto).
+    if (newPassword === currentPassword) {
+      throw new BadRequestException(
+        'La nueva contraseña debe ser distinta de la actual',
+      );
+    }
+
+    const passwordHash = await this.password.hash(newPassword);
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash },
+    });
+
+    // Aviso de seguridad best-effort: si falla el envío, el cambio ya está hecho,
+    // así que lo logueamos sin romper la respuesta (decisión 4 del plan).
+    try {
+      await this.mail.sendPasswordChangedNotice(user.email);
+    } catch (err) {
+      this.logger.error(
+        `No se pudo enviar el aviso de cambio de contraseña a ${user.email}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+
+    return this.toAuthenticatedUser(user);
+  }
+
   // Genera un token, guarda SOLO su hash y envía el email con el token en claro
   // dentro del enlace. Reutilizable desde el reenvío de verificación.
   private async issueEmailVerification(
