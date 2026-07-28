@@ -106,6 +106,15 @@ export function LoginPage() {
       </form>
 
       <p className="mt-4 text-sm text-neutral-600">
+        <Link
+          to="/recuperar-password"
+          className="underline hover:text-neutral-900"
+        >
+          ¿Olvidaste tu contraseña?
+        </Link>
+      </p>
+
+      <p className="mt-2 text-sm text-neutral-600">
         ¿No tienes cuenta?{' '}
         <Link
           to={`/registro?redirect=${encodeURIComponent(redirect)}`}

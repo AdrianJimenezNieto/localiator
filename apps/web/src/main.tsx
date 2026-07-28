@@ -25,6 +25,8 @@ import { PrivacyPage } from './pages/PrivacyPage.tsx'
 import { AccountPage } from './pages/AccountPage.tsx'
 import { VerifyEmailPage } from './pages/VerifyEmailPage.tsx'
 import { ResendVerificationPage } from './pages/ResendVerificationPage.tsx'
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage.tsx'
+import { ResetPasswordPage } from './pages/ResetPasswordPage.tsx'
 import { NotFoundPage } from './pages/NotFoundPage.tsx'
 import { ErrorPage } from './pages/ErrorPage.tsx'
 import { OrdersAdminPage } from './pages/admin/OrdersAdminPage.tsx'
@@ -64,6 +66,8 @@ const router = createBrowserRouter([
       { path: 'cuenta', element: <AccountPage /> },
       { path: 'verificar-email', element: <VerifyEmailPage /> },
       { path: 'reenviar-verificacion', element: <ResendVerificationPage /> },
+      { path: 'recuperar-password', element: <ForgotPasswordPage /> },
+      { path: 'restablecer-password', element: <ResetPasswordPage /> },
       // Comodín: cualquier URL no reconocida cae en el 404 (dentro del layout).
       { path: '*', element: <NotFoundPage /> },
     ],
