@@ -60,7 +60,7 @@ Objetivo: usuarios, roles y sesión seguros + esquema base de catálogo.
 - [x] Migraciones y seed de datos de prueba
 - [x] Registro con verificación de email (Resend)
 - [x] Login con email/contraseña (hashing argon2/bcrypt)
-- [x] Login social (Google + un segundo proveedor)
+- [x] Login social (Google — decisión de alcance: solo Google, ver `tasks/fase1/08-login-google.md` y `tasks/google.md`)
 - [x] Sesión con refresh token en cookie HttpOnly/Secure/SameSite + access token corto
 - [x] Sliding expiration ~15 días por inactividad
 - [x] Recuperación de contraseña

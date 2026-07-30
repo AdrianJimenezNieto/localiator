@@ -8,18 +8,21 @@ import {
 import { apiGet, apiSend } from './api';
 
 // Identidad del usuario logueado, tal como la devuelve GET /auth/me.
+// `profileComplete`: false en cuentas creadas por Google que aún no tienen
+// nombre/dirección de facturación (esos campos son nullable en BD para no
+// romper el login social; el checkout los exige antes de pagar).
 export interface AuthUser {
   userId: string;
   email: string;
   role: string;
+  profileComplete: boolean;
 }
 
-// Datos que recoge el formulario de registro. Coinciden con los que valida el
-// RegisterDto del backend (identidad, contacto y dirección de facturación).
-// `phone` y `addressLine2` son opcionales; `birthDate` viaja como 'YYYY-MM-DD'.
-export interface RegisterData {
-  email: string;
-  password: string;
+// Datos personales (identidad + dirección de facturación), compartidos entre el
+// registro y el formulario de "completar perfil" del checkout. Coinciden con
+// los que valida RegisterDto/UpdateProfileDto en el backend. `phone` y
+// `addressLine2` son opcionales; `birthDate` viaja como 'YYYY-MM-DD'.
+export interface PersonalData {
   firstName: string;
   lastName: string;
   birthDate: string;
@@ -30,6 +33,11 @@ export interface RegisterData {
   city: string;
   province: string;
   country: string;
+}
+
+export interface RegisterData extends PersonalData {
+  email: string;
+  password: string;
 }
 
 interface AuthContextValue {
@@ -57,6 +65,10 @@ interface AuthContextValue {
     currentPassword: string,
     newPassword: string,
   ) => Promise<void>;
+  // Completa/edita los datos personales de la cuenta (PATCH /users/me) y
+  // refresca `user` para que `profileComplete` quede al día. Lo usa el checkout
+  // cuando una cuenta de Google todavía no tiene nombre/dirección.
+  updateProfile: (data: PersonalData) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -144,6 +156,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(accessToken);
   }
 
+  async function updateProfile(data: PersonalData) {
+    await apiSend('PATCH', '/users/me', data, token ?? undefined);
+    const me = await apiGet<AuthUser>('/auth/me', token ?? undefined);
+    setUser(me);
+  }
+
   async function logout() {
     try {
       await apiSend('POST', '/auth/logout');
@@ -166,6 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         register,
         changePassword,
+        updateProfile,
         logout,
       }}
     >

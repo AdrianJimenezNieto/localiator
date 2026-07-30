@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { ApiError } from '../lib/api';
-import { useAuth } from '../lib/auth';
+import { useAuth, type PersonalData } from '../lib/auth';
 import { useCart } from '../lib/cart';
 import { createOrder, payOrder, type OrderView } from '../lib/orders';
 import { formatPrice } from '../lib/format';
+import { PersonalDataFields } from '../components/PersonalDataFields';
 
 // Flujo de checkout. Al entrar crea el pedido en el servidor (tarea 03), que
 // devuelve el total REAL y la caducidad de la reserva. El botón "Pagar" lanza la
@@ -22,7 +23,10 @@ export function CheckoutPage() {
   const created = useRef(false);
 
   useEffect(() => {
-    if (!ready || !user || !token) return;
+    // Sin perfil completo (identidad + dirección de facturación) no se crea
+    // pedido todavía: se pide primero (ver el gate más abajo), para no dejar
+    // corriendo el contador de la reserva mientras el usuario rellena datos.
+    if (!ready || !user || !token || !user.profileComplete) return;
     if (created.current) return;
     if (items.length === 0) {
       setLoading(false);
@@ -60,6 +64,12 @@ export function CheckoutPage() {
   // Gating: sin sesión, a login conservando el destino (el carrito sobrevive solo).
   if (ready && !user) {
     return <Navigate to="/login?redirect=/checkout" replace />;
+  }
+
+  // Cuenta sin perfil completo (típico de un primer login con Google): pedimos
+  // los datos antes de crear el pedido, con el mismo formulario del registro.
+  if (ready && user && !user.profileComplete) {
+    return <CompleteProfileGate />;
   }
 
   if (!ready || loading) {
@@ -146,6 +156,84 @@ export function CheckoutPage() {
       <p className="mt-3 text-center text-xs text-neutral-400">
         Pago seguro procesado por Stripe. No guardamos datos de tu tarjeta.
       </p>
+    </div>
+  );
+}
+
+const EMPTY_PROFILE: PersonalData = {
+  firstName: '',
+  lastName: '',
+  birthDate: '',
+  phone: '',
+  addressLine1: '',
+  addressLine2: '',
+  postalCode: '',
+  city: '',
+  province: '',
+  country: 'ES',
+};
+
+// Formulario de "completa tu registro" para cuentas sin perfil (login social).
+// Mismos campos/validaciones que RegisterPage vía PersonalDataFields; al
+// guardar, updateProfile refresca `user.profileComplete` y CheckoutPage
+// continúa solo (esta pantalla desaparece porque deja de cumplirse el gate).
+function CompleteProfileGate() {
+  const { updateProfile } = useAuth();
+  const [form, setForm] = useState<PersonalData>(EMPTY_PROFILE);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  function set<K extends keyof PersonalData>(key: K, value: PersonalData[K]) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await updateProfile({
+        ...form,
+        phone: form.phone?.trim() ? form.phone.trim() : undefined,
+        addressLine2: form.addressLine2?.trim()
+          ? form.addressLine2.trim()
+          : undefined,
+      });
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : 'No se pudo guardar tus datos',
+      );
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="mx-auto max-w-lg px-4 py-16">
+      <h1 className="mb-2 text-2xl font-bold">Completa tus datos</h1>
+      <p className="mb-6 text-neutral-600">
+        Necesitamos tu nombre y dirección de facturación antes de poder
+        tramitar el pedido.
+      </p>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <PersonalDataFields form={form} set={set} />
+
+        {error && (
+          <p
+            className="rounded-md bg-red-50 p-3 text-sm text-red-700"
+            role="alert"
+          >
+            {error}
+          </p>
+        )}
+
+        <button
+          type="submit"
+          disabled={submitting}
+          className="min-h-11 rounded-md bg-neutral-900 px-4 py-2 font-medium text-white disabled:opacity-50"
+        >
+          {submitting ? 'Guardando…' : 'Continuar'}
+        </button>
+      </form>
     </div>
   );
 }

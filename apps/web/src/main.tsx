@@ -14,6 +14,7 @@ import { DetailPage } from './pages/DetailPage.tsx'
 import { CartPage } from './pages/CartPage.tsx'
 import { LoginPage } from './pages/LoginPage.tsx'
 import { RegisterPage } from './pages/RegisterPage.tsx'
+import { OAuthCallbackPage } from './pages/OAuthCallbackPage.tsx'
 import { CheckoutPage } from './pages/CheckoutPage.tsx'
 import { CheckoutResultPage } from './pages/CheckoutResultPage.tsx'
 import { MyOrdersPage } from './pages/MyOrdersPage.tsx'
@@ -55,6 +56,7 @@ const router = createBrowserRouter([
       { path: 'carrito', element: <CartPage /> },
       { path: 'login', element: <LoginPage /> },
       { path: 'registro', element: <RegisterPage /> },
+      { path: 'oauth/callback', element: <OAuthCallbackPage /> },
       { path: 'checkout', element: <CheckoutPage /> },
       { path: 'checkout/resultado', element: <CheckoutResultPage /> },
       { path: 'mis-pedidos', element: <MyOrdersPage /> },
