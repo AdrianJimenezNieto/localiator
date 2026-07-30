@@ -8,9 +8,9 @@ import {
   Req,
   Res,
   UnauthorizedException,
+  UseFilters,
   UseGuards,
 } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
 import { Throttle } from '@nestjs/throttler';
 import { ConfigService } from '@nestjs/config';
 import type { CookieOptions, Request, Response } from 'express';
@@ -18,6 +18,8 @@ import { AuthService, AuthenticatedUser } from './auth.service';
 import { SessionService, IssuedSession } from './session.service';
 import { Public } from './public.decorator';
 import { AntiBotGuard } from './anti-bot.guard';
+import { GoogleAuthGuard } from './google-auth.guard';
+import { OAuthErrorFilter } from './oauth-error.filter';
 import { CurrentUser } from './current-user.decorator';
 import type { RequestUser } from './jwt.strategy';
 import { RegisterDto } from './dto/register.dto';
@@ -27,6 +29,7 @@ import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { UsersService } from '../users/users.service';
 
 // Nombre de la cookie del refresh token. Path acotado a /auth: la cookie solo se
 // envía a los endpoints de sesión (refresh, logout), no a toda la API → menos
@@ -45,6 +48,7 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly session: SessionService,
     private readonly config: ConfigService,
+    private readonly users: UsersService,
   ) {}
 
   // 200 (no 201): no revelamos si se ha creado o no un recurso, coherente con la
@@ -173,34 +177,42 @@ export class AuthController {
   // access token válido y devuelve el usuario. Sirve al frontend para saber quién
   // está logueado.
   @Get('me')
-  me(@CurrentUser() user: RequestUser) {
-    return user;
+  async me(@CurrentUser() user: RequestUser) {
+    const profileComplete = await this.users.isProfileComplete(user.userId);
+    return { ...user, profileComplete };
   }
 
   // Inicia el flujo OAuth: el guard redirige a la pantalla de consentimiento de
-  // Google. @Public para saltar el JwtAuthGuard global; el AuthGuard('google')
-  // es quien maneja este endpoint.
+  // Google. @Public para saltar el JwtAuthGuard global; GoogleAuthGuard es quien
+  // maneja este endpoint (y, con él, el OAuthStateStore que guarda el `state` +
+  // el destino `?redirect=` en la cookie oauth_state — ver oauth-state.store.ts).
   @Public()
+  @Throttle(MODERATE_THROTTLE)
   @Get('google')
-  @UseGuards(AuthGuard('google'))
+  @UseGuards(GoogleAuthGuard)
+  @UseFilters(OAuthErrorFilter)
   googleAuth() {
     // Intencionadamente vacío.
   }
 
-  // Google redirige aquí tras el consentimiento. El guard resuelve/crea el usuario
-  // (req.user); emitimos la sesión, dejamos el refresh en la cookie y redirigimos
-  // al frontend. El access token NO va en la URL (se filtraría en logs/historial):
-  // el frontend lo pedirá con /auth/refresh usando la cookie recién puesta.
+  // Google redirige aquí tras el consentimiento. El guard verifica el `state`
+  // (rechaza si no cuadra) y resuelve/crea el usuario (req.user); emitimos la
+  // sesión, dejamos el refresh en la cookie y redirigimos al destino guardado
+  // en el state (req.oauthNext, por defecto /oauth/callback). El access token
+  // NO va en la URL (se filtraría en logs/historial): el frontend lo pedirá con
+  // /auth/refresh usando la cookie recién puesta.
   @Public()
+  @Throttle(MODERATE_THROTTLE)
   @Get('google/callback')
-  @UseGuards(AuthGuard('google'))
+  @UseGuards(GoogleAuthGuard)
+  @UseFilters(OAuthErrorFilter)
   async googleCallback(@Req() req: Request, @Res() res: Response) {
     const user = req.user as AuthenticatedUser;
     const session = await this.session.issue(user, this.meta(req));
     this.setRefreshCookie(res, session);
     const appUrl =
       this.config.get<string>('APP_URL') ?? 'http://localhost:5173';
-    res.redirect(`${appUrl}/oauth/callback`);
+    res.redirect(`${appUrl}${req.oauthNext ?? '/oauth/callback'}`);
   }
 
   // --- Helpers de cookie/sesión ---

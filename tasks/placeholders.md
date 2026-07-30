@@ -61,7 +61,9 @@ indica **el fichero exacto** donde se cambia.
 | `GOOGLE_CLIENT_SECRET` | *(placeholder)* | Client secret. |
 | `GOOGLE_CALLBACK_URL` | `https://api.localiator.com/auth/google/callback` | Ya correcto; **darlo de alta como URI de redirección autorizada** en Google Cloud Console. |
 
-> Sin esto, el **botón de Google falla**; el login/registro por email funciona igual.
+> Sin esto, el **botón de Google no funciona**: el flujo ya no revienta con un 401 crudo
+> (`tasks/google.md`, guard + filtro de errores), sino que redirige a `/login?error=oauth`
+> con un aviso legible; el login/registro por email funciona igual.
 
 ---
 

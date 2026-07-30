@@ -8,5 +8,6 @@ import { UsersService } from './users.service';
 @Module({
   controllers: [UsersController],
   providers: [UsersService],
+  exports: [UsersService], // AuthController lo usa para el profileComplete de /auth/me.
 })
 export class UsersModule {}

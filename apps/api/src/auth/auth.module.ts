@@ -3,10 +3,12 @@ import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { MailModule } from '../mail/mail.module';
+import { UsersModule } from '../users/users.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { PasswordService } from './password.service';
 import { GoogleStrategy } from './google.strategy';
+import { OAuthStateStore } from './oauth-state.store';
 import { SessionService } from './session.service';
 import { SessionCleanupService } from './session-cleanup.service';
 import { JwtStrategy } from './jwt.strategy';
@@ -19,6 +21,7 @@ import { AntiBotGuard } from './anti-bot.guard';
 @Module({
   imports: [
     MailModule,
+    UsersModule,
     PassportModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
@@ -33,6 +36,7 @@ import { AntiBotGuard } from './anti-bot.guard';
   providers: [
     AuthService,
     PasswordService,
+    OAuthStateStore,
     GoogleStrategy,
     SessionService,
     SessionCleanupService,

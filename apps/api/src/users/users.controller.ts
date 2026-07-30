@@ -1,12 +1,28 @@
-import { Controller, Delete, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  HttpCode,
+  HttpStatus,
+  Patch,
+} from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { RequestUser } from '../auth/jwt.strategy';
 import { UsersService } from './users.service';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 
 @Controller('users')
 export class UsersController {
   constructor(private readonly users: UsersService) {}
+
+  // Completar/editar los datos personales de la propia cuenta (p. ej. tras un
+  // login con Google, o para corregir la dirección de facturación). Sin id en
+  // la ruta: actúa siempre sobre @CurrentUser, igual que deleteMe.
+  @Patch('me')
+  updateMe(@CurrentUser() user: RequestUser, @Body() dto: UpdateProfileDto) {
+    return this.users.updateOwnProfile(user.userId, dto);
+  }
 
   // Borrado (anonimización) de la PROPIA cuenta. No lleva un id en la ruta: actúa
   // siempre sobre el usuario autenticado (@CurrentUser), así que es estructuralmente

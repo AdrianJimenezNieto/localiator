@@ -3,6 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../lib/api';
 import { useAuth, type RegisterData } from '../lib/auth';
 import { TurnstileWidget } from '../components/TurnstileWidget';
+import { GoogleLoginButton } from '../components/GoogleLoginButton';
+import { PersonalDataFields } from '../components/PersonalDataFields';
 
 // Estado inicial del formulario: los mismos campos que espera RegisterData. El
 // país por defecto es España (el negocio es solo España, recogida en almacén).
@@ -40,7 +42,9 @@ export function RegisterPage() {
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileReset, setTurnstileReset] = useState(0);
 
-  // Actualiza un campo del formulario por su clave, manteniendo el resto.
+  // Actualiza un campo del formulario por su clave, manteniendo el resto. Su
+  // firma genérica (K extends keyof RegisterData) también cubre keyof
+  // PersonalData, que es lo que exige PersonalDataFields.
   function set<K extends keyof RegisterData>(key: K, value: RegisterData[K]) {
     setForm((f) => ({ ...f, [key]: value }));
   }
@@ -97,6 +101,15 @@ export function RegisterPage() {
   return (
     <div className="mx-auto max-w-lg px-4 py-16">
       <h1 className="mb-6 text-2xl font-bold">Crear cuenta</h1>
+
+      <GoogleLoginButton redirect={redirect} />
+
+      <div className="my-4 flex items-center gap-3 text-sm text-neutral-400">
+        <div className="h-px flex-1 bg-neutral-200" />
+        o
+        <div className="h-px flex-1 bg-neutral-200" />
+      </div>
+
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Field id="email" label="Email">
           <input
@@ -136,121 +149,7 @@ export function RegisterPage() {
           especial.
         </p>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field id="firstName" label="Nombre">
-            <input
-              id="firstName"
-              required
-              value={form.firstName}
-              onChange={(e) => set('firstName', e.target.value)}
-              className={inputClass}
-            />
-          </Field>
-          <Field id="lastName" label="Apellidos">
-            <input
-              id="lastName"
-              required
-              value={form.lastName}
-              onChange={(e) => set('lastName', e.target.value)}
-              className={inputClass}
-            />
-          </Field>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field id="birthDate" label="Fecha de nacimiento">
-            <input
-              id="birthDate"
-              type="date"
-              required
-              value={form.birthDate}
-              onChange={(e) => set('birthDate', e.target.value)}
-              className={inputClass}
-            />
-          </Field>
-          <Field id="phone" label="Teléfono (opcional)">
-            <input
-              id="phone"
-              type="tel"
-              value={form.phone}
-              onChange={(e) => set('phone', e.target.value)}
-              className={inputClass}
-            />
-          </Field>
-        </div>
-
-        <fieldset className="mt-2 flex flex-col gap-4 border-t border-neutral-200 pt-4">
-          <legend className="text-sm font-semibold text-neutral-700">
-            Dirección de facturación
-          </legend>
-
-          <Field id="addressLine1" label="Dirección">
-            <input
-              id="addressLine1"
-              required
-              placeholder="Calle y número"
-              value={form.addressLine1}
-              onChange={(e) => set('addressLine1', e.target.value)}
-              className={inputClass}
-            />
-          </Field>
-          <Field id="addressLine2" label="Piso, puerta… (opcional)">
-            <input
-              id="addressLine2"
-              value={form.addressLine2}
-              onChange={(e) => set('addressLine2', e.target.value)}
-              className={inputClass}
-            />
-          </Field>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field id="postalCode" label="Código postal">
-              <input
-                id="postalCode"
-                required
-                inputMode="numeric"
-                value={form.postalCode}
-                onChange={(e) => set('postalCode', e.target.value)}
-                className={inputClass}
-              />
-            </Field>
-            <Field id="city" label="Localidad">
-              <input
-                id="city"
-                required
-                value={form.city}
-                onChange={(e) => set('city', e.target.value)}
-                className={inputClass}
-              />
-            </Field>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field id="province" label="Provincia">
-              <input
-                id="province"
-                required
-                value={form.province}
-                onChange={(e) => set('province', e.target.value)}
-                className={inputClass}
-              />
-            </Field>
-            <Field id="country" label="País">
-              <select
-                id="country"
-                required
-                value={form.country}
-                onChange={(e) => set('country', e.target.value)}
-                className={inputClass}
-              >
-                <option value="ES">España</option>
-                <option value="PT">Portugal</option>
-                <option value="FR">Francia</option>
-                <option value="AD">Andorra</option>
-              </select>
-            </Field>
-          </div>
-        </fieldset>
+        <PersonalDataFields form={form} set={set} />
 
         <TurnstileWidget onVerify={setTurnstileToken} resetKey={turnstileReset} />
 

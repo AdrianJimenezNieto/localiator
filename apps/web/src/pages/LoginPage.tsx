@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { TurnstileWidget } from '../components/TurnstileWidget';
+import { GoogleLoginButton } from '../components/GoogleLoginButton';
 
 // Login de COMPRADOR. Igual que el de admin pero vuelve a donde el usuario quería
 // ir (?redirect=…), para no perder el checkout tras iniciar sesión. El carrito
@@ -12,6 +13,7 @@ export function LoginPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const redirect = params.get('redirect') ?? '/';
+  const oauthError = params.get('error') === 'oauth';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -49,6 +51,24 @@ export function LoginPage() {
   return (
     <div className="mx-auto max-w-sm px-4 py-16">
       <h1 className="mb-6 text-2xl font-bold">Iniciar sesión</h1>
+
+      {oauthError && (
+        <p
+          className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700"
+          role="alert"
+        >
+          No se pudo iniciar sesión con Google, prueba con tu email.
+        </p>
+      )}
+
+      <GoogleLoginButton redirect={redirect} />
+
+      <div className="my-4 flex items-center gap-3 text-sm text-neutral-400">
+        <div className="h-px flex-1 bg-neutral-200" />
+        o
+        <div className="h-px flex-1 bg-neutral-200" />
+      </div>
+
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div>
           <label htmlFor="email" className="mb-1 block text-sm font-medium">

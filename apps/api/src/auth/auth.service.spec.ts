@@ -467,7 +467,11 @@ describe('AuthService', () => {
       passwordMock.hash.mockResolvedValue('newhash');
       prismaMock.user.update.mockResolvedValue({});
 
-      const res = await service.changePassword('u1', 'Current-1!', 'NewPass-1!');
+      const res = await service.changePassword(
+        'u1',
+        'Current-1!',
+        'NewPass-1!',
+      );
 
       expect(passwordMock.verify).toHaveBeenCalledWith('stored', 'Current-1!');
       expect(passwordMock.hash).toHaveBeenCalledWith('NewPass-1!');
@@ -522,7 +526,11 @@ describe('AuthService', () => {
       prismaMock.user.update.mockResolvedValue({});
       mailMock.sendPasswordChangedNotice.mockRejectedValue(new Error('down'));
 
-      const res = await service.changePassword('u1', 'Current-1!', 'NewPass-1!');
+      const res = await service.changePassword(
+        'u1',
+        'Current-1!',
+        'NewPass-1!',
+      );
 
       expect(res.id).toBe('u1');
     });

@@ -1,7 +1,8 @@
 import { Test } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
+import type { UpdateProfileDto } from './dto/update-profile.dto';
 
 const prismaMock = {
   user: { findUnique: jest.fn(), update: jest.fn() },
@@ -111,6 +112,92 @@ describe('UsersService', () => {
       prismaMock.user.findUnique.mockResolvedValue(null);
 
       await expect(service.anonymizeOwnAccount('missing')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('isProfileComplete', () => {
+    it('es true cuando todos los campos obligatorios están rellenos', async () => {
+      prismaMock.user.findUnique.mockResolvedValue({
+        firstName: 'Ana',
+        lastName: 'Gómez',
+        birthDate: new Date('1990-01-01'),
+        addressLine1: 'Calle Falsa 123',
+        postalCode: '28080',
+        city: 'Madrid',
+        province: 'Madrid',
+        country: 'ES',
+      });
+
+      await expect(service.isProfileComplete('u1')).resolves.toBe(true);
+    });
+
+    it('es false si falta algún campo obligatorio (típico de una cuenta de Google)', async () => {
+      prismaMock.user.findUnique.mockResolvedValue({
+        firstName: null,
+        lastName: null,
+        birthDate: null,
+        addressLine1: null,
+        postalCode: null,
+        city: null,
+        province: null,
+        country: 'ES',
+      });
+
+      await expect(service.isProfileComplete('u1')).resolves.toBe(false);
+    });
+
+    it('es false si el usuario no existe', async () => {
+      prismaMock.user.findUnique.mockResolvedValue(null);
+
+      await expect(service.isProfileComplete('missing')).resolves.toBe(false);
+    });
+  });
+
+  describe('updateOwnProfile', () => {
+    const dto: UpdateProfileDto = {
+      firstName: 'Ana',
+      lastName: 'Gómez',
+      birthDate: '1990-01-01',
+      addressLine1: 'Calle Falsa 123',
+      postalCode: '28080',
+      city: 'Madrid',
+      province: 'Madrid',
+      country: 'ES',
+    };
+
+    it('actualiza el perfil convirtiendo birthDate a Date', async () => {
+      prismaMock.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        anonymizedAt: null,
+      });
+
+      await service.updateOwnProfile('u1', dto);
+
+      expect(prismaMock.user.update).toHaveBeenCalledWith({
+        where: { id: 'u1' },
+        data: { ...dto, birthDate: new Date('1990-01-01') },
+        select: { id: true },
+      });
+    });
+
+    it('rechaza si la cuenta está anonimizada (derecho al olvido)', async () => {
+      prismaMock.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        anonymizedAt: new Date(),
+      });
+
+      await expect(service.updateOwnProfile('u1', dto)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prismaMock.user.update).not.toHaveBeenCalled();
+    });
+
+    it('lanza NotFound si el usuario no existe', async () => {
+      prismaMock.user.findUnique.mockResolvedValue(null);
+
+      await expect(service.updateOwnProfile('missing', dto)).rejects.toThrow(
         NotFoundException,
       );
     });
