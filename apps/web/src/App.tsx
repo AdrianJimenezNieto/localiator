@@ -20,6 +20,9 @@ function App() {
           </Link>
 
           <nav className="flex items-center gap-5 text-sm font-medium text-neutral-700">
+            <Link to="/subastas" className="hover:text-neutral-900">
+              Subastas
+            </Link>
             <Link
               to="/carrito"
               className="relative flex items-center gap-2 hover:text-neutral-900"
