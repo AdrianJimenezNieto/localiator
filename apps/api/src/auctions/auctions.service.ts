@@ -184,6 +184,40 @@ export class AuctionsService {
     }));
   }
 
+  // Detalle de una subasta para el formulario de edición del backoffice: misma
+  // forma que una fila de listAuctionsForAdmin (incluido bidCount, que el
+  // formulario necesita para deshabilitar los campos que updateAuction ya no
+  // deja tocar una vez hay pujas).
+  async getAuctionForAdmin(auctionId: string) {
+    const row = await this.prisma.auction.findUnique({
+      where: { id: auctionId },
+      include: {
+        bids: { orderBy: { amountCents: 'desc' }, take: 1 },
+        _count: { select: { bids: true } },
+        winner: { select: { id: true, email: true } },
+      },
+    });
+    if (!row) {
+      throw new NotFoundException('Subasta no encontrada');
+    }
+    const items = await this.resolveItems([row]);
+    return {
+      id: row.id,
+      itemType: row.itemType,
+      itemId: row.itemId,
+      itemName: items.get(this.itemKey(row))?.name ?? null,
+      status: row.status,
+      startingPriceCents: row.startingPriceCents,
+      minIncrementCents: row.minIncrementCents,
+      currentPriceCents: row.bids[0]?.amountCents ?? row.startingPriceCents,
+      bidCount: row._count.bids,
+      startsAt: row.startsAt,
+      endsAt: row.endsAt,
+      winner: row.winner,
+      paymentDueAt: row.paymentDueAt,
+    };
+  }
+
   // Edita una subasta. Qué se puede tocar depende del estado, y es la regla
   // interesante de esta tarea:
   //  - SCHEDULED: todo. Nadie ha pujado ni podía hacerlo.

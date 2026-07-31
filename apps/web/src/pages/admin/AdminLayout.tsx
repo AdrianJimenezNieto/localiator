@@ -6,6 +6,7 @@ const NAV = [
   { to: '/admin/lotes', label: 'Lotes' },
   { to: '/admin/categorias', label: 'Categorías' },
   { to: '/admin/pedidos', label: 'Pedidos' },
+  { to: '/admin/subastas', label: 'Subastas' },
 ];
 
 export function AdminLayout() {

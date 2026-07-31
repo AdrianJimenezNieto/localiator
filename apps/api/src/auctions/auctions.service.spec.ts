@@ -656,6 +656,36 @@ describe('AuctionsService', () => {
         });
       });
     });
+
+    describe('getAuctionForAdmin', () => {
+      it('devuelve el detalle con el nombre del artículo y el nº de pujas', async () => {
+        prismaMock.auction.findUnique.mockResolvedValue({
+          ...liveAuction,
+          bids: [{ amountCents: 7000 }],
+          _count: { bids: 3 },
+        });
+        prismaMock.product.findMany.mockResolvedValue([
+          { id: 'product-1', name: 'Taladro', photos: [] },
+        ]);
+        prismaMock.lot.findMany.mockResolvedValue([]);
+
+        const result = await service.getAuctionForAdmin('auction-1');
+
+        expect(result).toMatchObject({
+          itemName: 'Taladro',
+          currentPriceCents: 7000,
+          bidCount: 3,
+        });
+      });
+
+      it('lanza NotFoundException si la subasta no existe', async () => {
+        prismaMock.auction.findUnique.mockResolvedValue(null);
+
+        await expect(
+          service.getAuctionForAdmin('auction-1'),
+        ).rejects.toBeInstanceOf(NotFoundException);
+      });
+    });
   });
 
   // Apertura automática (tarea 10). Sin esto una subasta creada desde el admin se
