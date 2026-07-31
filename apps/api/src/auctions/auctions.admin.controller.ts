@@ -39,6 +39,11 @@ export class AuctionsAdminController {
     return this.auctions.listAuctionsForAdmin(status);
   }
 
+  @Get(':id')
+  get(@Param('id') id: string) {
+    return this.auctions.getAuctionForAdmin(id);
+  }
+
   @Post()
   create(@Body() dto: CreateAuctionDto) {
     return this.auctions.createAuction(dto);
