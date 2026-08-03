@@ -1,6 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { ItemCondition } from '@prisma/client';
 import { CatalogService } from './catalog.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { DEFAULT_PAGE_SIZE } from './dto/list-catalog.dto';
@@ -19,7 +18,6 @@ const row = {
   name: 'Taladro',
   priceCents: 5000,
   discountCents: 500,
-  condition: ItemCondition.GOOD,
   photos: ['http://x/a.jpg', 'http://x/b.jpg'],
   category: { id: 'c1', name: 'Herramientas' },
 };
@@ -55,7 +53,6 @@ describe('CatalogService', () => {
           name: 'Taladro',
           priceCents: 5000,
           discountCents: 500,
-          condition: ItemCondition.GOOD,
           photo: 'http://x/a.jpg',
           category: { id: 'c1', name: 'Herramientas' },
         },
@@ -142,15 +139,6 @@ describe('CatalogService', () => {
       });
     });
 
-    it('filtra por varios estados (in)', async () => {
-      await service.listProducts({
-        condition: [ItemCondition.NEW, ItemCondition.GOOD],
-      });
-      expect(whereOfLastFindMany()).toMatchObject({
-        condition: { in: [ItemCondition.NEW, ItemCondition.GOOD] },
-      });
-    });
-
     it('sin filtros solo aplica la base de vendibles', async () => {
       await service.listProducts({});
       expect(whereOfLastFindMany()).toEqual({ stock: { gt: 0 } });
@@ -163,7 +151,6 @@ describe('CatalogService', () => {
         id: 'p1',
         name: 'Taladro',
         description: 'Percutor',
-        condition: ItemCondition.GOOD,
         priceCents: 5000,
         discountCents: 500,
         stock: 4,
@@ -178,7 +165,6 @@ describe('CatalogService', () => {
         kind: 'product',
         name: 'Taladro',
         description: 'Percutor',
-        condition: ItemCondition.GOOD,
         priceCents: 5000,
         discountCents: 500,
         available: true,

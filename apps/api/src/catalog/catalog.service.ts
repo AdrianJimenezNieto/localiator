@@ -1,5 +1,4 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { ItemCondition } from '@prisma/client';
 import type {
   CatalogDetail,
   CatalogItem,
@@ -16,7 +15,6 @@ const CARD_SELECT = {
   name: true,
   priceCents: true,
   discountCents: true,
-  condition: true,
   photos: true,
   category: { select: { id: true, name: true } },
 } as const;
@@ -27,7 +25,6 @@ interface CardRow {
   name: string;
   priceCents: number;
   discountCents: number;
-  condition: ItemCondition;
   photos: string[];
   category: { id: string; name: string };
 }
@@ -38,7 +35,6 @@ const DETAIL_SELECT = {
   id: true,
   name: true,
   description: true,
-  condition: true,
   priceCents: true,
   discountCents: true,
   stock: true,
@@ -57,7 +53,6 @@ function toCatalogDetail(row: DetailRow, kind: ItemKind): CatalogDetail {
     kind,
     name: row.name,
     description: row.description,
-    condition: row.condition,
     priceCents: row.priceCents,
     discountCents: row.discountCents,
     available: row.stock > 0, // no exponemos el stock exacto, solo disponibilidad.
@@ -73,7 +68,6 @@ function toCatalogItem(row: CardRow, kind: ItemKind): CatalogItem {
     name: row.name,
     priceCents: row.priceCents,
     discountCents: row.discountCents,
-    condition: row.condition,
     photo: row.photos[0] ?? null, // portada = primera foto (o null si no hay).
     category: row.category,
   };
@@ -170,7 +164,6 @@ export class CatalogService {
     const where: {
       stock: { gt: number };
       categoryId?: string;
-      condition?: { in: ItemCondition[] };
       priceCents?: { gte?: number; lte?: number };
       OR?: Array<
         | { name: { contains: string; mode: 'insensitive' } }
@@ -188,10 +181,6 @@ export class CatalogService {
 
     if (dto.categoryId) {
       where.categoryId = dto.categoryId;
-    }
-
-    if (dto.condition && dto.condition.length > 0) {
-      where.condition = { in: dto.condition };
     }
 
     if (dto.minPriceCents !== undefined || dto.maxPriceCents !== undefined) {

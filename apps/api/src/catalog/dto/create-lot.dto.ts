@@ -1,6 +1,5 @@
 import {
   IsArray,
-  IsEnum,
   IsInt,
   IsOptional,
   IsString,
@@ -9,7 +8,6 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { ItemCondition } from '@prisma/client';
 import { IsNotGreaterThanProperty } from './is-not-greater-than.decorator';
 
 // Alta de lote. Mismas reglas que el producto (02): Lot y Product son entidades
@@ -25,9 +23,6 @@ export class CreateLotDto {
   @MinLength(1, { message: 'La descripción no puede estar vacía' })
   @MaxLength(5000)
   description!: string;
-
-  @IsEnum(ItemCondition, { message: 'Estado de artículo no válido' })
-  condition!: ItemCondition;
 
   @IsInt({ message: 'El precio debe ser un entero en céntimos' })
   @Min(0)

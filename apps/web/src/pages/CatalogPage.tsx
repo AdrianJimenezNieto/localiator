@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import type { CatalogItem, ItemCondition, Paginated } from '@localiator/shared';
+import type { CatalogItem, Paginated } from '@localiator/shared';
 import { toQuery } from '../lib/api';
 import { useApi } from '../lib/useApi';
 import { useSeo } from '../lib/useSeo';
@@ -17,7 +17,7 @@ export function CatalogPage() {
   useSeo({
     title: 'Catálogo — Localiator',
     description:
-      'Explora lotes y productos individuales de subasta disponibles para recoger en almacén. Filtra por categoría, precio y estado.',
+      'Explora lotes y productos individuales de subasta disponibles para recoger en almacén. Filtra por categoría y precio.',
     canonicalPath: '/',
   });
 
@@ -28,7 +28,6 @@ export function CatalogPage() {
     categoryId: searchParams.get('categoryId') ?? '',
     minPrice: searchParams.get('minPrice') ?? '',
     maxPrice: searchParams.get('maxPrice') ?? '',
-    conditions: searchParams.getAll('condition') as ItemCondition[],
   };
 
   // En móvil los filtros se pliegan tras un botón (drawer/acordeón) para no empujar
@@ -37,8 +36,7 @@ export function CatalogPage() {
   const activeFilterCount =
     (filters.q ? 1 : 0) +
     (filters.categoryId ? 1 : 0) +
-    (filters.minPrice || filters.maxPrice ? 1 : 0) +
-    filters.conditions.length;
+    (filters.minPrice || filters.maxPrice ? 1 : 0);
 
   // Un único flujo de datos: los filtros construyen el path, y useApi re-pide al
   // cambiar. La conversión euros→céntimos ocurre aquí (la API trabaja en céntimos).
@@ -49,7 +47,6 @@ export function CatalogPage() {
     categoryId: filters.categoryId,
     minPriceCents: eurosToCents(filters.minPrice),
     maxPriceCents: eurosToCents(filters.maxPrice),
-    condition: filters.conditions,
   });
   const { data, error, loading } = useApi<Paginated<CatalogItem>>(
     `/catalog/products${query}`,
@@ -62,7 +59,6 @@ export function CatalogPage() {
     if (next.categoryId) params.set('categoryId', next.categoryId);
     if (next.minPrice) params.set('minPrice', next.minPrice);
     if (next.maxPrice) params.set('maxPrice', next.maxPrice);
-    for (const c of next.conditions) params.append('condition', c);
     setSearchParams(params);
   }
 

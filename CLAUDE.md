@@ -133,7 +133,8 @@ en boilerplate repetitivo o config puedes ir más directo.
 ## Inventario y almacén
 - **Sincronización de stock físico**: no es una preocupación (almacén no ordenado).
 - **Alta de producto/lote** nuevo comprado: proceso a definir (backoffice de admin).
-- **Gestión de fotos y estado real** de cada artículo: sí (muchos con desperfectos).
+- **Gestión de fotos** de cada artículo: sí (muchos con desperfectos). Sin campo de estado/condición
+  del artículo (nuevo, aceptable, etc.): descartado por decisión de negocio.
 - **Ubicación física**: no necesaria.
 - **Reserva temporal de stock** mientras el cliente paga: sí (con expiración).
 
@@ -149,7 +150,7 @@ en boilerplate repetitivo o config puedes ir más directo.
 - **Subasta extranjera / aduanas**: no aplica, todo comprado en España.
 
 ## Búsqueda, catálogo y UX
-- **Filtros y búsqueda** por categoría, precio y estado del producto.
+- **Filtros y búsqueda** por categoría y precio.
 - **Paginación/rendimiento** del catálogo con muchos productos.
 - **SEO** para que los productos sean encontrables en buscadores.
 - **Diseño responsive 100%**.

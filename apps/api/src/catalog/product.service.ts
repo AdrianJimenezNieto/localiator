@@ -39,7 +39,6 @@ export class ProductService {
       data: {
         name: dto.name,
         description: dto.description,
-        condition: dto.condition,
         priceCents: dto.priceCents,
         discountCents: dto.discountCents ?? 0,
         stock: dto.stock,
@@ -66,7 +65,6 @@ export class ProductService {
     const data = {
       ...(dto.name !== undefined && { name: dto.name }),
       ...(dto.description !== undefined && { description: dto.description }),
-      ...(dto.condition !== undefined && { condition: dto.condition }),
       ...(dto.priceCents !== undefined && { priceCents: dto.priceCents }),
       ...(dto.discountCents !== undefined && {
         discountCents: dto.discountCents,

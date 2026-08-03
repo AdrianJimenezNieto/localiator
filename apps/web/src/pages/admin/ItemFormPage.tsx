@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import type { ItemCondition, ItemKind } from '@localiator/shared';
+import type { ItemKind } from '@localiator/shared';
 import { apiGet, apiSend, ApiError } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import {
@@ -9,7 +9,7 @@ import {
   type AdminItem,
   type Category,
 } from '../../lib/adminTypes';
-import { centsToEuros, CONDITION_OPTIONS, eurosToCents } from '../../lib/format';
+import { centsToEuros, eurosToCents } from '../../lib/format';
 import { PhotoManager } from '../../components/admin/PhotoManager';
 
 // Formulario de alta/edición de producto o lote. Si la ruta trae :id, es edición
@@ -25,9 +25,6 @@ export function ItemFormPage({ kind }: { kind: ItemKind }) {
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [condition, setCondition] = useState<ItemCondition>(
-    CONDITION_OPTIONS[2].value, // GOOD por defecto.
-  );
   const [priceEuros, setPriceEuros] = useState('');
   const [discountEuros, setDiscountEuros] = useState('');
   const [stock, setStock] = useState('0');
@@ -55,7 +52,6 @@ export function ItemFormPage({ kind }: { kind: ItemKind }) {
           if (cancelled) return;
           setName(item.name);
           setDescription(item.description);
-          setCondition(item.condition);
           setPriceEuros(centsToEuros(item.priceCents));
           setDiscountEuros(item.discountCents ? centsToEuros(item.discountCents) : '');
           setStock(String(item.stock));
@@ -96,7 +92,6 @@ export function ItemFormPage({ kind }: { kind: ItemKind }) {
     const payload = {
       name,
       description,
-      condition,
       priceCents,
       discountCents,
       stock: Number(stock) || 0,
@@ -149,21 +144,6 @@ export function ItemFormPage({ kind }: { kind: ItemKind }) {
             rows={4}
             className={inputClass}
           />
-        </Field>
-
-        <Field label="Estado" htmlFor="condition">
-          <select
-            id="condition"
-            value={condition}
-            onChange={(e) => setCondition(e.target.value as ItemCondition)}
-            className={inputClass}
-          >
-            {CONDITION_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
         </Field>
 
         <div className="grid grid-cols-2 gap-4">

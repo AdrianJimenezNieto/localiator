@@ -4,7 +4,7 @@ import { itemPath, type CatalogDetail, type ItemKind } from '@localiator/shared'
 import { useApi } from '../lib/useApi';
 import { useCart } from '../lib/cart';
 import { useSeo } from '../lib/useSeo';
-import { conditionLabel, finalPriceCents, formatPrice } from '../lib/format';
+import { finalPriceCents, formatPrice } from '../lib/format';
 import { Gallery } from '../components/Gallery';
 
 // Página de ficha. `kind` lo fija la ruta (/productos/:id → 'product',
@@ -77,9 +77,6 @@ export function DetailPage({ kind }: { kind: ItemKind }) {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <span className="rounded bg-neutral-100 px-2 py-1 text-sm text-neutral-700">
-              {conditionLabel(data.condition)}
-            </span>
             <span
               className={`text-sm ${data.available ? 'text-green-700' : 'text-neutral-500'}`}
             >
@@ -100,12 +97,12 @@ export function DetailPage({ kind }: { kind: ItemKind }) {
 
           <p className="whitespace-pre-line text-neutral-700">{data.description}</p>
 
-          {/* El estado y los desperfectos descritos arriba forman parte de lo
-              acordado en la compra: lo enlazamos con la garantía de las condiciones
-              de venta (tarea 04) para dar transparencia al comprador. */}
+          {/* Los desperfectos descritos arriba forman parte de lo acordado en la
+              compra: lo enlazamos con la garantía de las condiciones de venta
+              (tarea 04) para dar transparencia al comprador. */}
           <p className="text-sm text-neutral-500">
-            Artículo de subasta: su estado ({conditionLabel(data.condition)}) y los
-            desperfectos descritos forman parte de la venta. Consulta la{' '}
+            Artículo de subasta: los desperfectos descritos forman parte de la
+            venta. Consulta la{' '}
             <Link
               to="/condiciones-venta"
               className="underline hover:text-neutral-900"
