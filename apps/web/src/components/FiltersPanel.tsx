@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { ItemCondition } from '@localiator/shared';
 import { useApi } from '../lib/useApi';
 import { useDebounce } from '../lib/useDebounce';
-import { CONDITION_OPTIONS } from '../lib/format';
 
 // Categoría tal como la devuelve GET /categories (solo lo que usa el selector).
 interface Category {
@@ -17,7 +15,6 @@ export interface CatalogFilters {
   categoryId: string;
   minPrice: string;
   maxPrice: string;
-  conditions: ItemCondition[];
 }
 
 interface FiltersPanelProps {
@@ -53,13 +50,6 @@ export function FiltersPanel({
   useEffect(() => {
     setQInput(filters.q);
   }, [filters.q]);
-
-  function toggleCondition(value: ItemCondition) {
-    const next = filters.conditions.includes(value)
-      ? filters.conditions.filter((c) => c !== value)
-      : [...filters.conditions, value];
-    onChange({ conditions: next });
-  }
 
   const priceInvalid =
     filters.minPrice !== '' &&
@@ -132,23 +122,6 @@ export function FiltersPanel({
           </p>
         )}
       </div>
-
-      <fieldset>
-        <legend className="mb-1 block text-sm font-medium">Estado</legend>
-        <div className="flex flex-col gap-1">
-          {CONDITION_OPTIONS.map((opt) => (
-            <label key={opt.value} className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={filters.conditions.includes(opt.value)}
-                onChange={() => toggleCondition(opt.value)}
-                className="h-4 w-4 rounded border-neutral-300"
-              />
-              {opt.label}
-            </label>
-          ))}
-        </div>
-      </fieldset>
 
       <div className="flex items-center justify-between border-t border-neutral-200 pt-3">
         <span className="text-sm text-neutral-500">

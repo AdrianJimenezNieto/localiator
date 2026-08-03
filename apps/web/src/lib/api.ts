@@ -15,7 +15,7 @@ export class ApiError extends Error {
 }
 
 // Construye una query string a partir de un objeto, omitiendo valores vacíos y
-// desplegando los arrays en claves repetidas (?condition=NEW&condition=GOOD).
+// desplegando los arrays en claves repetidas.
 export function toQuery(
   params: Record<string, string | number | string[] | undefined>,
 ): string {

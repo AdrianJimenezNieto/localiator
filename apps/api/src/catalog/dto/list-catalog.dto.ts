@@ -1,7 +1,5 @@
 import { Transform, Type } from 'class-transformer';
 import {
-  IsArray,
-  IsEnum,
   IsInt,
   IsOptional,
   IsString,
@@ -9,7 +7,6 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { ItemCondition } from '@prisma/client';
 import { IsNotGreaterThanProperty } from './is-not-greater-than.decorator';
 
 // Tope de página: impide que alguien pida 10.000 items de golpe (coste/DoS).
@@ -65,17 +62,4 @@ export class ListCatalogDto {
   @IsInt()
   @Min(0)
   maxPriceCents?: number;
-
-  // Uno o varios estados. En la URL puede venir como `condition=NEW&condition=GOOD`
-  // (array) o `condition=NEW` (string): normalizamos a array antes de validar.
-  @IsOptional()
-  @Transform(({ value }) =>
-    value === undefined ? undefined : Array.isArray(value) ? value : [value],
-  )
-  @IsArray()
-  @IsEnum(ItemCondition, {
-    each: true,
-    message: 'Estado de artículo no válido',
-  })
-  condition?: ItemCondition[];
 }

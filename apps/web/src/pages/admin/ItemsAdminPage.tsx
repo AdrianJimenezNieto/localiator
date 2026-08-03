@@ -8,7 +8,7 @@ import {
   itemLabels,
   type AdminItem,
 } from '../../lib/adminTypes';
-import { conditionLabel, formatPrice } from '../../lib/format';
+import { formatPrice } from '../../lib/format';
 
 // Listado de gestión de productos o lotes (mismo código, `kind` decide endpoint y
 // rutas). Muestra TODOS los artículos, también los agotados.
@@ -62,7 +62,6 @@ export function ItemsAdminPage({ kind }: { kind: ItemKind }) {
               <tr>
                 <th className="p-3 font-medium">Nombre</th>
                 <th className="p-3 font-medium">Categoría</th>
-                <th className="p-3 font-medium">Estado</th>
                 <th className="p-3 font-medium">Precio</th>
                 <th className="p-3 font-medium">Stock</th>
                 <th className="p-3" />
@@ -73,9 +72,6 @@ export function ItemsAdminPage({ kind }: { kind: ItemKind }) {
                 <tr key={item.id}>
                   <td className="p-3 font-medium">{item.name}</td>
                   <td className="p-3 text-neutral-600">{item.category?.name ?? '—'}</td>
-                  <td className="p-3 text-neutral-600">
-                    {conditionLabel(item.condition)}
-                  </td>
                   <td className="p-3">{formatPrice(item.priceCents)}</td>
                   <td className="p-3">{item.stock}</td>
                   <td className="p-3">

@@ -33,8 +33,8 @@ export class ListAuctionsDto {
   @Max(MAX_AUCTION_PAGE_SIZE)
   pageSize?: number;
 
-  // Uno o varios estados, como el `condition` del catálogo: puede venir como
-  // `status=LIVE&status=CLOSED` (array) o `status=LIVE` (string). Se restringe a
+  // Uno o varios estados. Puede venir como `status=LIVE&status=CLOSED` (array) o
+  // `status=LIVE` (string). Se restringe a
   // PUBLIC_AUCTION_STATUSES: pedir PAID o CANCELLED da 400, no una lista vacía
   // silenciosa (un filtro que no filtra lo que pides es peor que un error claro).
   @IsOptional()

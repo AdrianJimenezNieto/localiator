@@ -1,6 +1,5 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { ItemCondition } from '@prisma/client';
 import { LotService } from './lot.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -25,7 +24,6 @@ type TxCallback = (tx: typeof prismaMock) => unknown;
 const baseDto = {
   name: 'Palé de electrónica',
   description: 'Lote mixto de devoluciones',
-  condition: ItemCondition.FAIR,
   priceCents: 20000,
   discountCents: 2000,
   stock: 1,
@@ -56,7 +54,6 @@ describe('LotService', () => {
       data: {
         name: 'Palé de electrónica',
         description: 'Lote mixto de devoluciones',
-        condition: ItemCondition.FAIR,
         priceCents: 20000,
         discountCents: 2000,
         stock: 1,

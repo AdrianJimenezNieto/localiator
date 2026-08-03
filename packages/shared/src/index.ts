@@ -29,23 +29,10 @@ export const ItemKind = {
 
 export type ItemKind = (typeof ItemKind)[keyof typeof ItemKind];
 
-// Estado real del artículo. Reflejo del enum `ItemCondition` de Prisma para que el
-// frontend tenga los valores sin depender del cliente de Prisma. Si divergen, CI
-// (build) lo detectaría al usarse en ambos lados.
-export const ItemCondition = {
-  NEW: "NEW",
-  LIKE_NEW: "LIKE_NEW",
-  GOOD: "GOOD",
-  FAIR: "FAIR",
-  DAMAGED: "DAMAGED",
-} as const;
-
-export type ItemCondition = (typeof ItemCondition)[keyof typeof ItemCondition];
-
-// Ciclo de vida de una subasta. Reflejo del enum `AuctionStatus` de Prisma, por la
-// misma razón que ItemCondition: el frontend necesita los valores sin depender del
-// cliente de Prisma. PAID y CANCELLED no salen del listado público, pero el tipo
-// los incluye porque el backoffice sí los muestra.
+// Ciclo de vida de una subasta. Reflejo del enum `AuctionStatus` de Prisma: el
+// frontend necesita los valores sin depender del cliente de Prisma. PAID y
+// CANCELLED no salen del listado público, pero el tipo los incluye porque el
+// backoffice sí los muestra.
 export const AuctionStatus = {
   SCHEDULED: "SCHEDULED",
   LIVE: "LIVE",
@@ -73,7 +60,6 @@ export interface CatalogItem {
   name: string;
   priceCents: number;
   discountCents: number;
-  condition: ItemCondition;
   // Primera foto (portada) o null si el artículo no tiene fotos aún.
   photo: string | null;
   category: { id: string; name: string };
@@ -108,7 +94,6 @@ export interface CatalogDetail {
   kind: ItemKind;
   name: string;
   description: string;
-  condition: ItemCondition;
   priceCents: number;
   discountCents: number;
   available: boolean;

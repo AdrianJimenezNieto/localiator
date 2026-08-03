@@ -1,4 +1,4 @@
-import type { ItemCondition, ItemKind } from '@localiator/shared';
+import type { ItemKind } from '@localiator/shared';
 
 // Categoría tal como la devuelve GET /categories.
 export interface Category {
@@ -14,7 +14,6 @@ export interface AdminItem {
   id: string;
   name: string;
   description: string;
-  condition: ItemCondition;
   priceCents: number;
   discountCents: number;
   stock: number;

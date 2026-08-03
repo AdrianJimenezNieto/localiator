@@ -1,6 +1,5 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { ItemCondition } from '@prisma/client';
 import { ProductService } from './product.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -26,7 +25,6 @@ type TxCallback = (tx: typeof prismaMock) => unknown;
 const baseDto = {
   name: 'Taladro',
   description: 'Taladro percutor',
-  condition: ItemCondition.GOOD,
   priceCents: 5000,
   discountCents: 500,
   stock: 3,
@@ -61,7 +59,6 @@ describe('ProductService', () => {
         data: {
           name: 'Taladro',
           description: 'Taladro percutor',
-          condition: ItemCondition.GOOD,
           priceCents: 5000,
           discountCents: 500,
           stock: 3,
@@ -79,7 +76,6 @@ describe('ProductService', () => {
       await service.create({
         name: 'Martillo',
         description: 'Martillo de carpintero',
-        condition: ItemCondition.NEW,
         priceCents: 1200,
         stock: 10,
         categoryId: 'cat-1',
@@ -89,7 +85,6 @@ describe('ProductService', () => {
         data: {
           name: 'Martillo',
           description: 'Martillo de carpintero',
-          condition: ItemCondition.NEW,
           priceCents: 1200,
           discountCents: 0,
           stock: 10,
