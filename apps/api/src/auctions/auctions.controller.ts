@@ -7,6 +7,7 @@ import type { RequestUser } from '../auth/jwt.strategy';
 import { AuctionsService } from './auctions.service';
 import { PlaceBidDto } from './dto/place-bid.dto';
 import { ListAuctionsDto } from './dto/list-auctions.dto';
+import { CalendarAuctionsDto } from './dto/calendar-auctions.dto';
 
 // Cara PÚBLICA + pujas de las subastas. La gestión (alta, edición, cancelación) va
 // en auctions.admin.controller.ts, bajo `admin/auctions` y con @Roles(ADMIN).
@@ -31,6 +32,16 @@ export class AuctionsController {
   @Get()
   list(@Query() query: ListAuctionsDto) {
     return this.auctions.listPublicAuctions(query);
+  }
+
+  // Calendario público: las subastas que CIERRAN dentro de un rango de fechas,
+  // sin paginar. Va antes de cualquier `@Get(':id')` a propósito: Nest resuelve
+  // las rutas en orden de declaración, así que un `:id` declarado antes se comería
+  // esta ruta haciendo match de `id = "calendar"` (404 silencioso).
+  @Public()
+  @Get('calendar')
+  calendar(@Query() query: CalendarAuctionsDto) {
+    return this.auctions.listAuctionsForCalendar(query);
   }
 
   // Registra una puja. Recibe solo el importe; el usuario sale del JWT y la

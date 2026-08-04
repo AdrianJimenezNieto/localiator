@@ -502,6 +502,11 @@ model Auction {
   orders Order[]
 
   @@index([status])
+  // Filtro por estado + rango de `endsAt` con ORDER BY endsAt: es exactamente la
+  // consulta del calendario público y del listado paginado. El orden de las
+  // columnas importa: `status` va primero porque se filtra por igualdad (IN) y
+  // `endsAt` después porque es el rango y el criterio de orden.
+  @@index([status, endsAt])
   @@index([itemType, itemId])
 }
 

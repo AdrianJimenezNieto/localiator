@@ -30,7 +30,13 @@ import { UpdateAuctionDto } from './dto/update-auction.dto';
 import {
   DEFAULT_AUCTION_PAGE_SIZE,
   ListAuctionsDto,
+  PUBLIC_AUCTION_STATUSES,
 } from './dto/list-auctions.dto';
+import {
+  CalendarAuctionsDto,
+  MAX_CALENDAR_RANGE_DAYS,
+  MAX_CALENDAR_RANGE_MS,
+} from './dto/calendar-auctions.dto';
 
 // Motivos estables de rechazo de una puja. Se envían como `code` en el 409 para
 // que el front dé feedback útil sin parsear el mensaje (que es solo humano).
@@ -518,32 +524,93 @@ export class AuctionsService {
 
     const items = await this.resolveItems(rows);
     return {
-      items: rows.map((row) => {
-        const item = items.get(this.itemKey(row));
-        return {
-          id: row.id,
-          status: row.status,
-          // Literales y no la constante ItemKind de shared: la API solo puede
-          // importar TIPOS de shared, no valores en runtime (ts-jest no transforma
-          // node_modules). Mismo criterio que itemPath en seo.service.ts. El tipo
-          // AuctionListItem obliga a que estos literales sigan siendo válidos.
-          itemKind: row.itemType === OrderItemType.PRODUCT ? 'product' : 'lot',
-          itemId: row.itemId,
-          // El artículo debería existir siempre (el alta lo valida, tarea 11);
-          // el fallback evita que una fila huérfana tumbe el listado entero.
-          name: item?.name ?? 'Artículo no disponible',
-          photo: item?.photo ?? null,
-          currentPriceCents: row.bids[0]?.amountCents ?? row.startingPriceCents,
-          startingPriceCents: row.startingPriceCents,
-          minIncrementCents: row.minIncrementCents,
-          bidCount: row._count.bids,
-          startsAt: row.startsAt.toISOString(),
-          endsAt: row.endsAt.toISOString(),
-        };
-      }),
+      items: rows.map((row) => this.toListItem(row, items)),
       total,
       page,
       pageSize,
+    };
+  }
+
+  // Subastas cuyo CIERRE cae en el rango [from, to), sin paginar, para el
+  // calendario público. Devuelve la misma forma que el listado (AuctionListItem)
+  // a propósito: así el front reutiliza la misma tarjeta en el panel del día.
+  //
+  // Sin paginación porque la rejilla necesita el mes ENTERO: una página de 24
+  // dejaría días sin marcar aunque tuvieran subastas, y sería un fallo invisible
+  // (no da error, simplemente miente). El coste lo acota MAX_CALENDAR_RANGE_DAYS.
+  //
+  // Aquí las CLOSED SÍ entran por defecto, al revés que en listPublicAuctions: en
+  // un calendario se navega a meses pasados, y un mes vacío parecería roto.
+  async listAuctionsForCalendar(
+    dto: CalendarAuctionsDto,
+  ): Promise<AuctionListItem[]> {
+    const from = new Date(dto.from);
+    const to = new Date(dto.to);
+
+    // Coherencia del rango: en el servicio y no en el DTO porque class-validator
+    // valida campo a campo, y una regla que cruza dos campos necesita un validador
+    // propio (registerDecorator) que para un solo caso complica más que aporta.
+    if (to.getTime() <= from.getTime()) {
+      throw this.badRequest(
+        'INVALID_RANGE',
+        'La fecha de fin debe ser posterior a la de inicio',
+      );
+    }
+    if (to.getTime() - from.getTime() > MAX_CALENDAR_RANGE_MS) {
+      throw this.badRequest(
+        'INVALID_RANGE',
+        `El rango no puede superar los ${MAX_CALENDAR_RANGE_DAYS} días`,
+      );
+    }
+
+    const rows = await this.prisma.auction.findMany({
+      // Rango SEMIABIERTO [from, to): el instante `to` pertenece al mes siguiente.
+      // Si fuera cerrado por ambos lados, dos meses contiguos se solaparían un
+      // instante y una subasta que cierra justo en la frontera saldría dos veces.
+      where: {
+        status: { in: [...PUBLIC_AUCTION_STATUSES] },
+        endsAt: { gte: from, lt: to },
+      },
+      orderBy: { endsAt: 'asc' },
+      include: {
+        bids: { orderBy: { amountCents: 'desc' }, take: 1 },
+        _count: { select: { bids: true } },
+      },
+    });
+
+    const items = await this.resolveItems(rows);
+    return rows.map((row) => this.toListItem(row, items));
+  }
+
+  // Fila de Auction (con su puja máxima y su conteo) → tarjeta pública. Lo usan
+  // el listado paginado y el calendario; vive aquí para que ambos no puedan
+  // divergir en lo que exponen (que es justo donde se filtran datos de más).
+  private toListItem(
+    row: Prisma.AuctionGetPayload<{
+      include: { bids: true; _count: { select: { bids: true } } };
+    }>,
+    items: Map<string, { name: string; photo: string | null }>,
+  ): AuctionListItem {
+    const item = items.get(this.itemKey(row));
+    return {
+      id: row.id,
+      status: row.status,
+      // Literales y no la constante ItemKind de shared: la API solo puede
+      // importar TIPOS de shared, no valores en runtime (ts-jest no transforma
+      // node_modules). Mismo criterio que itemPath en seo.service.ts. El tipo
+      // AuctionListItem obliga a que estos literales sigan siendo válidos.
+      itemKind: row.itemType === OrderItemType.PRODUCT ? 'product' : 'lot',
+      itemId: row.itemId,
+      // El artículo debería existir siempre (el alta lo valida, tarea 11);
+      // el fallback evita que una fila huérfana tumbe el listado entero.
+      name: item?.name ?? 'Artículo no disponible',
+      photo: item?.photo ?? null,
+      currentPriceCents: row.bids[0]?.amountCents ?? row.startingPriceCents,
+      startingPriceCents: row.startingPriceCents,
+      minIncrementCents: row.minIncrementCents,
+      bidCount: row._count.bids,
+      startsAt: row.startsAt.toISOString(),
+      endsAt: row.endsAt.toISOString(),
     };
   }
 

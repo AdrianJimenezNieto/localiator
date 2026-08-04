@@ -1,4 +1,4 @@
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import type { AuctionListItem, Paginated } from '@localiator/shared';
 import { toQuery } from '../lib/api';
 import { useApi } from '../lib/useApi';
@@ -56,7 +56,15 @@ export function AuctionsListPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
-      <h1 className="mb-6 text-2xl font-bold text-neutral-900">Subastas</h1>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold text-neutral-900">Subastas</h1>
+        <Link
+          to="/subastas/calendario"
+          className="rounded-md bg-neutral-100 px-3 py-1.5 text-sm font-medium text-neutral-600 hover:bg-neutral-200"
+        >
+          Ver calendario
+        </Link>
+      </div>
 
       <div className="mb-6 flex flex-wrap gap-2">
         {FILTERS.map((f) => (
