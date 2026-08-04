@@ -32,6 +32,10 @@ export function ItemFormPage({ kind }: { kind: ItemKind }) {
   const [photos, setPhotos] = useState<string[]>([]);
 
   const [categories, setCategories] = useState<Category[]>([]);
+  // Alta rápida de categoría sin salir del formulario del artículo.
+  const [creatingCategory, setCreatingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [categoryBusy, setCategoryBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
@@ -114,6 +118,35 @@ export function ItemFormPage({ kind }: { kind: ItemKind }) {
     }
   }
 
+  // Crea la categoría vía API y la deja ya seleccionada en el desplegable. No es un
+  // submit: vive dentro del <form> del artículo, así que se dispara con onClick.
+  async function handleCreateCategory() {
+    const name = newCategoryName.trim();
+    if (!name) return;
+
+    setError(null);
+    setCategoryBusy(true);
+    try {
+      const cat = await apiSend<Category>(
+        'POST',
+        '/categories',
+        { name },
+        token ?? undefined,
+      );
+      setCategories((prev) =>
+        [...prev, cat].sort((a, b) => a.name.localeCompare(b.name)),
+      );
+      setCategoryId(cat.id);
+      setNewCategoryName('');
+      setCreatingCategory(false);
+    } catch (err) {
+      // Típico: 409 si ya existe una categoría con ese slug.
+      setError(err instanceof ApiError ? err.message : 'No se pudo crear la categoría');
+    } finally {
+      setCategoryBusy(false);
+    }
+  }
+
   if (loading) {
     return <p className="text-neutral-500">Cargando…</p>;
   }
@@ -185,20 +218,59 @@ export function ItemFormPage({ kind }: { kind: ItemKind }) {
             />
           </Field>
           <Field label="Categoría" htmlFor="category">
-            <select
-              id="category"
-              value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
-              required
-              className={inputClass}
-            >
-              <option value="">Elige…</option>
-              {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.name}
-                </option>
-              ))}
-            </select>
+            <div className="flex gap-2">
+              <select
+                id="category"
+                value={categoryId}
+                onChange={(e) => setCategoryId(e.target.value)}
+                required
+                className={inputClass}
+              >
+                <option value="">Elige…</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setCreatingCategory((v) => !v)}
+                aria-expanded={creatingCategory}
+                title="Nueva categoría"
+                className="shrink-0 rounded-md border border-neutral-300 px-3 py-2 font-medium hover:bg-neutral-100"
+              >
+                {creatingCategory ? '×' : '+'}
+              </button>
+            </div>
+
+            {creatingCategory && (
+              <div className="mt-2 flex gap-2">
+                <input
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  // Enter aquí crearía el artículo (estamos dentro de su <form>),
+                  // así que lo interceptamos para crear la categoría.
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      void handleCreateCategory();
+                    }
+                  }}
+                  placeholder="Nombre de la categoría"
+                  aria-label="Nombre de la nueva categoría"
+                  className={inputClass}
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleCreateCategory()}
+                  disabled={categoryBusy || newCategoryName.trim() === ''}
+                  className="shrink-0 rounded-md bg-neutral-900 px-3 py-2 font-medium text-white disabled:opacity-50"
+                >
+                  {categoryBusy ? 'Creando…' : 'Crear'}
+                </button>
+              </div>
+            )}
           </Field>
         </div>
 
