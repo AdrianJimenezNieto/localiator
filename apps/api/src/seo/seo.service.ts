@@ -57,7 +57,13 @@ export class SeoService {
       this.prisma.lot.findMany({ where, select }),
     ]);
 
-    const urls: string[] = [urlEntry(base, '/')];
+    // Páginas públicas fijas. No salen de la BD, así que van a mano; sin ellas
+    // los buscadores solo llegan a las fichas sueltas y no a los índices.
+    const urls: string[] = [
+      urlEntry(base, '/'),
+      urlEntry(base, '/subastas'),
+      urlEntry(base, '/subastas/calendario'),
+    ];
     for (const p of products) {
       urls.push(urlEntry(base, itemPath('product', p.id, p.name), p.updatedAt));
     }

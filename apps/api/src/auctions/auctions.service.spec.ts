@@ -470,6 +470,131 @@ describe('AuctionsService', () => {
     });
   });
 
+  // Calendario público: mismas tarjetas que el listado, pero filtradas por rango
+  // de cierre y SIN paginar (la rejilla necesita el mes entero). El interés está
+  // en el rango: sus fronteras y su tope.
+  describe('listAuctionsForCalendar', () => {
+    const row = {
+      ...liveAuction,
+      bids: [] as { amountCents: number }[],
+      _count: { bids: 0 },
+    };
+
+    // Un mes cualquiera, en el formato que manda el front.
+    const range = {
+      from: '2026-08-01T00:00:00.000Z',
+      to: '2026-09-01T00:00:00.000Z',
+    };
+
+    beforeEach(() => {
+      prismaMock.auction.findMany.mockResolvedValue([row]);
+      prismaMock.product.findMany.mockResolvedValue([
+        { id: 'product-1', name: 'Taladro', photos: ['foto.jpg'] },
+      ]);
+      prismaMock.lot.findMany.mockResolvedValue([]);
+    });
+
+    // Semiabierto [from, to): el instante `to` ya es del mes siguiente. Si fuera
+    // cerrado, una subasta que cierra justo en la frontera saldría en los dos meses.
+    it('filtra por un rango semiabierto sobre endsAt', async () => {
+      await service.listAuctionsForCalendar(range);
+
+      const [call] = prismaMock.auction.findMany.mock.calls as Array<
+        [{ where: { endsAt: { gte: Date; lt: Date } }; orderBy: unknown }]
+      >;
+      expect(call[0].where.endsAt).toEqual({
+        gte: new Date(range.from),
+        lt: new Date(range.to),
+      });
+      expect(call[0].orderBy).toEqual({ endsAt: 'asc' });
+    });
+
+    // Incluye CLOSED, al revés que el listado: en un calendario se navega a meses
+    // pasados, y un mes vacío parecería que la página está rota. PAID y CANCELLED
+    // siguen sin salir (son estado interno).
+    it('incluye las cerradas pero nunca PAID ni CANCELLED', async () => {
+      await service.listAuctionsForCalendar(range);
+
+      const [call] = prismaMock.auction.findMany.mock.calls as Array<
+        [{ where: { status: { in: string[] } } }]
+      >;
+      expect(call[0].where.status.in).toEqual(
+        expect.arrayContaining([
+          AuctionStatus.LIVE,
+          AuctionStatus.SCHEDULED,
+          AuctionStatus.CLOSED,
+        ]),
+      );
+      expect(call[0].where.status.in).not.toContain(AuctionStatus.PAID);
+      expect(call[0].where.status.in).not.toContain(AuctionStatus.CANCELLED);
+    });
+
+    // Sin paginar: la rejilla necesita TODAS las del mes. Una página dejaría días
+    // sin marcar aunque tuvieran subastas, y sin dar ningún error.
+    it('no pagina', async () => {
+      await service.listAuctionsForCalendar(range);
+
+      const [call] = prismaMock.auction.findMany.mock.calls as Array<
+        [{ skip?: number; take?: number }]
+      >;
+      expect(call[0].skip).toBeUndefined();
+      expect(call[0].take).toBeUndefined();
+    });
+
+    it('devuelve las mismas tarjetas que el listado', async () => {
+      prismaMock.auction.findMany.mockResolvedValue([
+        { ...row, bids: [{ amountCents: 7000 }], _count: { bids: 3 } },
+      ]);
+
+      const items = await service.listAuctionsForCalendar(range);
+
+      expect(items[0]).toMatchObject({
+        name: 'Taladro',
+        photo: 'foto.jpg',
+        currentPriceCents: 7000,
+        bidCount: 3,
+        endsAt: liveAuction.endsAt.toISOString(),
+      });
+      // Público: ni siquiera enmascarado se filtra quién puja.
+      expect(JSON.stringify(items)).not.toContain('userId');
+    });
+
+    it('resuelve los artículos en bloque, sin N+1', async () => {
+      prismaMock.auction.findMany.mockResolvedValue([
+        row,
+        { ...row, id: 'auction-2', itemId: 'product-2' },
+        { ...row, id: 'auction-3', itemType: 'LOT', itemId: 'lot-1' },
+      ]);
+
+      await service.listAuctionsForCalendar(range);
+
+      expect(prismaMock.product.findMany).toHaveBeenCalledTimes(1);
+      expect(prismaMock.lot.findMany).toHaveBeenCalledTimes(1);
+    });
+
+    // Sin paginación, el tope de ventana es lo ÚNICO que acota el coste: sin él,
+    // `from=2000&to=2100` se traería la tabla entera.
+    it('rechaza un rango mayor que el tope', async () => {
+      await expect(
+        service.listAuctionsForCalendar({
+          from: '2026-01-01T00:00:00.000Z',
+          to: '2026-06-01T00:00:00.000Z',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prismaMock.auction.findMany).not.toHaveBeenCalled();
+    });
+
+    it('rechaza un rango invertido o vacío', async () => {
+      await expect(
+        service.listAuctionsForCalendar({ from: range.to, to: range.from }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        service.listAuctionsForCalendar({ from: range.from, to: range.from }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prismaMock.auction.findMany).not.toHaveBeenCalled();
+    });
+  });
+
   // Gestión de admin (tarea 11). El interés está en las validaciones: sin ellas se
   // podría subastar un artículo inexistente (el itemType/itemId es polimórfico y no
   // hay FK que lo impida) o cambiar las reglas con pujas ya puestas.

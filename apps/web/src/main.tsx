@@ -20,6 +20,7 @@ import { CheckoutResultPage } from './pages/CheckoutResultPage.tsx'
 import { MyOrdersPage } from './pages/MyOrdersPage.tsx'
 import { AuctionPage } from './pages/AuctionPage.tsx'
 import { AuctionsListPage } from './pages/AuctionsListPage.tsx'
+import { AuctionsCalendarPage } from './pages/AuctionsCalendarPage.tsx'
 import { LegalPage } from './pages/LegalPage.tsx'
 import { TermsPage } from './pages/TermsPage.tsx'
 import { CookiesPage } from './pages/CookiesPage.tsx'
@@ -64,6 +65,10 @@ const router = createBrowserRouter([
       { path: 'checkout/resultado', element: <CheckoutResultPage /> },
       { path: 'mis-pedidos', element: <MyOrdersPage /> },
       { path: 'subastas', element: <AuctionsListPage /> },
+      // Antes de 'subastas/:id'. React Router prioriza el segmento estático sobre
+      // el dinámico y funcionaría en cualquier orden, pero declararlo aquí evita
+      // que se lea como si 'calendario' pudiera colarse como un id.
+      { path: 'subastas/calendario', element: <AuctionsCalendarPage /> },
       { path: 'subastas/:id', element: <AuctionPage /> },
       { path: 'aviso-legal', element: <LegalPage /> },
       { path: 'condiciones-venta', element: <TermsPage /> },
