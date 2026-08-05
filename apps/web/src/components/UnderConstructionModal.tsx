@@ -31,16 +31,32 @@ export function UnderConstructionModal() {
   }
 
   return (
+    // El click en el fondo cierra. Va aquí y no en el panel porque el panel es
+    // hijo: sin `stopPropagation` en él, cualquier click dentro burbujearía hasta
+    // este handler y cerraría el modal sin querer.
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-neutral-900/60 p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="under-construction-title"
+      onClick={close}
     >
-      <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+      <div
+        className="relative w-full max-w-md rounded-lg bg-white p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={close}
+          aria-label="Cerrar aviso"
+          className="absolute right-3 top-3 rounded-md p-1 text-xl leading-none text-neutral-400 hover:bg-neutral-100 hover:text-neutral-900"
+        >
+          ×
+        </button>
+
         <h2
           id="under-construction-title"
-          className="text-lg font-bold text-neutral-900"
+          className="pr-8 text-lg font-bold text-neutral-900"
         >
           Sitio en construcción
         </h2>
