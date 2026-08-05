@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 // Aviso de "sitio en construcción". Sale al entrar en la web pública y se puede
 // cerrar para seguir navegando; queda recordado en sessionStorage, así que no
@@ -19,16 +19,33 @@ export function UnderConstructionModal() {
     }
   })
 
-  if (dismissed) return null
-
-  function close() {
+  // useCallback mantiene la misma referencia entre renders, para que el efecto de
+  // abajo no tenga que desuscribir y volver a suscribir el listener cada vez.
+  const close = useCallback(() => {
     try {
       sessionStorage.setItem(STORAGE_KEY, '1')
     } catch {
       // Si no se puede persistir, al menos lo cerramos en esta página.
     }
     setDismissed(true)
-  }
+  }, [])
+
+  // Cierre con Escape, lo esperable en cualquier diálogo. El listener va en
+  // `document` (no en el modal) porque el foco puede estar en cualquier parte, y
+  // la función de retorno lo quita al desmontar para no dejarlo colgado.
+  useEffect(() => {
+    if (dismissed) return
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') close()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [dismissed, close])
+
+  // Los hooks van SIEMPRE antes de este return: React exige que se llamen en el
+  // mismo orden en cada render, así que no pueden quedar detrás de una salida
+  // temprana.
+  if (dismissed) return null
 
   return (
     // El click en el fondo cierra. Va aquí y no en el panel porque el panel es
