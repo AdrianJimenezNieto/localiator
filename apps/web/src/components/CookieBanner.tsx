@@ -30,14 +30,14 @@ export function CookieBanner() {
     <div
       role="dialog"
       aria-label="Consentimiento de cookies"
-      className="fixed inset-x-0 bottom-0 z-50 border-t border-neutral-200 bg-white shadow-lg"
+      className="fixed inset-x-0 bottom-0 z-50 border-t border-ink-200 bg-white shadow-lg"
     >
       <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-neutral-700">
+        <p className="text-sm text-ink-700">
           Usamos cookies técnicas necesarias para el funcionamiento del sitio. No
           activamos cookies no esenciales sin tu consentimiento. Más información en
           la{' '}
-          <Link to="/cookies" className="underline hover:text-neutral-900">
+          <Link to="/cookies" className="underline hover:text-ink-900">
             política de cookies
           </Link>
           .
@@ -46,14 +46,14 @@ export function CookieBanner() {
           <button
             type="button"
             onClick={() => choose('rejected')}
-            className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100"
+            className="rounded-md border border-ink-300 px-4 py-2 text-sm font-medium text-ink-700 hover:bg-ink-100"
           >
             Rechazar
           </button>
           <button
             type="button"
             onClick={() => choose('accepted')}
-            className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
+            className="rounded-md bg-ink-900 px-4 py-2 text-sm font-medium text-white hover:bg-ink-800"
           >
             Aceptar
           </button>

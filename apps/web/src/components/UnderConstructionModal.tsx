@@ -52,7 +52,7 @@ export function UnderConstructionModal() {
     // hijo: sin `stopPropagation` en él, cualquier click dentro burbujearía hasta
     // este handler y cerraría el modal sin querer.
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-neutral-900/60 p-4"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-ink-900/60 p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="under-construction-title"
@@ -66,23 +66,23 @@ export function UnderConstructionModal() {
           type="button"
           onClick={close}
           aria-label="Cerrar aviso"
-          className="absolute right-3 top-3 rounded-md p-1 text-xl leading-none text-neutral-400 hover:bg-neutral-100 hover:text-neutral-900"
+          className="absolute right-3 top-3 rounded-md p-1 text-xl leading-none text-ink-400 hover:bg-ink-100 hover:text-ink-900"
         >
           ×
         </button>
 
         <h2
           id="under-construction-title"
-          className="pr-8 text-lg font-bold text-neutral-900"
+          className="pr-8 text-lg font-bold text-ink-900"
         >
           Sitio en construcción
         </h2>
-        <p className="mt-3 text-sm text-neutral-700">
+        <p className="mt-3 text-sm text-ink-700">
           Localiator todavía está en desarrollo. Puedes echar un vistazo, pero
           algunas funciones pueden no estar disponibles o cambiar, y los datos que
           veas son provisionales.
         </p>
-        <p className="mt-2 text-sm text-neutral-700">
+        <p className="mt-2 text-sm text-ink-700">
           Gracias por tu paciencia: pronto estaremos listos.
         </p>
         <div className="mt-6 flex justify-end">
@@ -90,7 +90,7 @@ export function UnderConstructionModal() {
             type="button"
             onClick={close}
             autoFocus
-            className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
+            className="rounded-md bg-ink-900 px-4 py-2 text-sm font-medium text-white hover:bg-ink-800"
           >
             Entendido
           </button>

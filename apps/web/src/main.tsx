@@ -9,6 +9,8 @@ import './index.css'
 import App from './App.tsx'
 import { AuthProvider } from './lib/auth.tsx'
 import { CartProvider } from './lib/cart.tsx'
+import { HomePage } from './pages/HomePage.tsx'
+import { HowItWorksPage } from './pages/HowItWorksPage.tsx'
 import { CatalogPage } from './pages/CatalogPage.tsx'
 import { DetailPage } from './pages/DetailPage.tsx'
 import { CartPage } from './pages/CartPage.tsx'
@@ -52,7 +54,12 @@ const router = createBrowserRouter([
     // si algo revienta al renderizar cualquier ruta hija.
     errorElement: <ErrorPage />,
     children: [
-      { index: true, element: <CatalogPage /> },
+      // La raíz era el catálogo. Ahora es una portada que explica qué es esto, y
+      // el catálogo pasa a /catalogo. Las URLs de ficha, subastas y legales no
+      // cambian, así que lo ya indexado en buscadores sigue resolviendo.
+      { index: true, element: <HomePage /> },
+      { path: 'catalogo', element: <CatalogPage /> },
+      { path: 'como-funciona', element: <HowItWorksPage /> },
       { path: 'productos/:id', element: <DetailPage kind="product" /> },
       { path: 'productos/:id/:slug', element: <DetailPage kind="product" /> },
       { path: 'lotes/:id', element: <DetailPage kind="lot" /> },

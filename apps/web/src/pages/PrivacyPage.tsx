@@ -72,7 +72,7 @@ export function PrivacyPage() {
           oposición, limitación y portabilidad escribiéndonos a {COMPANY.email}.
           Además, puedes ejercer el <strong>derecho al olvido</strong> tú mismo
           eliminando tu cuenta desde{' '}
-          <Link to="/cuenta" className="underline hover:text-neutral-900">
+          <Link to="/cuenta" className="underline hover:text-ink-900">
             tu cuenta
           </Link>
           . Si consideras que no hemos atendido correctamente tu solicitud, puedes

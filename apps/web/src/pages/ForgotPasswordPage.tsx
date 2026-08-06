@@ -42,11 +42,11 @@ export function ForgotPasswordPage() {
     return (
       <div className="mx-auto max-w-sm px-4 py-16 text-center">
         <h1 className="mb-2 text-2xl font-bold">Revisa tu email</h1>
-        <p className="mb-6 text-neutral-600">
+        <p className="mb-6 text-ink-600">
           Si el email corresponde a una cuenta, te hemos enviado un enlace para
           restablecer tu contraseña (válido 1 hora).
         </p>
-        <Link to="/login" className="text-neutral-900 underline">
+        <Link to="/login" className="text-ink-900 underline">
           Volver a iniciar sesión
         </Link>
       </div>
@@ -56,7 +56,7 @@ export function ForgotPasswordPage() {
   return (
     <div className="mx-auto max-w-sm px-4 py-16">
       <h1 className="mb-2 text-2xl font-bold">Recuperar contraseña</h1>
-      <p className="mb-6 text-sm text-neutral-600">
+      <p className="mb-6 text-sm text-ink-600">
         Introduce tu email y te enviaremos un enlace para elegir una contraseña
         nueva.
       </p>
@@ -71,7 +71,7 @@ export function ForgotPasswordPage() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-md border border-neutral-300 px-3 py-2 focus:border-neutral-900 focus:outline-none"
+            className="w-full rounded-md border border-ink-300 px-3 py-2 focus:border-ink-900 focus:outline-none"
           />
         </div>
 
@@ -89,14 +89,14 @@ export function ForgotPasswordPage() {
         <button
           type="submit"
           disabled={submitting || turnstileToken === null}
-          className="min-h-11 rounded-md bg-neutral-900 px-4 py-2 font-medium text-white disabled:opacity-50"
+          className="min-h-11 rounded-md bg-ink-900 px-4 py-2 font-medium text-white disabled:opacity-50"
         >
           {submitting ? 'Enviando…' : 'Enviar enlace'}
         </button>
       </form>
 
-      <p className="mt-4 text-sm text-neutral-600">
-        <Link to="/login" className="underline hover:text-neutral-900">
+      <p className="mt-4 text-sm text-ink-600">
+        <Link to="/login" className="underline hover:text-ink-900">
           Volver a iniciar sesión
         </Link>
       </p>

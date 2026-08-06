@@ -56,8 +56,8 @@ export function PersonalDataFields<T extends PersonalData>({
         </Field>
       </div>
 
-      <fieldset className="mt-2 flex flex-col gap-4 border-t border-neutral-200 pt-4">
-        <legend className="text-sm font-semibold text-neutral-700">
+      <fieldset className="mt-2 flex flex-col gap-4 border-t border-ink-200 pt-4">
+        <legend className="text-sm font-semibold text-ink-700">
           Dirección de facturación
         </legend>
 
@@ -133,7 +133,7 @@ export function PersonalDataFields<T extends PersonalData>({
 }
 
 const inputClass =
-  'w-full rounded-md border border-neutral-300 px-3 py-2 focus:border-neutral-900 focus:outline-none';
+  'w-full rounded-md border border-ink-300 px-3 py-2 focus:border-ink-900 focus:outline-none';
 
 function Field({
   id,

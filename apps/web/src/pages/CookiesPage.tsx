@@ -18,7 +18,7 @@ export function CookiesPage() {
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="border-b border-neutral-300 text-left">
+              <tr className="border-b border-ink-300 text-left">
                 <th className="py-2 pr-4 font-semibold">Cookie</th>
                 <th className="py-2 pr-4 font-semibold">Finalidad</th>
                 <th className="py-2 pr-4 font-semibold">Duración</th>
@@ -26,7 +26,7 @@ export function CookiesPage() {
               </tr>
             </thead>
             <tbody className="align-top">
-              <tr className="border-b border-neutral-200">
+              <tr className="border-b border-ink-200">
                 <td className="py-2 pr-4">Sesión (refresh token)</td>
                 <td className="py-2 pr-4">
                   Técnica: mantener la sesión iniciada de forma segura.
@@ -34,7 +34,7 @@ export function CookiesPage() {
                 <td className="py-2 pr-4">~15 días (renovable)</td>
                 <td className="py-2">{COMPANY.brand}</td>
               </tr>
-              <tr className="border-b border-neutral-200">
+              <tr className="border-b border-ink-200">
                 <td className="py-2 pr-4">Cloudflare Turnstile</td>
                 <td className="py-2 pr-4">
                   Técnica/seguridad: protección antibot en los formularios.
@@ -64,7 +64,7 @@ export function CookiesPage() {
           el correcto funcionamiento de la web (por ejemplo, no poder iniciar
           sesión). Para más información sobre el tratamiento de tus datos, consulta
           la{' '}
-          <Link to="/privacidad" className="underline hover:text-neutral-900">
+          <Link to="/privacidad" className="underline hover:text-ink-900">
             política de privacidad
           </Link>
           .

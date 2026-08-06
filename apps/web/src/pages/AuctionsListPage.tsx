@@ -57,10 +57,10 @@ export function AuctionsListPage() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-neutral-900">Subastas</h1>
+        <h1 className="text-2xl font-bold text-ink-900">Subastas</h1>
         <Link
           to="/subastas/calendario"
-          className="rounded-md bg-neutral-100 px-3 py-1.5 text-sm font-medium text-neutral-600 hover:bg-neutral-200"
+          className="rounded-md bg-ink-100 px-3 py-1.5 text-sm font-medium text-ink-600 hover:bg-ink-200"
         >
           Ver calendario
         </Link>
@@ -74,8 +74,8 @@ export function AuctionsListPage() {
             onClick={() => selectFilter(f)}
             className={`rounded-md px-3 py-1.5 text-sm font-medium ${
               f.label === activeFilter.label
-                ? 'bg-neutral-900 text-white'
-                : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                ? 'bg-ink-900 text-white'
+                : 'bg-ink-100 text-ink-600 hover:bg-ink-200'
             }`}
           >
             {f.value ? AUCTION_STATUS_LABELS[f.value[0]] : f.label}
@@ -92,7 +92,7 @@ export function AuctionsListPage() {
       )}
 
       {!loading && !error && data && data.items.length === 0 && (
-        <p className="py-16 text-center text-neutral-500">
+        <p className="py-16 text-center text-ink-500">
           No hay subastas con este filtro.
         </p>
       )}
@@ -122,13 +122,13 @@ function AuctionsSkeleton() {
       {Array.from({ length: 6 }).map((_, i) => (
         <div
           key={i}
-          className="flex flex-col overflow-hidden rounded-lg border border-neutral-200"
+          className="flex flex-col overflow-hidden rounded-lg border border-ink-200"
         >
-          <div className="aspect-square w-full animate-pulse bg-neutral-200" />
+          <div className="aspect-square w-full animate-pulse bg-ink-200" />
           <div className="space-y-2 p-3">
-            <div className="h-3 w-1/3 animate-pulse rounded bg-neutral-200" />
-            <div className="h-4 w-3/4 animate-pulse rounded bg-neutral-200" />
-            <div className="h-4 w-1/2 animate-pulse rounded bg-neutral-200" />
+            <div className="h-3 w-1/3 animate-pulse rounded bg-ink-200" />
+            <div className="h-4 w-3/4 animate-pulse rounded bg-ink-200" />
+            <div className="h-4 w-1/2 animate-pulse rounded bg-ink-200" />
           </div>
         </div>
       ))}

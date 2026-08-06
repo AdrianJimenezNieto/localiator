@@ -9,7 +9,7 @@ export function GoogleLoginButton({ redirect }: { redirect: string }) {
   return (
     <a
       href={href}
-      className="flex min-h-11 items-center justify-center gap-2 rounded-md border border-neutral-300 px-4 py-2 font-medium text-neutral-700 hover:bg-neutral-50"
+      className="flex min-h-11 items-center justify-center gap-2 rounded-md border border-ink-300 px-4 py-2 font-medium text-ink-700 hover:bg-ink-50"
     >
       <svg viewBox="0 0 48 48" className="h-5 w-5" aria-hidden="true">
         <path

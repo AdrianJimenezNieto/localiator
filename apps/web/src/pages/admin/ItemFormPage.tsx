@@ -148,7 +148,7 @@ export function ItemFormPage({ kind }: { kind: ItemKind }) {
   }
 
   if (loading) {
-    return <p className="text-neutral-500">Cargando…</p>;
+    return <p className="text-ink-500">Cargando…</p>;
   }
 
   return (
@@ -238,7 +238,7 @@ export function ItemFormPage({ kind }: { kind: ItemKind }) {
                 onClick={() => setCreatingCategory((v) => !v)}
                 aria-expanded={creatingCategory}
                 title="Nueva categoría"
-                className="shrink-0 rounded-md border border-neutral-300 px-3 py-2 font-medium hover:bg-neutral-100"
+                className="shrink-0 rounded-md border border-ink-300 px-3 py-2 font-medium hover:bg-ink-100"
               >
                 {creatingCategory ? '×' : '+'}
               </button>
@@ -265,7 +265,7 @@ export function ItemFormPage({ kind }: { kind: ItemKind }) {
                   type="button"
                   onClick={() => void handleCreateCategory()}
                   disabled={categoryBusy || newCategoryName.trim() === ''}
-                  className="shrink-0 rounded-md bg-neutral-900 px-3 py-2 font-medium text-white disabled:opacity-50"
+                  className="shrink-0 rounded-md bg-ink-900 px-3 py-2 font-medium text-white disabled:opacity-50"
                 >
                   {categoryBusy ? 'Creando…' : 'Crear'}
                 </button>
@@ -286,14 +286,14 @@ export function ItemFormPage({ kind }: { kind: ItemKind }) {
           <button
             type="submit"
             disabled={saving}
-            className="min-h-11 rounded-md bg-neutral-900 px-4 py-2 font-medium text-white disabled:opacity-50"
+            className="min-h-11 rounded-md bg-ink-900 px-4 py-2 font-medium text-white disabled:opacity-50"
           >
             {saving ? 'Guardando…' : 'Guardar'}
           </button>
           <button
             type="button"
             onClick={() => navigate(listRoute)}
-            className="min-h-11 rounded-md border border-neutral-300 px-4 py-2 font-medium hover:bg-neutral-100"
+            className="min-h-11 rounded-md border border-ink-300 px-4 py-2 font-medium hover:bg-ink-100"
           >
             Cancelar
           </button>
@@ -304,7 +304,7 @@ export function ItemFormPage({ kind }: { kind: ItemKind }) {
 }
 
 const inputClass =
-  'w-full rounded-md border border-neutral-300 px-3 py-2 focus:border-neutral-900 focus:outline-none';
+  'w-full rounded-md border border-ink-300 px-3 py-2 focus:border-ink-900 focus:outline-none';
 
 function Field({
   label,

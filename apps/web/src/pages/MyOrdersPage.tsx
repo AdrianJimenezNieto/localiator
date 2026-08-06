@@ -48,7 +48,7 @@ export function MyOrdersPage() {
 
   if (!ready || (!orders && !error)) {
     return (
-      <p className="mx-auto max-w-3xl px-4 py-16 text-center text-neutral-500">
+      <p className="mx-auto max-w-3xl px-4 py-16 text-center text-ink-500">
         Cargando tus pedidos…
       </p>
     );
@@ -66,7 +66,7 @@ export function MyOrdersPage() {
     return (
       <div className="mx-auto max-w-3xl px-4 py-16 text-center">
         <h1 className="mb-2 text-2xl font-bold">Aún no tienes pedidos</h1>
-        <p className="text-neutral-500">Cuando compres, aparecerán aquí.</p>
+        <p className="text-ink-500">Cuando compres, aparecerán aquí.</p>
       </div>
     );
   }
@@ -78,16 +78,16 @@ export function MyOrdersPage() {
         {orders?.map((order) => (
           <li
             key={order.id}
-            className="rounded-lg border border-neutral-200 bg-white p-4"
+            className="rounded-lg border border-ink-200 bg-white p-4"
           >
             <div className="mb-2 flex items-center justify-between">
-              <span className="text-sm text-neutral-500">
+              <span className="text-sm text-ink-500">
                 {new Date(order.createdAt).toLocaleDateString('es-ES')}
               </span>
               <OrderStatusBadge status={order.status} />
             </div>
 
-            <ul className="mb-2 text-sm text-neutral-700">
+            <ul className="mb-2 text-sm text-ink-700">
               {order.lines.map((line) => (
                 <li key={`${line.itemType}:${line.itemId}`}>
                   {line.nameSnapshot} × {line.quantity} —{' '}
@@ -112,7 +112,7 @@ export function MyOrdersPage() {
                   type="button"
                   onClick={() => void handlePay(order.id)}
                   disabled={payingId === order.id}
-                  className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50"
+                  className="rounded-md bg-ink-900 px-4 py-2 text-sm font-medium text-white hover:bg-ink-700 disabled:opacity-50"
                 >
                   {payingId === order.id ? 'Redirigiendo…' : 'Pagar'}
                 </button>
@@ -122,7 +122,7 @@ export function MyOrdersPage() {
                   <button
                     type="button"
                     onClick={() => void openInvoice(order.id, token)}
-                    className="text-sm text-neutral-700 underline hover:text-neutral-900"
+                    className="text-sm text-ink-700 underline hover:text-ink-900"
                   >
                     Factura {order.invoice.number}
                   </button>

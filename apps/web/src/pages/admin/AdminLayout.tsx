@@ -19,8 +19,8 @@ export function AdminLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-50 text-neutral-900">
-      <header className="border-b border-neutral-200 bg-white">
+    <div className="min-h-screen bg-ink-50 text-ink-900">
+      <header className="border-b border-ink-200 bg-white">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-4 px-4 py-3">
           <span className="text-lg font-bold">Localiator · Admin</span>
           <nav className="flex flex-wrap gap-1">
@@ -31,8 +31,8 @@ export function AdminLayout() {
                 className={({ isActive }) =>
                   `rounded-md px-3 py-2 text-sm font-medium ${
                     isActive
-                      ? 'bg-neutral-900 text-white'
-                      : 'text-neutral-600 hover:bg-neutral-100'
+                      ? 'bg-ink-900 text-white'
+                      : 'text-ink-600 hover:bg-ink-100'
                   }`
                 }
               >
@@ -41,11 +41,11 @@ export function AdminLayout() {
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-3 text-sm">
-            <span className="hidden text-neutral-500 sm:inline">{user?.email}</span>
+            <span className="hidden text-ink-500 sm:inline">{user?.email}</span>
             <button
               type="button"
               onClick={handleLogout}
-              className="rounded-md border border-neutral-300 px-3 py-2 font-medium hover:bg-neutral-100"
+              className="rounded-md border border-ink-300 px-3 py-2 font-medium hover:bg-ink-100"
             >
               Salir
             </button>

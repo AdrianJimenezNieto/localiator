@@ -52,7 +52,7 @@ export function AdminLoginPage() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-md border border-neutral-300 px-3 py-2 focus:border-neutral-900 focus:outline-none"
+            className="w-full rounded-md border border-ink-300 px-3 py-2 focus:border-ink-900 focus:outline-none"
           />
         </div>
         <div>
@@ -65,7 +65,7 @@ export function AdminLoginPage() {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-md border border-neutral-300 px-3 py-2 focus:border-neutral-900 focus:outline-none"
+            className="w-full rounded-md border border-ink-300 px-3 py-2 focus:border-ink-900 focus:outline-none"
           />
         </div>
 
@@ -83,7 +83,7 @@ export function AdminLoginPage() {
         <button
           type="submit"
           disabled={submitting || turnstileToken === null}
-          className="min-h-11 rounded-md bg-neutral-900 px-4 py-2 font-medium text-white disabled:opacity-50"
+          className="min-h-11 rounded-md bg-ink-900 px-4 py-2 font-medium text-white disabled:opacity-50"
         >
           {submitting ? 'Entrando…' : 'Entrar'}
         </button>

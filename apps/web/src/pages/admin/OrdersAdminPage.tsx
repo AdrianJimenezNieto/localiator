@@ -83,8 +83,8 @@ export function OrdersAdminPage() {
             onClick={() => setFilter(f.value)}
             className={`rounded-md px-3 py-1.5 text-sm font-medium ${
               filter === f.value
-                ? 'bg-neutral-900 text-white'
-                : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                ? 'bg-ink-900 text-white'
+                : 'bg-ink-100 text-ink-600 hover:bg-ink-200'
             }`}
           >
             {f.label}
@@ -99,27 +99,27 @@ export function OrdersAdminPage() {
       )}
 
       {!orders ? (
-        <p className="text-neutral-500">Cargando…</p>
+        <p className="text-ink-500">Cargando…</p>
       ) : orders.length === 0 ? (
-        <p className="text-neutral-500">No hay pedidos con este filtro.</p>
+        <p className="text-ink-500">No hay pedidos con este filtro.</p>
       ) : (
         <ul className="flex flex-col gap-3">
           {orders.map((order) => (
             <li
               key={order.id}
-              className="rounded-lg border border-neutral-200 bg-white p-4"
+              className="rounded-lg border border-ink-200 bg-white p-4"
             >
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <span className="font-medium">{order.user?.email}</span>
-                  <span className="ml-2 text-sm text-neutral-500">
+                  <span className="ml-2 text-sm text-ink-500">
                     {new Date(order.createdAt).toLocaleString('es-ES')}
                   </span>
                 </div>
                 <OrderStatusBadge status={order.status} />
               </div>
 
-              <ul className="mb-3 text-sm text-neutral-700">
+              <ul className="mb-3 text-sm text-ink-700">
                 {order.lines.map((line) => (
                   <li key={`${line.itemType}:${line.itemId}`}>
                     {line.nameSnapshot} × {line.quantity} —{' '}
@@ -136,7 +136,7 @@ export function OrdersAdminPage() {
                   <button
                     type="button"
                     onClick={() => void openInvoice(order.id, token)}
-                    className="text-sm text-neutral-600 underline hover:text-neutral-900"
+                    className="text-sm text-ink-600 underline hover:text-ink-900"
                   >
                     Factura {order.invoice.number}
                   </button>
@@ -147,7 +147,7 @@ export function OrdersAdminPage() {
                     type="button"
                     disabled={busyId === order.id}
                     onClick={() => void transition(order.id, action.to)}
-                    className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
+                    className="rounded-md bg-ink-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-ink-800 disabled:opacity-50"
                   >
                     {action.label}
                   </button>

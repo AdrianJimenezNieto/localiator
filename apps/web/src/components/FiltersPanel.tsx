@@ -68,7 +68,7 @@ export function FiltersPanel({
           value={qInput}
           onChange={(e) => setQInput(e.target.value)}
           placeholder="Nombre o descripción…"
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-900 focus:outline-none"
+          className="w-full rounded-md border border-ink-300 px-3 py-2 text-sm focus:border-ink-900 focus:outline-none"
         />
       </div>
 
@@ -80,7 +80,7 @@ export function FiltersPanel({
           id="category"
           value={filters.categoryId}
           onChange={(e) => onChange({ categoryId: e.target.value })}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-900 focus:outline-none"
+          className="w-full rounded-md border border-ink-300 px-3 py-2 text-sm focus:border-ink-900 focus:outline-none"
         >
           <option value="">Todas</option>
           {categories?.map((cat) => (
@@ -102,9 +102,9 @@ export function FiltersPanel({
             onChange={(e) => onChange({ minPrice: e.target.value })}
             placeholder="Mín"
             aria-label="Precio mínimo"
-            className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-900 focus:outline-none"
+            className="w-full rounded-md border border-ink-300 px-3 py-2 text-sm focus:border-ink-900 focus:outline-none"
           />
-          <span className="text-neutral-400">–</span>
+          <span className="text-ink-400">–</span>
           <input
             type="number"
             min="0"
@@ -113,7 +113,7 @@ export function FiltersPanel({
             onChange={(e) => onChange({ maxPrice: e.target.value })}
             placeholder="Máx"
             aria-label="Precio máximo"
-            className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-900 focus:outline-none"
+            className="w-full rounded-md border border-ink-300 px-3 py-2 text-sm focus:border-ink-900 focus:outline-none"
           />
         </div>
         {priceInvalid && (
@@ -123,14 +123,14 @@ export function FiltersPanel({
         )}
       </div>
 
-      <div className="flex items-center justify-between border-t border-neutral-200 pt-3">
-        <span className="text-sm text-neutral-500">
+      <div className="flex items-center justify-between border-t border-ink-200 pt-3">
+        <span className="text-sm text-ink-500">
           {resultCount !== null && `${resultCount} resultado${resultCount === 1 ? '' : 's'}`}
         </span>
         <button
           type="button"
           onClick={onClear}
-          className="text-sm text-neutral-600 underline hover:text-neutral-900"
+          className="text-sm text-ink-600 underline hover:text-ink-900"
         >
           Limpiar filtros
         </button>

@@ -149,7 +149,7 @@ export function AuctionFormPage() {
   }
 
   if (loading) {
-    return <p className="text-neutral-500">Cargando…</p>;
+    return <p className="text-ink-500">Cargando…</p>;
   }
 
   return (
@@ -159,12 +159,12 @@ export function AuctionFormPage() {
       </h1>
 
       {!editable && (
-        <p className="mb-4 rounded-md bg-neutral-100 p-3 text-sm text-neutral-600">
+        <p className="mb-4 rounded-md bg-ink-100 p-3 text-sm text-ink-600">
           Esta subasta ya está cerrada: no se puede editar.
         </p>
       )}
       {hasBids && editable && (
-        <p className="mb-4 rounded-md bg-neutral-100 p-3 text-sm text-neutral-600">
+        <p className="mb-4 rounded-md bg-ink-100 p-3 text-sm text-ink-600">
           Ya tiene {bidCount} {bidCount === 1 ? 'puja' : 'pujas'}: solo se puede alargar el cierre.
         </p>
       )}
@@ -269,14 +269,14 @@ export function AuctionFormPage() {
           <button
             type="submit"
             disabled={saving || !editable}
-            className="min-h-11 rounded-md bg-neutral-900 px-4 py-2 font-medium text-white disabled:opacity-50"
+            className="min-h-11 rounded-md bg-ink-900 px-4 py-2 font-medium text-white disabled:opacity-50"
           >
             {saving ? 'Guardando…' : 'Guardar'}
           </button>
           <button
             type="button"
             onClick={() => navigate('/admin/subastas')}
-            className="min-h-11 rounded-md border border-neutral-300 px-4 py-2 font-medium hover:bg-neutral-100"
+            className="min-h-11 rounded-md border border-ink-300 px-4 py-2 font-medium hover:bg-ink-100"
           >
             Cancelar
           </button>
@@ -299,7 +299,7 @@ function fromDatetimeLocal(value: string): string {
 }
 
 const inputClass =
-  'w-full rounded-md border border-neutral-300 px-3 py-2 focus:border-neutral-900 focus:outline-none disabled:bg-neutral-100 disabled:text-neutral-500';
+  'w-full rounded-md border border-ink-300 px-3 py-2 focus:border-ink-900 focus:outline-none disabled:bg-ink-100 disabled:text-ink-500';
 
 function Field({
   label,

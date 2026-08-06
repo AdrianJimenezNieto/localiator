@@ -67,7 +67,7 @@ export function AuctionsAdminPage() {
         <h1 className="text-2xl font-bold">Subastas</h1>
         <Link
           to="/admin/subastas/nuevo"
-          className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
+          className="rounded-md bg-ink-900 px-4 py-2 text-sm font-medium text-white"
         >
           Nueva
         </Link>
@@ -81,8 +81,8 @@ export function AuctionsAdminPage() {
             onClick={() => setFilter(f.value)}
             className={`rounded-md px-3 py-1.5 text-sm font-medium ${
               filter === f.value
-                ? 'bg-neutral-900 text-white'
-                : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                ? 'bg-ink-900 text-white'
+                : 'bg-ink-100 text-ink-600 hover:bg-ink-200'
             }`}
           >
             {f.label}
@@ -95,13 +95,13 @@ export function AuctionsAdminPage() {
       )}
 
       {!auctions ? (
-        <p className="text-neutral-500">Cargando…</p>
+        <p className="text-ink-500">Cargando…</p>
       ) : auctions.length === 0 ? (
-        <p className="text-neutral-500">No hay subastas con este filtro.</p>
+        <p className="text-ink-500">No hay subastas con este filtro.</p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-ink-200 bg-white">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-neutral-200 text-neutral-500">
+            <thead className="border-b border-ink-200 text-ink-500">
               <tr>
                 <th className="p-3 font-medium">Artículo</th>
                 <th className="p-3 font-medium">Estado</th>
@@ -112,26 +112,26 @@ export function AuctionsAdminPage() {
                 <th className="p-3" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-100">
+            <tbody className="divide-y divide-ink-100">
               {auctions.map((auction) => (
                 <tr key={auction.id}>
                   <td className="p-3 font-medium">{auction.itemName ?? '—'}</td>
-                  <td className="p-3 text-neutral-600">
+                  <td className="p-3 text-ink-600">
                     {AUCTION_STATUS_LABELS[auction.status]}
                   </td>
                   <td className="p-3">{formatPrice(auction.currentPriceCents)}</td>
                   <td className="p-3">{auction.bidCount}</td>
-                  <td className="p-3 text-neutral-600">
+                  <td className="p-3 text-ink-600">
                     {new Date(auction.endsAt).toLocaleString('es-ES')}
                   </td>
-                  <td className="p-3 text-neutral-600">
+                  <td className="p-3 text-ink-600">
                     {auction.winner?.email ?? '—'}
                   </td>
                   <td className="p-3">
                     <div className="flex justify-end gap-2">
                       <Link
                         to={`/admin/subastas/${auction.id}`}
-                        className="rounded-md border border-neutral-300 px-3 py-1.5 hover:bg-neutral-100"
+                        className="rounded-md border border-ink-300 px-3 py-1.5 hover:bg-ink-100"
                       >
                         Editar
                       </Link>
@@ -140,7 +140,7 @@ export function AuctionsAdminPage() {
                           type="button"
                           disabled={busyId === auction.id}
                           onClick={() => void cancel(auction)}
-                          className="rounded-md border border-neutral-300 px-3 py-1.5 text-red-700 hover:bg-red-50 disabled:opacity-50"
+                          className="rounded-md border border-ink-300 px-3 py-1.5 text-red-700 hover:bg-red-50 disabled:opacity-50"
                         >
                           Cancelar
                         </button>

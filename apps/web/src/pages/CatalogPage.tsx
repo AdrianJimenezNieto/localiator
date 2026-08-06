@@ -8,6 +8,8 @@ import { eurosToCents } from '../lib/format';
 import { ProductCard } from '../components/ProductCard';
 import { Pagination } from '../components/Pagination';
 import { FiltersPanel, type CatalogFilters } from '../components/FiltersPanel';
+import { useReveal } from '../lib/useReveal';
+import { badge, card, container } from '../lib/ui';
 
 const PAGE_SIZE = 12;
 
@@ -18,7 +20,7 @@ export function CatalogPage() {
     title: 'Catálogo — Localiator',
     description:
       'Explora lotes y productos individuales de subasta disponibles para recoger en almacén. Filtra por categoría y precio.',
-    canonicalPath: '/',
+    canonicalPath: '/catalogo',
   });
 
   // La página y todos los filtros viven en la URL: compartir/recargar los conserva.
@@ -52,6 +54,10 @@ export function CatalogPage() {
     `/catalog/products${query}`,
   );
 
+  // `watch: data` vuelve a enganchar la animación tras cada respuesta: al
+  // paginar o filtrar, las tarjetas son nuevas y hay que observarlas otra vez.
+  const gridRef = useReveal<HTMLDivElement>({ watch: data });
+
   // Escribe los filtros en la URL SIN page: cambiar un filtro resetea a la página 1.
   function applyFilters(next: CatalogFilters) {
     const params = new URLSearchParams();
@@ -70,8 +76,21 @@ export function CatalogPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
-      <h1 className="mb-6 text-2xl font-bold text-neutral-900">Catálogo</h1>
+    <div className={`${container} py-10`}>
+      <header className="mb-8">
+        <h1 className="text-3xl font-bold text-ink-900 sm:text-4xl">Catálogo</h1>
+        <p className="mt-2 max-w-2xl text-ink-600">
+          Lotes y productos sueltos listos para recoger en almacén. Cada artículo
+          es único: lo que ves es la unidad concreta que te llevas.
+        </p>
+        {/* Recuento total junto al título: contesta "¿cuánto hay aquí?" antes de
+            que haya que bajar hasta el paginador. */}
+        {data && (
+          <p className={`${badge('brand')} mt-3`}>
+            {data.total} {data.total === 1 ? 'artículo' : 'artículos'} disponibles
+          </p>
+        )}
+      </header>
 
       <div className="grid gap-8 lg:grid-cols-[16rem_1fr]">
         <aside className="lg:sticky lg:top-4 lg:self-start">
@@ -80,12 +99,12 @@ export function CatalogPage() {
             type="button"
             onClick={() => setFiltersOpen((open) => !open)}
             aria-expanded={filtersOpen}
-            className="mb-4 flex min-h-11 w-full items-center justify-between rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium lg:hidden"
+            className="mb-4 flex min-h-11 w-full items-center justify-between rounded-lg border border-ink-300 bg-white px-4 py-2 text-sm font-medium transition hover:border-ink-400 lg:hidden"
           >
             <span>
               Filtros
               {activeFilterCount > 0 && (
-                <span className="ml-2 rounded-full bg-neutral-900 px-2 py-0.5 text-xs text-white">
+                <span className="ml-2 rounded-full bg-brand-600 px-2 py-0.5 text-xs font-semibold text-white">
                   {activeFilterCount}
                 </span>
               )}
@@ -108,22 +127,38 @@ export function CatalogPage() {
           {loading && <CatalogSkeleton />}
 
           {!loading && error && (
-            <p className="rounded-md bg-red-50 p-4 text-red-700" role="alert">
+            <p
+              className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-800"
+              role="alert"
+            >
               {error}
             </p>
           )}
 
           {!loading && !error && data && data.items.length === 0 && (
-            <p className="py-16 text-center text-neutral-500">
-              No hay artículos que coincidan con la búsqueda.
-            </p>
+            <div className="rounded-xl border border-dashed border-ink-300 py-16 text-center">
+              <p className="font-medium text-ink-700">
+                No hay artículos que coincidan con la búsqueda.
+              </p>
+              <p className="mt-1 text-sm text-ink-500">
+                Prueba a quitar algún filtro o a ampliar el rango de precio.
+              </p>
+            </div>
           )}
 
           {!loading && !error && data && data.items.length > 0 && (
             <>
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
+              <div
+                ref={gridRef}
+                className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4"
+              >
                 {data.items.map((item) => (
-                  <ProductCard key={item.id} item={item} />
+                  // key con la página incluida: al paginar, React recrea las
+                  // tarjetas en vez de reutilizarlas, y así vuelven a aparecer
+                  // con la animación en lugar de cambiar de golpe.
+                  <div key={`${page}-${item.id}`} className="reveal">
+                    <ProductCard item={item} />
+                  </div>
                 ))}
               </div>
               <Pagination
@@ -146,15 +181,12 @@ function CatalogSkeleton() {
   return (
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
       {Array.from({ length: 6 }).map((_, i) => (
-        <div
-          key={i}
-          className="flex flex-col overflow-hidden rounded-lg border border-neutral-200"
-        >
-          <div className="aspect-square w-full animate-pulse bg-neutral-200" />
-          <div className="space-y-2 p-3">
-            <div className="h-3 w-1/3 animate-pulse rounded bg-neutral-200" />
-            <div className="h-4 w-3/4 animate-pulse rounded bg-neutral-200" />
-            <div className="h-4 w-1/2 animate-pulse rounded bg-neutral-200" />
+        <div key={i} className={`${card} flex flex-col overflow-hidden`}>
+          <div className="aspect-square w-full animate-pulse bg-ink-100" />
+          <div className="space-y-2 p-4">
+            <div className="h-3 w-1/3 animate-pulse rounded bg-ink-100" />
+            <div className="h-4 w-3/4 animate-pulse rounded bg-ink-100" />
+            <div className="h-4 w-1/2 animate-pulse rounded bg-ink-100" />
           </div>
         </div>
       ))}

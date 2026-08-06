@@ -84,13 +84,13 @@ export function RegisterPage() {
     return (
       <div className="mx-auto max-w-sm px-4 py-16 text-center">
         <h1 className="mb-2 text-2xl font-bold">Revisa tu email</h1>
-        <p className="mb-6 text-neutral-600">
+        <p className="mb-6 text-ink-600">
           Te hemos enviado un enlace para verificar tu cuenta. Cuando la
           verifiques podrás iniciar sesión y comprar.
         </p>
         <Link
           to={`/login?redirect=${encodeURIComponent(redirect)}`}
-          className="text-neutral-900 underline"
+          className="text-ink-900 underline"
         >
           Ir a iniciar sesión
         </Link>
@@ -104,10 +104,10 @@ export function RegisterPage() {
 
       <GoogleLoginButton redirect={redirect} />
 
-      <div className="my-4 flex items-center gap-3 text-sm text-neutral-400">
-        <div className="h-px flex-1 bg-neutral-200" />
+      <div className="my-4 flex items-center gap-3 text-sm text-ink-400">
+        <div className="h-px flex-1 bg-ink-200" />
         o
-        <div className="h-px flex-1 bg-neutral-200" />
+        <div className="h-px flex-1 bg-ink-200" />
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -144,7 +144,7 @@ export function RegisterPage() {
             />
           </Field>
         </div>
-        <p className="-mt-2 text-xs text-neutral-500">
+        <p className="-mt-2 text-xs text-ink-500">
           Mínimo 10 caracteres, con al menos una letra, un número y un carácter
           especial.
         </p>
@@ -165,17 +165,17 @@ export function RegisterPage() {
         <button
           type="submit"
           disabled={submitting || turnstileToken === null}
-          className="min-h-11 rounded-md bg-neutral-900 px-4 py-2 font-medium text-white disabled:opacity-50"
+          className="min-h-11 rounded-md bg-ink-900 px-4 py-2 font-medium text-white disabled:opacity-50"
         >
           {submitting ? 'Creando…' : 'Crear cuenta'}
         </button>
       </form>
 
-      <p className="mt-4 text-sm text-neutral-600">
+      <p className="mt-4 text-sm text-ink-600">
         ¿Ya tienes cuenta?{' '}
         <Link
           to={`/login?redirect=${encodeURIComponent(redirect)}`}
-          className="underline hover:text-neutral-900"
+          className="underline hover:text-ink-900"
         >
           Inicia sesión
         </Link>
@@ -186,7 +186,7 @@ export function RegisterPage() {
 
 // Clases compartidas por todos los inputs (mismo estilo que el resto de formularios).
 const inputClass =
-  'w-full rounded-md border border-neutral-300 px-3 py-2 focus:border-neutral-900 focus:outline-none';
+  'w-full rounded-md border border-ink-300 px-3 py-2 focus:border-ink-900 focus:outline-none';
 
 // Envoltorio label + control, para no repetir la estructura en cada campo.
 function Field({

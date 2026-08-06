@@ -53,10 +53,10 @@ export function PhotoManager({ photos, onChange }: PhotoManagerProps) {
           {photos.map((url, i) => (
             <li
               key={url}
-              className="relative w-24 overflow-hidden rounded-md border border-neutral-200"
+              className="relative w-24 overflow-hidden rounded-md border border-ink-200"
             >
               <img src={url} alt="" className="h-24 w-24 object-cover" />
-              <div className="flex items-center justify-between bg-neutral-100 px-1 py-0.5 text-xs">
+              <div className="flex items-center justify-between bg-ink-100 px-1 py-0.5 text-xs">
                 <button
                   type="button"
                   onClick={() => move(i, -1)}
@@ -89,7 +89,7 @@ export function PhotoManager({ photos, onChange }: PhotoManagerProps) {
         </ul>
       )}
 
-      <label className="inline-block cursor-pointer rounded-md border border-neutral-300 px-3 py-2 text-sm font-medium hover:bg-neutral-100">
+      <label className="inline-block cursor-pointer rounded-md border border-ink-300 px-3 py-2 text-sm font-medium hover:bg-ink-100">
         {uploading ? 'Subiendo…' : 'Añadir foto'}
         <input
           type="file"
@@ -99,7 +99,7 @@ export function PhotoManager({ photos, onChange }: PhotoManagerProps) {
           className="hidden"
         />
       </label>
-      <p className="mt-1 text-xs text-neutral-500">
+      <p className="mt-1 text-xs text-ink-500">
         La primera foto es la portada. JPEG, PNG o WebP.
       </p>
 

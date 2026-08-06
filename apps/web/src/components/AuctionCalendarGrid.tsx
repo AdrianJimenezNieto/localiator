@@ -39,14 +39,14 @@ export function AuctionCalendarGrid({
             type="button"
             onClick={() => onShiftMonth(-1)}
             aria-label="Mes anterior"
-            className="rounded-md px-2 py-1 text-lg text-neutral-600 hover:bg-neutral-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900"
+            className="rounded-md px-2 py-1 text-lg text-ink-600 hover:bg-ink-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900"
           >
             ‹
           </button>
           {/* aria-live: al cambiar de mes con los botones, el lector de pantalla
               anuncia el mes nuevo. Sin esto la navegación es muda. */}
           <h2
-            className="min-w-40 text-center font-semibold text-neutral-900"
+            className="min-w-40 text-center font-semibold text-ink-900"
             aria-live="polite"
           >
             {monthLabel(visible)}
@@ -55,7 +55,7 @@ export function AuctionCalendarGrid({
             type="button"
             onClick={() => onShiftMonth(1)}
             aria-label="Mes siguiente"
-            className="rounded-md px-2 py-1 text-lg text-neutral-600 hover:bg-neutral-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900"
+            className="rounded-md px-2 py-1 text-lg text-ink-600 hover:bg-ink-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900"
           >
             ›
           </button>
@@ -63,7 +63,7 @@ export function AuctionCalendarGrid({
         <button
           type="button"
           onClick={onToday}
-          className="rounded-md bg-neutral-100 px-3 py-1.5 text-sm font-medium text-neutral-600 hover:bg-neutral-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900"
+          className="rounded-md bg-ink-100 px-3 py-1.5 text-sm font-medium text-ink-600 hover:bg-ink-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900"
         >
           Hoy
         </button>
@@ -73,7 +73,7 @@ export function AuctionCalendarGrid({
         {WEEKDAY_LABELS.map((label, i) => (
           // Las iniciales se repiten (M de martes y de miércoles), así que la
           // clave es el índice, no la etiqueta.
-          <div key={i} className="pb-1 text-xs font-medium text-neutral-400">
+          <div key={i} className="pb-1 text-xs font-medium text-ink-400">
             {label}
           </div>
         ))}
@@ -123,8 +123,8 @@ function DayCell({
     return (
       <div
         className={`aspect-square rounded-md p-1 text-sm sm:aspect-auto sm:min-h-16 ${
-          inMonth ? 'text-neutral-500' : 'text-neutral-300'
-        } ${isToday ? 'ring-1 ring-neutral-900' : ''}`}
+          inMonth ? 'text-ink-500' : 'text-ink-300'
+        } ${isToday ? 'ring-1 ring-ink-900' : ''}`}
       >
         {dayOfMonth}
       </div>
@@ -139,11 +139,11 @@ function DayCell({
       // El número suelto y el punto de color no dicen nada a un lector de
       // pantalla: la etiqueta lleva el día y cuántas subastas cierran.
       aria-label={`${dayOfMonth}: ${count} ${count === 1 ? 'subasta' : 'subastas'}`}
-      className={`flex aspect-square flex-col items-center justify-start gap-1 rounded-md p-1 text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 sm:aspect-auto sm:min-h-16 ${
+      className={`flex aspect-square flex-col items-center justify-start gap-1 rounded-md p-1 text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 sm:aspect-auto sm:min-h-16 ${
         isSelected
-          ? 'bg-neutral-900 text-white'
-          : `${inMonth ? 'text-neutral-900' : 'text-neutral-400'} bg-neutral-100 hover:bg-neutral-200`
-      } ${isToday && !isSelected ? 'ring-1 ring-neutral-900' : ''}`}
+          ? 'bg-ink-900 text-white'
+          : `${inMonth ? 'text-ink-900' : 'text-ink-400'} bg-ink-100 hover:bg-ink-200`
+      } ${isToday && !isSelected ? 'ring-1 ring-ink-900' : ''}`}
     >
       <span className="font-medium">{dayOfMonth}</span>
       {/* aria-hidden: el conteo ya va en el aria-label del botón; sin esto el
@@ -151,12 +151,12 @@ function DayCell({
       <span aria-hidden="true">
         <span
           className={`block h-1.5 w-1.5 rounded-full sm:hidden ${
-            isSelected ? 'bg-white' : 'bg-neutral-900'
+            isSelected ? 'bg-white' : 'bg-ink-900'
           }`}
         />
         <span
           className={`hidden rounded px-1.5 py-0.5 text-xs sm:block ${
-            isSelected ? 'bg-white/20' : 'bg-neutral-900 text-white'
+            isSelected ? 'bg-white/20' : 'bg-ink-900 text-white'
           }`}
         >
           {count}

@@ -14,13 +14,13 @@ export function ErrorPage() {
   const title = status === 404 ? 'Página no encontrada' : 'Algo ha ido mal';
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-neutral-50 px-4 text-center text-neutral-900">
-      <p className="mb-2 text-5xl font-bold text-neutral-300">{status}</p>
+    <div className="flex min-h-screen flex-col items-center justify-center bg-ink-50 px-4 text-center text-ink-900">
+      <p className="mb-2 text-5xl font-bold text-ink-300">{status}</p>
       <h1 className="mb-2 text-2xl font-bold">{title}</h1>
-      <p className="mb-6 text-neutral-600">
+      <p className="mb-6 text-ink-600">
         Ha ocurrido un error inesperado. Inténtalo de nuevo en unos minutos.
       </p>
-      <a href="/" className="text-neutral-900 underline">
+      <a href="/" className="text-ink-900 underline">
         Volver al inicio
       </a>
     </div>
