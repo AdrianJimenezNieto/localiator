@@ -11,6 +11,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fontsource-variable/nunito-sans": "^5.3.0",
+    "@fontsource-variable/rubik": "^5.3.0",
     "@localiator/shared": "workspace:*",
     "@tailwindcss/vite": "^4.3.2",
     "react": "^19.2.7",

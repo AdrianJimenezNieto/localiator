@@ -1,1 +1,230 @@
-@import "tailwindcss";
+@import 'tailwindcss';
+
+/* Fuentes autoalojadas (paquetes npm, no el CDN de Google): sirven desde nuestro
+   propio dominio, así ninguna visita filtra su IP a un tercero. Es un requisito
+   RGPD del proyecto, no una preferencia de rendimiento.
+
+   Las @font-face se escriben a mano en vez de importar el CSS del paquete
+   porque ese CSS declara TODOS los subconjuntos (cirílico, hebreo, árabe,
+   vietnamita): ~140 KB de fuentes que ninguna visita de una web en español va a
+   necesitar. Apuntando solo a los ficheros latinos quedan dos.
+
+   Son fuentes variables: un único fichero cubre todo el rango de grosores, así
+   que negrita y regular no son dos descargas.
+
+   font-display: swap → el texto se lee de inmediato con la fuente del sistema y
+   se recompone al llegar la definitiva; es preferible a dejar el texto invisible
+   esperando. */
+@font-face {
+  font-family: 'Rubik Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 300 900;
+  src: url('@fontsource-variable/rubik/files/rubik-latin-wght-normal.woff2')
+    format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Nunito Sans Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 1000;
+  src: url('@fontsource-variable/nunito-sans/files/nunito-sans-latin-wght-normal.woff2')
+    format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* ============================================================================
+   Sistema de diseño de Localiator
+   ----------------------------------------------------------------------------
+   La paleta sale del logo (búho verde sobre naranja), pero desaturada: los
+   colores originales (#6CC24A y #FF8200) son fluorescentes y a pantalla completa
+   cansan la vista y le quitan protagonismo a las fotos de producto, que es lo que
+   de verdad tiene que destacar en una tienda.
+
+   Reparto de papeles, para que el color signifique algo y no sea decoración:
+     · brand (verde)  → identidad, navegación, acciones de compra.
+     · accent (naranja) → subastas y urgencia (cuenta atrás, "cierra pronto").
+   Al no competir por el mismo sitio, el naranja conserva fuerza de aviso.
+   ========================================================================== */
+@theme {
+  /* --- Verde de marca: el del búho, bajado de saturación y luminosidad --- */
+  --color-brand-50: #f2f9ee;
+  --color-brand-100: #e1f2d8;
+  --color-brand-200: #c4e5b4;
+  --color-brand-300: #9fd188;
+  --color-brand-400: #7cb862;
+  --color-brand-500: #5f9c47;
+  --color-brand-600: #497c36;
+  --color-brand-700: #3a622c;
+  --color-brand-800: #304e26;
+  --color-brand-900: #294222;
+  --color-brand-950: #12240f;
+
+  /* --- Naranja de acento: el del fondo del logo, llevado a terracota --- */
+  --color-accent-50: #fdf6ee;
+  --color-accent-100: #f9e9d5;
+  --color-accent-200: #f2cfa8;
+  --color-accent-300: #e9ae74;
+  --color-accent-400: #e08a48;
+  /* accent-500 es decorativo (manchas del fondo, punto que late, círculo del
+     héroe): con texto blanco encima solo llega a 3.3:1 y no cumple WCAG AA, así
+     que nunca se usa como fondo de algo con letra. Para eso está accent-600, que
+     se oscureció a propósito hasta 4.85:1. */
+  --color-accent-500: #d97036;
+  --color-accent-600: #b85426;
+  --color-accent-700: #a14523;
+  --color-accent-800: #813823;
+  --color-accent-900: #6a301f;
+  --color-accent-950: #39160e;
+
+  /* --- Neutros cálidos: un gris frío junto a este verde y este naranja
+         resulta sucio, así que los neutros llevan una pizca de amarillo. --- */
+  --color-ink-50: #faf9f7;
+  --color-ink-100: #f2f0ec;
+  --color-ink-200: #e6e2db;
+  --color-ink-300: #d2ccc1;
+  --color-ink-400: #a8a094;
+  /* Oscurecido desde #7d766b: sobre blanco se quedaba en 4.49:1, justo por
+     debajo del 4.5:1 que pide WCAG AA para texto normal. */
+  --color-ink-500: #786f64;
+  --color-ink-600: #5f594f;
+  --color-ink-700: #4a453d;
+  --color-ink-800: #33302a;
+  --color-ink-900: #21201c;
+  --color-ink-950: #141311;
+
+  /* --- Tipografía: Rubik para titulares (geométrica, algo redondeada, pega
+         con las formas del búho) y Nunito Sans para texto largo. --- */
+  --font-heading: 'Rubik Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Nunito Sans Variable', ui-sans-serif, system-ui, sans-serif;
+
+  /* --- Sombras suaves y cálidas, no el negro puro de Tailwind por defecto --- */
+  --shadow-card: 0 1px 2px rgb(33 32 28 / 0.04), 0 4px 12px rgb(33 32 28 / 0.06);
+  --shadow-card-hover: 0 2px 4px rgb(33 32 28 / 0.06), 0 12px 28px rgb(33 32 28 / 0.1);
+
+  /* --- Animaciones: entradas cortas (300-400ms) y desplazamientos pequeños,
+         para que se lean como un fundido y no como algo que se mueve. --- */
+  --animate-fade-up: fade-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-fade-in: fade-in 0.4s ease-out both;
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-pulse-ring: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -8px, 0);
+  }
+}
+
+@keyframes pulse-ring {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@layer base {
+  html {
+    /* Los anclajes y el "volver arriba" se deslizan en vez de saltar. */
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    /* Compensa que Nunito Sans se ve algo gruesa en pantallas normales. */
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-heading);
+    letter-spacing: -0.02em;
+  }
+
+  /* Foco visible y consistente en toda la web. Se dibuja con outline (no con
+     ring) para que también funcione sobre elementos con overflow oculto. */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-600);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* Aparición al hacer scroll.
+
+     Ojo al reparto de responsabilidades, que es deliberado: `.reveal` (la clase
+     que se escribe en el JSX) NO oculta nada. Quien oculta es `.reveal-hidden`,
+     que la añade useReveal en tiempo de ejecución justo antes de observar el
+     elemento.
+
+     Si se ocultara desde el CSS, cualquiera que no ejecute el JS —un buscador
+     rastreando la página, un fallo de red al cargar el bundle, un navegador con
+     JS desactivado— vería el contenido en blanco para siempre. Así, lo peor que
+     puede pasar es que no haya animación. */
+  .reveal-hidden {
+    opacity: 0;
+    transform: translate3d(0, 16px, 0);
+  }
+
+  .reveal-in {
+    animation: var(--animate-fade-up);
+  }
+}
+
+/* Accesibilidad: quien pida menos movimiento en su sistema no ve ninguna
+   animación ni desplazamiento, y el contenido aparece ya colocado. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .reveal-hidden,
+  .reveal-in {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+}
