@@ -63,10 +63,10 @@ export function LoginPage() {
 
       <GoogleLoginButton redirect={redirect} />
 
-      <div className="my-4 flex items-center gap-3 text-sm text-neutral-400">
-        <div className="h-px flex-1 bg-neutral-200" />
+      <div className="my-4 flex items-center gap-3 text-sm text-ink-400">
+        <div className="h-px flex-1 bg-ink-200" />
         o
-        <div className="h-px flex-1 bg-neutral-200" />
+        <div className="h-px flex-1 bg-ink-200" />
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -80,7 +80,7 @@ export function LoginPage() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-md border border-neutral-300 px-3 py-2 focus:border-neutral-900 focus:outline-none"
+            className="w-full rounded-md border border-ink-300 px-3 py-2 focus:border-ink-900 focus:outline-none"
           />
         </div>
         <div>
@@ -93,7 +93,7 @@ export function LoginPage() {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-md border border-neutral-300 px-3 py-2 focus:border-neutral-900 focus:outline-none"
+            className="w-full rounded-md border border-ink-300 px-3 py-2 focus:border-ink-900 focus:outline-none"
           />
         </div>
 
@@ -119,26 +119,26 @@ export function LoginPage() {
         <button
           type="submit"
           disabled={submitting || turnstileToken === null}
-          className="min-h-11 rounded-md bg-neutral-900 px-4 py-2 font-medium text-white disabled:opacity-50"
+          className="min-h-11 rounded-md bg-ink-900 px-4 py-2 font-medium text-white disabled:opacity-50"
         >
           {submitting ? 'Entrando…' : 'Entrar'}
         </button>
       </form>
 
-      <p className="mt-4 text-sm text-neutral-600">
+      <p className="mt-4 text-sm text-ink-600">
         <Link
           to="/recuperar-password"
-          className="underline hover:text-neutral-900"
+          className="underline hover:text-ink-900"
         >
           ¿Olvidaste tu contraseña?
         </Link>
       </p>
 
-      <p className="mt-2 text-sm text-neutral-600">
+      <p className="mt-2 text-sm text-ink-600">
         ¿No tienes cuenta?{' '}
         <Link
           to={`/registro?redirect=${encodeURIComponent(redirect)}`}
-          className="underline hover:text-neutral-900"
+          className="underline hover:text-ink-900"
         >
           Crear una
         </Link>

@@ -55,13 +55,13 @@ export function CategoriesAdminPage() {
             onChange={(e) => setName(e.target.value)}
             required
             placeholder="Nombre"
-            className="w-full rounded-md border border-neutral-300 px-3 py-2 focus:border-neutral-900 focus:outline-none"
+            className="w-full rounded-md border border-ink-300 px-3 py-2 focus:border-ink-900 focus:outline-none"
           />
         </div>
         <button
           type="submit"
           disabled={busy}
-          className="min-h-11 rounded-md bg-neutral-900 px-4 py-2 font-medium text-white disabled:opacity-50"
+          className="min-h-11 rounded-md bg-ink-900 px-4 py-2 font-medium text-white disabled:opacity-50"
         >
           Añadir
         </button>
@@ -72,24 +72,24 @@ export function CategoriesAdminPage() {
         </p>
       )}
 
-      {loading && <p className="text-neutral-500">Cargando…</p>}
+      {loading && <p className="text-ink-500">Cargando…</p>}
       {error && <p className="text-red-700">{error}</p>}
 
       {data && (
-        <ul className="divide-y divide-neutral-200 rounded-lg border border-neutral-200 bg-white">
+        <ul className="divide-y divide-ink-200 rounded-lg border border-ink-200 bg-white">
           {data.length === 0 && (
-            <li className="p-4 text-neutral-500">No hay categorías todavía.</li>
+            <li className="p-4 text-ink-500">No hay categorías todavía.</li>
           )}
           {data.map((cat) => (
             <li key={cat.id} className="flex items-center justify-between gap-4 p-3">
               <div>
                 <span className="font-medium">{cat.name}</span>
-                <span className="ml-2 text-sm text-neutral-400">/{cat.slug}</span>
+                <span className="ml-2 text-sm text-ink-400">/{cat.slug}</span>
               </div>
               <button
                 type="button"
                 onClick={() => handleDelete(cat)}
-                className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50"
+                className="rounded-md border border-ink-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50"
               >
                 Borrar
               </button>

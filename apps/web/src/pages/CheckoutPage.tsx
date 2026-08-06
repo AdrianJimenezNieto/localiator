@@ -73,14 +73,14 @@ export function CheckoutPage() {
   }
 
   if (!ready || loading) {
-    return <p className="mx-auto max-w-2xl px-4 py-16 text-center text-neutral-500">Preparando tu pedido…</p>;
+    return <p className="mx-auto max-w-2xl px-4 py-16 text-center text-ink-500">Preparando tu pedido…</p>;
   }
 
   if (items.length === 0 && !order) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-16 text-center">
         <h1 className="mb-2 text-2xl font-bold">No hay nada que pagar</h1>
-        <Link to="/" className="text-neutral-900 underline">
+        <Link to="/catalogo" className="text-ink-900 underline">
           Ir al catálogo
         </Link>
       </div>
@@ -93,7 +93,7 @@ export function CheckoutPage() {
         <p className="mb-6 rounded-md bg-red-50 p-4 text-red-700" role="alert">
           {error ?? 'No se pudo preparar el pedido.'}
         </p>
-        <Link to="/carrito" className="text-neutral-900 underline">
+        <Link to="/carrito" className="text-ink-900 underline">
           Volver al carrito
         </Link>
       </div>
@@ -120,7 +120,7 @@ export function CheckoutPage() {
     <div className="mx-auto max-w-2xl px-4 py-8">
       <h1 className="mb-6 text-2xl font-bold">Confirmar y pagar</h1>
 
-      <ul className="mb-4 divide-y divide-neutral-200 rounded-lg border border-neutral-200 bg-white">
+      <ul className="mb-4 divide-y divide-ink-200 rounded-lg border border-ink-200 bg-white">
         {order.lines.map((line) => (
           <li
             key={`${line.itemType}:${line.itemId}`}
@@ -128,7 +128,7 @@ export function CheckoutPage() {
           >
             <span className="min-w-0 truncate">
               {line.nameSnapshot}{' '}
-              <span className="text-neutral-500">× {line.quantity}</span>
+              <span className="text-ink-500">× {line.quantity}</span>
             </span>
             <span className="font-medium">
               {formatPrice(line.lineTotalCents)}
@@ -148,12 +148,12 @@ export function CheckoutPage() {
         type="button"
         onClick={handlePay}
         disabled={paying}
-        className="mt-4 w-full rounded-md bg-neutral-900 px-6 py-3 font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
+        className="mt-4 w-full rounded-md bg-ink-900 px-6 py-3 font-medium text-white hover:bg-ink-800 disabled:opacity-50"
       >
         {paying ? 'Redirigiendo a Stripe…' : 'Pagar con tarjeta'}
       </button>
 
-      <p className="mt-3 text-center text-xs text-neutral-400">
+      <p className="mt-3 text-center text-xs text-ink-400">
         Pago seguro procesado por Stripe. No guardamos datos de tu tarjeta.
       </p>
     </div>
@@ -210,7 +210,7 @@ function CompleteProfileGate() {
   return (
     <div className="mx-auto max-w-lg px-4 py-16">
       <h1 className="mb-2 text-2xl font-bold">Completa tus datos</h1>
-      <p className="mb-6 text-neutral-600">
+      <p className="mb-6 text-ink-600">
         Necesitamos tu nombre y dirección de facturación antes de poder
         tramitar el pedido.
       </p>
@@ -229,7 +229,7 @@ function CompleteProfileGate() {
         <button
           type="submit"
           disabled={submitting}
-          className="min-h-11 rounded-md bg-neutral-900 px-4 py-2 font-medium text-white disabled:opacity-50"
+          className="min-h-11 rounded-md bg-ink-900 px-4 py-2 font-medium text-white disabled:opacity-50"
         >
           {submitting ? 'Guardando…' : 'Continuar'}
         </button>
@@ -264,9 +264,9 @@ function ReservationCountdown({ expiresAt }: { expiresAt: string }) {
   const minutes = Math.floor(remaining / 60_000);
   const seconds = Math.floor((remaining % 60_000) / 1000);
   return (
-    <p className="rounded-md bg-neutral-100 p-3 text-sm text-neutral-600">
+    <p className="rounded-md bg-ink-100 p-3 text-sm text-ink-600">
       Stock reservado durante{' '}
-      <span className="font-semibold text-neutral-900">
+      <span className="font-semibold text-ink-900">
         {minutes}:{seconds.toString().padStart(2, '0')}
       </span>
       . Completa el pago antes de que expire.

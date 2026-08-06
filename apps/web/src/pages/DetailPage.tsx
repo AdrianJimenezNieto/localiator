@@ -35,10 +35,10 @@ export function DetailPage({ kind }: { kind: ItemKind }) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-16 text-center">
         <h1 className="mb-2 text-2xl font-bold">Este artículo no está disponible</h1>
-        <p className="mb-6 text-neutral-500">
+        <p className="mb-6 text-ink-500">
           Puede que se haya vendido o que el enlace no sea correcto.
         </p>
-        <Link to="/" className="text-neutral-900 underline">
+        <Link to="/catalogo" className="text-ink-900 underline">
           Volver al catálogo
         </Link>
       </div>
@@ -67,45 +67,45 @@ export function DetailPage({ kind }: { kind: ItemKind }) {
           <div>
             <Link
               to={`/?categoryId=${data.category.id}`}
-              className="text-sm text-neutral-500 underline hover:text-neutral-900"
+              className="text-sm text-ink-500 underline hover:text-ink-900"
             >
               {data.category.name}
             </Link>
-            <h1 className="mt-1 text-2xl font-bold text-neutral-900">
+            <h1 className="mt-1 text-2xl font-bold text-ink-900">
               {data.name}
             </h1>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
             <span
-              className={`text-sm ${data.available ? 'text-green-700' : 'text-neutral-500'}`}
+              className={`text-sm ${data.available ? 'text-green-700' : 'text-ink-500'}`}
             >
               {data.available ? 'Disponible' : 'Agotado'}
             </span>
           </div>
 
           <div className="flex items-baseline gap-3">
-            <span className="text-3xl font-bold text-neutral-900">
+            <span className="text-3xl font-bold text-ink-900">
               {formatPrice(finalCents)}
             </span>
             {hasDiscount && (
-              <span className="text-lg text-neutral-400 line-through">
+              <span className="text-lg text-ink-400 line-through">
                 {formatPrice(data.priceCents)}
               </span>
             )}
           </div>
 
-          <p className="whitespace-pre-line text-neutral-700">{data.description}</p>
+          <p className="whitespace-pre-line text-ink-700">{data.description}</p>
 
           {/* Los desperfectos descritos arriba forman parte de lo acordado en la
               compra: lo enlazamos con la garantía de las condiciones de venta
               (tarea 04) para dar transparencia al comprador. */}
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm text-ink-500">
             Artículo de subasta: los desperfectos descritos forman parte de la
             venta. Consulta la{' '}
             <Link
               to="/condiciones-venta"
-              className="underline hover:text-neutral-900"
+              className="underline hover:text-ink-900"
             >
               garantía y condiciones de venta
             </Link>
@@ -139,7 +139,7 @@ function AddToCart({
       <button
         type="button"
         disabled
-        className="mt-2 w-full cursor-not-allowed rounded-md bg-neutral-200 px-4 py-3 font-medium text-neutral-500 sm:w-auto"
+        className="mt-2 w-full cursor-not-allowed rounded-md bg-ink-200 px-4 py-3 font-medium text-ink-500 sm:w-auto"
       >
         Agotado
       </button>
@@ -162,7 +162,7 @@ function AddToCart({
     <button
       type="button"
       onClick={handleAdd}
-      className="mt-2 w-full rounded-md bg-neutral-900 px-4 py-3 font-medium text-white hover:bg-neutral-800 sm:w-auto"
+      className="mt-2 w-full rounded-md bg-ink-900 px-4 py-3 font-medium text-white hover:bg-ink-800 sm:w-auto"
     >
       {added ? '✓ Añadido al carrito' : 'Añadir al carrito'}
     </button>
@@ -173,12 +173,12 @@ function DetailSkeleton() {
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
       <div className="grid gap-8 md:grid-cols-2">
-        <div className="aspect-square w-full animate-pulse rounded-lg bg-neutral-200" />
+        <div className="aspect-square w-full animate-pulse rounded-lg bg-ink-200" />
         <div className="space-y-4">
-          <div className="h-4 w-1/4 animate-pulse rounded bg-neutral-200" />
-          <div className="h-8 w-3/4 animate-pulse rounded bg-neutral-200" />
-          <div className="h-6 w-1/3 animate-pulse rounded bg-neutral-200" />
-          <div className="h-24 w-full animate-pulse rounded bg-neutral-200" />
+          <div className="h-4 w-1/4 animate-pulse rounded bg-ink-200" />
+          <div className="h-8 w-3/4 animate-pulse rounded bg-ink-200" />
+          <div className="h-6 w-1/3 animate-pulse rounded bg-ink-200" />
+          <div className="h-24 w-full animate-pulse rounded bg-ink-200" />
         </div>
       </div>
     </div>

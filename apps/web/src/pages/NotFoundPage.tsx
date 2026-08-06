@@ -6,12 +6,12 @@ import { Link } from 'react-router-dom';
 export function NotFoundPage() {
   return (
     <div className="mx-auto max-w-md px-4 py-24 text-center">
-      <p className="mb-2 text-5xl font-bold text-neutral-300">404</p>
+      <p className="mb-2 text-5xl font-bold text-ink-300">404</p>
       <h1 className="mb-2 text-2xl font-bold">Página no encontrada</h1>
-      <p className="mb-6 text-neutral-600">
+      <p className="mb-6 text-ink-600">
         La página que buscas no existe o se ha movido.
       </p>
-      <Link to="/" className="text-neutral-900 underline">
+      <Link to="/" className="text-ink-900 underline">
         Volver al inicio
       </Link>
     </div>

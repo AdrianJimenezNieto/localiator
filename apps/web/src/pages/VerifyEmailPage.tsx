@@ -52,15 +52,15 @@ export function VerifyEmailPage() {
       {status === 'loading' && (
         <>
           <h1 className="mb-2 text-2xl font-bold">Verificando tu email…</h1>
-          <p className="text-neutral-600">Un momento, por favor.</p>
+          <p className="text-ink-600">Un momento, por favor.</p>
         </>
       )}
 
       {status === 'success' && (
         <>
           <h1 className="mb-2 text-2xl font-bold">¡Email verificado!</h1>
-          <p className="mb-6 text-neutral-600">{message}</p>
-          <Link to="/login" className="text-neutral-900 underline">
+          <p className="mb-6 text-ink-600">{message}</p>
+          <Link to="/login" className="text-ink-900 underline">
             Iniciar sesión
           </Link>
         </>
@@ -69,12 +69,12 @@ export function VerifyEmailPage() {
       {status === 'error' && (
         <>
           <h1 className="mb-2 text-2xl font-bold">No se pudo verificar</h1>
-          <p className="mb-6 text-neutral-600">{message}</p>
-          <p className="text-sm text-neutral-600">
+          <p className="mb-6 text-ink-600">{message}</p>
+          <p className="text-sm text-ink-600">
             El enlace puede haber caducado (válido 2 días).{' '}
             <Link
               to="/reenviar-verificacion"
-              className="underline hover:text-neutral-900"
+              className="underline hover:text-ink-900"
             >
               Solicita uno nuevo
             </Link>

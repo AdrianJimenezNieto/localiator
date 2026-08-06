@@ -16,7 +16,7 @@ export function OAuthCallbackPage() {
   }, [ready, user, navigate]);
 
   return (
-    <div className="mx-auto max-w-sm px-4 py-16 text-center text-neutral-600">
+    <div className="mx-auto max-w-sm px-4 py-16 text-center text-ink-600">
       Iniciando sesión…
     </div>
   );

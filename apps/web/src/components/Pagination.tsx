@@ -22,12 +22,12 @@ export function Pagination({ page, pageSize, total, onPageChange }: PaginationPr
         type="button"
         onClick={() => onPageChange(page - 1)}
         disabled={page <= 1}
-        className="min-h-11 rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40 enabled:hover:bg-neutral-100"
+        className="min-h-11 rounded-md border border-ink-300 px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40 enabled:hover:bg-ink-100"
       >
         Anterior
       </button>
 
-      <span className="text-sm text-neutral-600">
+      <span className="text-sm text-ink-600">
         Página {page} de {totalPages}
       </span>
 
@@ -35,7 +35,7 @@ export function Pagination({ page, pageSize, total, onPageChange }: PaginationPr
         type="button"
         onClick={() => onPageChange(page + 1)}
         disabled={page >= totalPages}
-        className="min-h-11 rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40 enabled:hover:bg-neutral-100"
+        className="min-h-11 rounded-md border border-ink-300 px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40 enabled:hover:bg-ink-100"
       >
         Siguiente
       </button>

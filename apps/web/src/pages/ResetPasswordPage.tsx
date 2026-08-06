@@ -58,10 +58,10 @@ export function ResetPasswordPage() {
     return (
       <div className="mx-auto max-w-sm px-4 py-16 text-center">
         <h1 className="mb-2 text-2xl font-bold">Enlace no válido</h1>
-        <p className="mb-6 text-neutral-600">
+        <p className="mb-6 text-ink-600">
           Este enlace no incluye ningún token para restablecer la contraseña.
         </p>
-        <Link to="/recuperar-password" className="text-neutral-900 underline">
+        <Link to="/recuperar-password" className="text-ink-900 underline">
           Pedir un enlace nuevo
         </Link>
       </div>
@@ -72,11 +72,11 @@ export function ResetPasswordPage() {
     return (
       <div className="mx-auto max-w-sm px-4 py-16 text-center">
         <h1 className="mb-2 text-2xl font-bold">Contraseña actualizada</h1>
-        <p className="mb-6 text-neutral-600">
+        <p className="mb-6 text-ink-600">
           Hemos cambiado tu contraseña y cerrado todas las sesiones abiertas.
           Vuelve a iniciar sesión con la nueva contraseña.
         </p>
-        <Link to="/login" className="text-neutral-900 underline">
+        <Link to="/login" className="text-ink-900 underline">
           Iniciar sesión
         </Link>
       </div>
@@ -86,7 +86,7 @@ export function ResetPasswordPage() {
   return (
     <div className="mx-auto max-w-sm px-4 py-16">
       <h1 className="mb-2 text-2xl font-bold">Nueva contraseña</h1>
-      <p className="mb-6 text-sm text-neutral-600">
+      <p className="mb-6 text-sm text-ink-600">
         Elige una contraseña nueva para tu cuenta.
       </p>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -100,7 +100,7 @@ export function ResetPasswordPage() {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-md border border-neutral-300 px-3 py-2 focus:border-neutral-900 focus:outline-none"
+            className="w-full rounded-md border border-ink-300 px-3 py-2 focus:border-ink-900 focus:outline-none"
           />
         </div>
         <div>
@@ -116,10 +116,10 @@ export function ResetPasswordPage() {
             required
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
-            className="w-full rounded-md border border-neutral-300 px-3 py-2 focus:border-neutral-900 focus:outline-none"
+            className="w-full rounded-md border border-ink-300 px-3 py-2 focus:border-ink-900 focus:outline-none"
           />
         </div>
-        <p className="-mt-2 text-xs text-neutral-500">
+        <p className="-mt-2 text-xs text-ink-500">
           Mínimo 10 caracteres, con al menos una letra, un número y un carácter
           especial.
         </p>
@@ -144,7 +144,7 @@ export function ResetPasswordPage() {
         <button
           type="submit"
           disabled={submitting || turnstileToken === null}
-          className="min-h-11 rounded-md bg-neutral-900 px-4 py-2 font-medium text-white disabled:opacity-50"
+          className="min-h-11 rounded-md bg-ink-900 px-4 py-2 font-medium text-white disabled:opacity-50"
         >
           {submitting ? 'Guardando…' : 'Cambiar contraseña'}
         </button>

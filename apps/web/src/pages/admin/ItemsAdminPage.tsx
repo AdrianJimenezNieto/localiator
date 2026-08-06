@@ -42,23 +42,23 @@ export function ItemsAdminPage({ kind }: { kind: ItemKind }) {
         <h1 className="text-2xl font-bold">{labels.plural}</h1>
         <Link
           to={`/admin/${base}/nuevo`}
-          className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
+          className="rounded-md bg-ink-900 px-4 py-2 text-sm font-medium text-white"
         >
           Nuevo
         </Link>
       </div>
 
-      {loading && <p className="text-neutral-500">Cargando…</p>}
+      {loading && <p className="text-ink-500">Cargando…</p>}
       {error && <p className="text-red-700">{error}</p>}
 
       {data && data.length === 0 && (
-        <p className="text-neutral-500">No hay {labels.plural.toLowerCase()} todavía.</p>
+        <p className="text-ink-500">No hay {labels.plural.toLowerCase()} todavía.</p>
       )}
 
       {data && data.length > 0 && (
-        <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-ink-200 bg-white">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-neutral-200 text-neutral-500">
+            <thead className="border-b border-ink-200 text-ink-500">
               <tr>
                 <th className="p-3 font-medium">Nombre</th>
                 <th className="p-3 font-medium">Categoría</th>
@@ -67,25 +67,25 @@ export function ItemsAdminPage({ kind }: { kind: ItemKind }) {
                 <th className="p-3" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-100">
+            <tbody className="divide-y divide-ink-100">
               {data.map((item) => (
                 <tr key={item.id}>
                   <td className="p-3 font-medium">{item.name}</td>
-                  <td className="p-3 text-neutral-600">{item.category?.name ?? '—'}</td>
+                  <td className="p-3 text-ink-600">{item.category?.name ?? '—'}</td>
                   <td className="p-3">{formatPrice(item.priceCents)}</td>
                   <td className="p-3">{item.stock}</td>
                   <td className="p-3">
                     <div className="flex justify-end gap-2">
                       <Link
                         to={`/admin/${base}/${item.id}`}
-                        className="rounded-md border border-neutral-300 px-3 py-1.5 hover:bg-neutral-100"
+                        className="rounded-md border border-ink-300 px-3 py-1.5 hover:bg-ink-100"
                       >
                         Editar
                       </Link>
                       <button
                         type="button"
                         onClick={() => handleDelete(item)}
-                        className="rounded-md border border-neutral-300 px-3 py-1.5 text-red-700 hover:bg-red-50"
+                        className="rounded-md border border-ink-300 px-3 py-1.5 text-red-700 hover:bg-red-50"
                       >
                         Borrar
                       </button>

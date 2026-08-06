@@ -14,7 +14,7 @@ export function TermsPage() {
         la web de {COMPANY.brand}, titularidad de {COMPANY.legalName}. Al realizar
         un pedido, el usuario declara ser mayor de edad y aceptar estas
         condiciones. Puede consultar los datos del vendedor en el{' '}
-        <Link to="/aviso-legal" className="underline hover:text-neutral-900">
+        <Link to="/aviso-legal" className="underline hover:text-ink-900">
           aviso legal
         </Link>
         .

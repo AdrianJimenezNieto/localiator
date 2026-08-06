@@ -98,18 +98,18 @@ export function AuctionsCalendarPage() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-neutral-900">
+        <h1 className="text-2xl font-bold text-ink-900">
           Calendario de subastas
         </h1>
         <Link
           to="/subastas"
-          className="rounded-md bg-neutral-100 px-3 py-1.5 text-sm font-medium text-neutral-600 hover:bg-neutral-200"
+          className="rounded-md bg-ink-100 px-3 py-1.5 text-sm font-medium text-ink-600 hover:bg-ink-200"
         >
           Ver como lista
         </Link>
       </div>
 
-      <p className="mb-6 text-sm text-neutral-500">
+      <p className="mb-6 text-sm text-ink-500">
         Cada subasta aparece en el día en que <strong>cierra</strong> (hora
         peninsular española).
       </p>
@@ -136,21 +136,21 @@ export function AuctionsCalendarPage() {
           perceptible. */}
       <section className="mt-8" aria-live="polite">
         {!loading && !error && selectedDay === null && (
-          <p className="py-12 text-center text-neutral-500">
+          <p className="py-12 text-center text-ink-500">
             No hay subastas que cierren este mes.
           </p>
         )}
 
         {selectedDay !== null && (
           <>
-            <h2 className="mb-4 text-lg font-semibold text-neutral-900">
+            <h2 className="mb-4 text-lg font-semibold text-ink-900">
               {dayLabel(selectedDay)}
             </h2>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
               {selectedAuctions.map((auction) => (
                 <div key={auction.id}>
                   <AuctionCard auction={auction} />
-                  <p className="mt-1 text-center text-xs text-neutral-500">
+                  <p className="mt-1 text-center text-xs text-ink-500">
                     Cierra a las {formatTime(auction.endsAt)}
                   </p>
                 </div>

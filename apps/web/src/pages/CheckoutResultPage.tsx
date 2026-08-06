@@ -23,15 +23,15 @@ export function CheckoutResultPage() {
     return (
       <div className="mx-auto max-w-2xl px-4 py-16 text-center">
         <h1 className="mb-2 text-2xl font-bold">¡Pago recibido!</h1>
-        <p className="mb-6 text-neutral-600">
+        <p className="mb-6 text-ink-600">
           Tu pedido está en preparación. Te avisaremos por email cuando esté
           listo para recoger en el almacén. Puedes ver su estado en tus pedidos.
         </p>
         <div className="flex justify-center gap-4">
-          <Link to="/mis-pedidos" className="text-neutral-900 underline">
+          <Link to="/mis-pedidos" className="text-ink-900 underline">
             Ver mis pedidos
           </Link>
-          <Link to="/" className="text-neutral-900 underline">
+          <Link to="/catalogo" className="text-ink-900 underline">
             Seguir comprando
           </Link>
         </div>
@@ -43,11 +43,11 @@ export function CheckoutResultPage() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-16 text-center">
       <h1 className="mb-2 text-2xl font-bold">Pago no completado</h1>
-      <p className="mb-6 text-neutral-600">
+      <p className="mb-6 text-ink-600">
         No se ha realizado ningún cargo. Tu carrito sigue disponible por si
         quieres intentarlo de nuevo.
       </p>
-      <Link to="/carrito" className="text-neutral-900 underline">
+      <Link to="/carrito" className="text-ink-900 underline">
         Volver al carrito
       </Link>
     </div>

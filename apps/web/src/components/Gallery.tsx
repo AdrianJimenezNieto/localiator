@@ -8,7 +8,7 @@ export function Gallery({ photos, name }: { photos: string[]; name: string }) {
 
   if (photos.length === 0) {
     return (
-      <div className="flex aspect-square w-full items-center justify-center rounded-lg bg-neutral-100 text-neutral-400">
+      <div className="flex aspect-square w-full items-center justify-center rounded-lg bg-ink-100 text-ink-400">
         Sin fotos
       </div>
     );
@@ -16,7 +16,7 @@ export function Gallery({ photos, name }: { photos: string[]; name: string }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="aspect-square w-full overflow-hidden rounded-lg bg-neutral-100">
+      <div className="aspect-square w-full overflow-hidden rounded-lg bg-ink-100">
         <img
           src={photos[active]}
           alt={name}
@@ -34,7 +34,7 @@ export function Gallery({ photos, name }: { photos: string[]; name: string }) {
               aria-label={`Ver foto ${i + 1} de ${name}`}
               aria-current={i === active}
               className={`h-16 w-16 overflow-hidden rounded-md border-2 ${
-                i === active ? 'border-neutral-900' : 'border-transparent'
+                i === active ? 'border-ink-900' : 'border-transparent'
               }`}
             >
               <img

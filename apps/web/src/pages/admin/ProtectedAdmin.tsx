@@ -10,7 +10,7 @@ export function ProtectedAdmin() {
 
   // Mientras se restaura la sesión no decidimos nada (evita un redirect en falso).
   if (!ready) {
-    return <p className="p-8 text-center text-neutral-500">Cargando…</p>;
+    return <p className="p-8 text-center text-ink-500">Cargando…</p>;
   }
 
   if (!isAdmin) {
