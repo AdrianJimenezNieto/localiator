@@ -64,8 +64,18 @@ async function bootstrap() {
   // Sirve las fotos subidas como archivos estáticos bajo /uploads. Al ser
   // middleware de Express (no pasa por los guards de Nest), las imágenes son
   // públicas: cualquiera puede verlas, que es justo lo que necesita el catálogo.
+  // dotfiles:'deny' e index:false son blindajes por si algún día cae un fichero
+  // que no debería en esa carpeta: sin ellos, un `.env` o similar colocado ahí se
+  // serviría públicamente, y un directorio sin index listaría su contenido.
   const uploadDir = resolve(process.env.UPLOAD_DIR ?? 'uploads');
-  app.useStaticAssets(uploadDir, { prefix: StorageService.PUBLIC_PATH });
+  app.useStaticAssets(uploadDir, {
+    prefix: StorageService.PUBLIC_PATH,
+    dotfiles: 'deny',
+    index: false,
+    // Los nombres son UUID irrepetibles (StorageService), así que el contenido de
+    // una URL nunca cambia: se puede cachear sin miedo.
+    maxAge: '1y',
+  });
 
   await app.listen(process.env.API_PORT ?? 3000);
 }

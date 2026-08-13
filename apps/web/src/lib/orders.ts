@@ -9,9 +9,23 @@ export type ApiOrderStatus =
   | 'PAID'
   | 'READY_FOR_PICKUP'
   | 'PICKED_UP'
-  | 'CANCELLED';
+  | 'CANCELLED'
+  // Movimientos de dinero posteriores al cobro. Los fija el webhook de Stripe, no
+  // el backoffice: el admin no puede seleccionarlos en el desplegable de gestión.
+  | 'REFUNDED'
+  | 'DISPUTED';
 
 export type OrderItemType = 'PRODUCT' | 'LOT';
+
+// FULL/SIMPLIFIED son la factura de la venta; CORRECTIVE es la rectificativa que
+// documenta un reembolso (va en serie propia y con importes negativos).
+export type InvoiceType = 'FULL' | 'SIMPLIFIED' | 'CORRECTIVE';
+
+export const INVOICE_TYPE_LABELS: Record<InvoiceType, string> = {
+  FULL: 'Factura',
+  SIMPLIFIED: 'Factura simplificada',
+  CORRECTIVE: 'Factura rectificativa',
+};
 
 export interface OrderLineView {
   itemType: OrderItemType;
@@ -40,7 +54,9 @@ export interface OrderRecord {
   totalCents: number;
   createdAt: string;
   lines: OrderLineView[];
-  invoice?: { number: string } | null;
+  // Documentos fiscales del pedido: la factura original y, si hubo reembolsos,
+  // sus rectificativas. Antes era una sola porque no existían rectificativas.
+  invoices?: { number: string; type: InvoiceType }[];
   user?: { email: string };
 }
 
@@ -51,6 +67,10 @@ export const ORDER_STATUS_LABELS: Record<ApiOrderStatus, string> = {
   READY_FOR_PICKUP: 'Listo para recoger',
   PICKED_UP: 'Recogido',
   CANCELLED: 'Cancelado',
+  REFUNDED: 'Reembolsado',
+  // "En revisión" y no "Disputado": es lo que el CLIENTE ve en "Mis pedidos", y
+  // nombrar ahí su reclamación bancaria no le aporta nada y suena acusatorio.
+  DISPUTED: 'En revisión',
 };
 
 // Línea del carrito tal como la espera la API (mayúsculas). El precio NO se envía:
@@ -119,6 +139,29 @@ export async function openInvoice(
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error('No se pudo abrir la factura');
+  await openHtmlBlob(res);
+}
+
+// Abre un documento fiscal concreto por su número (factura o rectificativa). El
+// backend solo lo busca entre los documentos del pedido ya autorizado, así que el
+// número no sirve para leer la factura de otro cliente.
+export async function openInvoiceByNumber(
+  orderId: string,
+  number: string,
+  token: string,
+): Promise<void> {
+  const res = await fetch(
+    `${API_URL}/orders/${orderId}/invoices/${encodeURIComponent(number)}`,
+    {
+      credentials: 'include',
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+  if (!res.ok) throw new Error('No se pudo abrir el documento');
+  await openHtmlBlob(res);
+}
+
+async function openHtmlBlob(res: Response): Promise<void> {
   const html = await res.text();
   const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
   window.open(url, '_blank');

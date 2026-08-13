@@ -28,7 +28,22 @@ const LEGAL_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   ],
   [OrderStatus.PICKED_UP]: [],
   [OrderStatus.CANCELLED]: [],
+  // Reembolso y disputa: sin salidas manuales. Los gobierna el webhook de Stripe
+  // (registerRefund / openDispute / resolveDispute), porque el estado del dinero lo
+  // decide la pasarela. Que el admin pudiera sacar un pedido de DISPUTED a mano
+  // sería fingir que el chargeback se resolvió sin que el banco haya dicho nada.
+  [OrderStatus.REFUNDED]: [],
+  [OrderStatus.DISPUTED]: [],
 };
+
+// Estados que NUNCA puede fijar el admin desde el backoffice, ni siquiera como
+// destino de una transición legal: reflejan movimientos de dinero reales en
+// Stripe. Se comprueba aparte del mapa de arriba para que añadir una transición
+// por descuido no abra la puerta.
+const WEBHOOK_ONLY_STATUSES: OrderStatus[] = [
+  OrderStatus.REFUNDED,
+  OrderStatus.DISPUTED,
+];
 
 // Fila del artículo bloqueada con SELECT ... FOR UPDATE. Solo los campos que
 // necesitamos para reservar y para el snapshot de la línea.
@@ -62,7 +77,10 @@ export class OrdersService {
     return this.prisma.order.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
-      include: { lines: true, invoice: { select: { number: true } } },
+      include: {
+        lines: true,
+        invoices: { select: { number: true, type: true } },
+      },
     });
   }
 
@@ -74,7 +92,7 @@ export class OrdersService {
       include: {
         lines: true,
         user: { select: { email: true } },
-        invoice: { select: { number: true } },
+        invoices: { select: { number: true, type: true } },
       },
     });
   }
@@ -83,7 +101,10 @@ export class OrdersService {
   async getOrderForUser(orderId: string, userId: string, isAdmin: boolean) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
-      include: { lines: true, invoice: { select: { number: true } } },
+      include: {
+        lines: true,
+        invoices: { select: { number: true, type: true } },
+      },
     });
     if (!order || (!isAdmin && order.userId !== userId)) {
       throw new NotFoundException('Pedido no encontrado');
@@ -96,6 +117,11 @@ export class OrdersService {
   // de la transición. Cancelar un pedido ya PAID NO repone stock (reembolsos
   // mínimos, gestión manual; ver CLAUDE.md).
   async transitionStatus(orderId: string, target: OrderStatus) {
+    if (WEBHOOK_ONLY_STATUSES.includes(target)) {
+      throw new ConflictException(
+        `El estado ${target} lo fija el cobro en Stripe, no el backoffice`,
+      );
+    }
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       select: { id: true, status: true },
@@ -399,21 +425,34 @@ export class OrdersService {
   async confirmOrderPaid(params: {
     paymentIntentId?: string;
     orderId?: string;
+    // Lo que Stripe dice que se cobró REALMENTE. Se compara con el total del
+    // pedido antes de darlo por pagado (ver `amount_mismatch` más abajo). Es
+    // opcional para no romper a los llamadores que no lo tienen, pero el webhook
+    // —el único camino real de cobro— siempre lo manda.
+    amountPaidCents?: number;
+    currency?: string;
   }): Promise<{
-    outcome: 'paid' | 'already_paid' | 'not_payable' | 'not_found';
+    outcome:
+      'paid' | 'already_paid' | 'not_payable' | 'not_found' | 'amount_mismatch';
     orderId?: string;
     // Subastas canceladas porque esta venta directa agotó su artículo (tarea 15).
     // El llamador avisa a los pujadores; aquí solo se cambian los datos.
     cancelledAuctionIds?: string[];
+    // Solo en 'amount_mismatch': lo que esperábamos frente a lo que llegó, para
+    // que el log del webhook permita cuadrarlo a mano sin abrir la BD.
+    expectedCents?: number;
+    receivedCents?: number;
   }> {
     return this.prisma.$transaction(async (tx) => {
       let cancelledAuctionIds: string[] = [];
-      const order = await tx.order.findFirst({
-        where: params.paymentIntentId
-          ? { stripePaymentIntentId: params.paymentIntentId }
-          : { id: params.orderId },
-        include: { lines: true, reservations: true },
-      });
+      // Búsqueda en dos pasos, no una sola por PaymentIntent. Motivo: si el cliente
+      // pulsa "Pagar" dos veces se crean DOS sesiones, y `setPaymentIntent` deja en
+      // el pedido la del segundo intento. Si acaba pagando con la primera pestaña,
+      // el PI que llega en el evento ya no está en ninguna fila y el cobro quedaba
+      // huérfano ('not_found'): dinero cobrado sin pedido que entregar. El
+      // orderId de la metadata —que lo ponemos nosotros al crear la sesión— es el
+      // enlace estable, así que sirve de red de seguridad.
+      const order = await this.findByStripeRef(tx, params);
 
       if (!order) {
         return { outcome: 'not_found' as const };
@@ -423,6 +462,26 @@ export class OrdersService {
       }
       if (order.status !== OrderStatus.PENDING) {
         return { outcome: 'not_payable' as const, orderId: order.id };
+      }
+
+      // El importe cobrado debe coincidir EXACTAMENTE con el total del pedido.
+      // Hasta ahora se confiaba en que Stripe cobrase lo que pedimos y se marcaba
+      // PAID sin mirar la cifra: cualquier desajuste (sesión reutilizada para otro
+      // pedido, importe editado desde el panel de Stripe, moneda distinta, un bug
+      // nuestro al construir las líneas) se entregaba como venta buena. Ante la
+      // duda NO entregamos: el dinero es recuperable, la mercancía no.
+      if (params.amountPaidCents !== undefined) {
+        const currencyMatches =
+          params.currency === undefined ||
+          params.currency.toLowerCase() === order.currency.toLowerCase();
+        if (params.amountPaidCents !== order.totalCents || !currencyMatches) {
+          return {
+            outcome: 'amount_mismatch' as const,
+            orderId: order.id,
+            expectedCents: order.totalCents,
+            receivedCents: params.amountPaidCents,
+          };
+        }
       }
 
       // Coherencia con la liberación de reservas (tarea 07): si la reserva ya
@@ -502,6 +561,185 @@ export class OrdersService {
         outcome: 'paid' as const,
         orderId: order.id,
         cancelledAuctionIds,
+      };
+    });
+  }
+
+  // ---- Reembolsos y disputas (chargebacks) ----
+  //
+  // Los tres métodos que siguen los dispara SOLO el webhook de Stripe: el estado
+  // del dinero lo dicta la pasarela, no nuestro backoffice. Todos son idempotentes
+  // (Stripe entrega "al menos una vez") y NINGUNO repone stock, por decisión
+  // explícita: un reembolso no prueba que el artículo haya vuelto al almacén —el
+  // cliente puede haberlo recogido ya— y reponerlo a ciegas provocaría sobreventa.
+  // La reposición, cuando proceda, la hace el admin al recibir la devolución.
+
+  // Registra un reembolso (evento `charge.refunded`). Stripe manda el ACUMULADO
+  // devuelto de ese cobro, no el delta, así que se guarda tal cual en vez de sumar:
+  // reintentos del mismo evento dejan el mismo valor (idempotencia natural).
+  async registerRefund(params: {
+    paymentIntentId?: string;
+    orderId?: string;
+    // Total acumulado devuelto de este cobro, en céntimos (charge.amount_refunded).
+    amountRefundedCents: number;
+  }): Promise<{
+    outcome: 'refunded' | 'partially_refunded' | 'noop' | 'not_found';
+    orderId?: string;
+    refundedCents?: number;
+    totalCents?: number;
+    // Lo devuelto EN ESTA operación (acumulado nuevo − anterior). Es lo que debe
+    // importar una factura rectificativa: cada reembolso se documenta por su
+    // importe, no por el acumulado.
+    deltaCents?: number;
+  }> {
+    return this.prisma.$transaction(async (tx) => {
+      const order = await this.findByStripeRef(tx, params);
+      if (!order) {
+        return { outcome: 'not_found' as const };
+      }
+
+      // Evento repetido sin cambios: nada que hacer.
+      if (order.refundedCents === params.amountRefundedCents) {
+        return { outcome: 'noop' as const, orderId: order.id };
+      }
+
+      // Solo el reembolso TOTAL cambia el estado. Uno parcial (se devuelve un
+      // artículo de tres) deja el pedido como estaba: sigue habiendo una venta viva
+      // y, si estaba listo para recoger, el cliente aún tiene que venir a por el
+      // resto. `>=` y no `===` porque un reembolso puede incluir importes que no
+      // estén en nuestro total (ajustes manuales desde el panel de Stripe).
+      const isFull = params.amountRefundedCents >= order.totalCents;
+
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          refundedCents: params.amountRefundedCents,
+          refundedAt: new Date(),
+          // Un pedido en disputa que se reembolsa se queda en DISPUTED hasta que
+          // la disputa se cierre: es la disputa la que manda mientras esté abierta.
+          ...(isFull && order.status !== OrderStatus.DISPUTED
+            ? { status: OrderStatus.REFUNDED }
+            : {}),
+        },
+      });
+
+      return {
+        outcome: isFull
+          ? ('refunded' as const)
+          : ('partially_refunded' as const),
+        orderId: order.id,
+        refundedCents: params.amountRefundedCents,
+        totalCents: order.totalCents,
+        deltaCents: params.amountRefundedCents - order.refundedCents,
+      };
+    });
+  }
+
+  // Abre una disputa (evento `charge.dispute.created`). El dinero ya no es nuestro:
+  // Stripe lo retiene mientras se resuelve. Guardamos el estado previo para poder
+  // restaurarlo si se gana.
+  async openDispute(params: {
+    paymentIntentId?: string;
+    orderId?: string;
+  }): Promise<{
+    outcome: 'disputed' | 'already_disputed' | 'not_found';
+    orderId?: string;
+    previousStatus?: OrderStatus;
+    totalCents?: number;
+    customerEmail?: string;
+  }> {
+    return this.prisma.$transaction(async (tx) => {
+      const order = await this.findByStripeRef(tx, params);
+      if (!order) {
+        return { outcome: 'not_found' as const };
+      }
+      if (order.status === OrderStatus.DISPUTED) {
+        return { outcome: 'already_disputed' as const, orderId: order.id };
+      }
+
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          status: OrderStatus.DISPUTED,
+          disputedAt: new Date(),
+          preDisputeStatus: order.status,
+        },
+      });
+
+      const user = await tx.user.findUnique({
+        where: { id: order.userId },
+        select: { email: true },
+      });
+
+      return {
+        outcome: 'disputed' as const,
+        orderId: order.id,
+        previousStatus: order.status,
+        totalCents: order.totalCents,
+        customerEmail: user?.email,
+      };
+    });
+  }
+
+  // Cierra una disputa (evento `charge.dispute.closed`). Stripe manda el veredicto
+  // en `dispute.status`; aquí solo importa si perdimos el dinero o no.
+  async resolveDispute(params: {
+    paymentIntentId?: string;
+    orderId?: string;
+    // true = el cargo se revirtió y el dinero está devuelto (status 'lost' o
+    // 'charge_refunded'); false = ganamos y el cobro se mantiene.
+    lost: boolean;
+  }): Promise<{
+    outcome: 'lost' | 'won' | 'not_disputed' | 'not_found';
+    orderId?: string;
+    restoredStatus?: OrderStatus;
+    // Importe que pasa a estar devuelto al perder, para la rectificativa.
+    deltaCents?: number;
+  }> {
+    return this.prisma.$transaction(async (tx) => {
+      const order = await this.findByStripeRef(tx, params);
+      if (!order) {
+        return { outcome: 'not_found' as const };
+      }
+      // Idempotencia: si no está en disputa, ya se cerró (o nunca se abrió).
+      if (order.status !== OrderStatus.DISPUTED) {
+        return { outcome: 'not_disputed' as const, orderId: order.id };
+      }
+
+      if (params.lost) {
+        // Disputa perdida: el banco devolvió el dinero al cliente. A efectos
+        // nuestros equivale a un reembolso total, aunque no venga un
+        // `charge.refunded` propio.
+        await tx.order.update({
+          where: { id: order.id },
+          data: {
+            status: OrderStatus.REFUNDED,
+            refundedCents: order.totalCents,
+            refundedAt: order.refundedAt ?? new Date(),
+            preDisputeStatus: null,
+          },
+        });
+        return {
+          outcome: 'lost' as const,
+          orderId: order.id,
+          deltaCents: order.totalCents - order.refundedCents,
+        };
+      }
+
+      // Disputa ganada: el cobro se mantiene y el pedido vuelve donde estaba. Por
+      // eso se guardó `preDisputeStatus`: si el cliente ya había recogido la
+      // mercancía, volver a PAID lo devolvería a la cola del almacén y se le
+      // prepararía dos veces. Si falta (dato antiguo), PAID es el mejor supuesto:
+      // el dinero es nuestro y el pedido sigue vivo.
+      const restored = order.preDisputeStatus ?? OrderStatus.PAID;
+      await tx.order.update({
+        where: { id: order.id },
+        data: { status: restored, preDisputeStatus: null },
+      });
+      return {
+        outcome: 'won' as const,
+        orderId: order.id,
+        restoredStatus: restored,
       };
     });
   }
@@ -677,6 +915,34 @@ export class OrdersService {
       where: { id: { in: ids } },
       data: { status: OrderStatus.CANCELLED },
     });
+  }
+
+  // Localiza el pedido al que se refiere un evento de Stripe. Búsqueda en DOS
+  // pasos, no una sola por PaymentIntent: si el cliente pulsa "Pagar" dos veces se
+  // crean DOS sesiones y `setPaymentIntent` deja en el pedido la del segundo
+  // intento. Si acaba pagando con la primera pestaña, el PI del evento ya no está
+  // en ninguna fila y el cobro quedaba huérfano ('not_found'): dinero cobrado sin
+  // pedido que entregar. El orderId de la metadata —que ponemos nosotros al crear
+  // la sesión— es el enlace estable, así que sirve de red de seguridad.
+  //
+  // Lo comparten el cobro, el reembolso y la disputa: los tres identifican el
+  // pedido igual, y un único camino evita que uno se quede sin la red de seguridad.
+  private async findByStripeRef(
+    tx: Prisma.TransactionClient,
+    params: { paymentIntentId?: string; orderId?: string },
+  ) {
+    const include = { lines: true, reservations: true } as const;
+    return (
+      (params.paymentIntentId
+        ? await tx.order.findFirst({
+            where: { stripePaymentIntentId: params.paymentIntentId },
+            include,
+          })
+        : null) ??
+      (params.orderId
+        ? await tx.order.findUnique({ where: { id: params.orderId }, include })
+        : null)
+    );
   }
 
   // Bloquea la fila del artículo (Product o Lot) con FOR UPDATE y devuelve sus

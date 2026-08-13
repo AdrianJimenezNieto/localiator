@@ -39,7 +39,7 @@ export class OrderMailService {
       include: {
         lines: true,
         user: { select: { email: true } },
-        invoice: { select: { number: true } },
+        invoices: { select: { number: true, type: true } },
       },
     });
     if (!order) return;
@@ -50,8 +50,10 @@ export class OrderMailService {
           `<tr><td>${l.nameSnapshot} × ${l.quantity}</td><td align="right">${this.eur(l.lineTotalCents)}</td></tr>`,
       )
       .join('');
-    const invoiceLine = order.invoice
-      ? `<p>Factura ${order.invoice.number}. Puedes descargarla desde "Mis pedidos".</p>`
+    // La ORIGINAL, no una rectificativa (un pedido puede acumular varias).
+    const original = order.invoices.find((i) => i.type !== 'CORRECTIVE');
+    const invoiceLine = original
+      ? `<p>Factura ${original.number}. Puedes descargarla desde "Mis pedidos".</p>`
       : '';
 
     await this.safeSend(
@@ -77,6 +79,67 @@ export class OrderMailService {
     if (!order) return;
 
     await this.safeSend(order.user.email, template.subject, template.html);
+  }
+
+  // Aviso al cliente de que se le ha devuelto dinero. No sale de `statusTemplate`
+  // porque un reembolso PARCIAL no cambia el estado del pedido y aun así hay que
+  // avisar: el cliente ve el abono en su banco y merece saber a qué corresponde.
+  async sendRefundNotice(
+    orderId: string,
+    refundedCents: number,
+    isFull: boolean,
+  ): Promise<void> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: { user: { select: { email: true } } },
+    });
+    if (!order) return;
+
+    const detalle = isFull
+      ? '<p>Hemos reembolsado el importe completo de tu pedido.</p>'
+      : '<p>Hemos reembolsado parcialmente tu pedido; el resto sigue en pie.</p>';
+
+    await this.safeSend(
+      order.user.email,
+      `Reembolso de ${this.eur(refundedCents)}`,
+      `${detalle}
+       <p>Importe devuelto: <strong>${this.eur(refundedCents)}</strong>.</p>
+       <p>El abono puede tardar unos días hábiles en aparecer en tu banco, según tu entidad.</p>`,
+    );
+  }
+
+  // Alerta INTERNA por un chargeback. Va al admin, no al cliente: una disputa
+  // tiene plazo de respuesta con pruebas (Stripe suele dar días contados) y
+  // enterarse tarde equivale a perderla y perder el dinero y la mercancía. Sin
+  // ADMIN_ALERT_EMAIL configurado no se envía nada: queda el log de nivel error,
+  // igual que el resto de emails funcionan sin clave de Resend.
+  async sendDisputeAlert(params: {
+    orderId: string;
+    totalCents: number;
+    customerEmail?: string;
+  }): Promise<void> {
+    const to = this.config.get<string>('ADMIN_ALERT_EMAIL');
+    if (!to) {
+      this.logger.warn(
+        `Disputa en el pedido ${params.orderId} sin avisar por email: ` +
+          'falta ADMIN_ALERT_EMAIL en la configuración',
+      );
+      return;
+    }
+
+    await this.safeSend(
+      to,
+      `[Localiator] Disputa abierta en el pedido ${params.orderId}`,
+      `<p>Un cliente ha abierto una disputa (chargeback).</p>
+       <ul>
+         <li>Pedido: <strong>${params.orderId}</strong></li>
+         <li>Importe: <strong>${this.eur(params.totalCents)}</strong></li>
+         <li>Cliente: ${params.customerEmail ?? '—'}</li>
+       </ul>
+       <p>Responde desde el panel de Stripe DENTRO DEL PLAZO que indique la disputa,
+          aportando pruebas (factura, confirmación de recogida). Pasado el plazo se
+          pierde automáticamente.</p>`,
+    );
   }
 
   private statusTemplate(

@@ -7,6 +7,8 @@ const STATUS_CLASSES: Record<ApiOrderStatus, string> = {
   READY_FOR_PICKUP: 'bg-green-100 text-green-800',
   PICKED_UP: 'bg-ink-200 text-ink-700',
   CANCELLED: 'bg-red-100 text-red-800',
+  REFUNDED: 'bg-ink-200 text-ink-700',
+  DISPUTED: 'bg-amber-100 text-amber-800',
 };
 
 export function OrderStatusBadge({ status }: { status: ApiOrderStatus }) {

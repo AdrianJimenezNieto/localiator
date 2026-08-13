@@ -52,6 +52,14 @@ const orderMailMock = {
 
 const verifiedUser = { emailVerifiedAt: new Date() };
 
+// Primer `order.update` registrado, tipado a mano: el mock de Prisma es `any` y
+// leer `.mock.calls[0][0]` en crudo dispara las reglas de no-unsafe del linter.
+function firstUpdate<T>(): { data: T } {
+  return (
+    prismaMock.order.update.mock.calls as unknown as Array<[{ data: T }]>
+  )[0][0];
+}
+
 describe('OrdersService', () => {
   let service: OrdersService;
 
@@ -237,6 +245,185 @@ describe('OrdersService', () => {
     });
   });
 
+  describe('reembolsos', () => {
+    const paidOrder = (extra: Record<string, unknown> = {}) => ({
+      id: 'o1',
+      userId: 'u1',
+      status: 'PAID',
+      stripePaymentIntentId: 'pi_1',
+      totalCents: 10_000,
+      refundedCents: 0,
+      refundedAt: null,
+      lines: [],
+      reservations: [],
+      ...extra,
+    });
+
+    it('un reembolso TOTAL pasa el pedido a REFUNDED', async () => {
+      prismaMock.order.findFirst.mockResolvedValue(paidOrder());
+
+      const result = await service.registerRefund({
+        paymentIntentId: 'pi_1',
+        amountRefundedCents: 10_000,
+      });
+
+      expect(result.outcome).toBe('refunded');
+      const call = firstUpdate<{ status?: string; refundedCents: number }>();
+      expect(call.data.status).toBe('REFUNDED');
+      expect(call.data.refundedCents).toBe(10_000);
+    });
+
+    // Devolver un artículo de tres no anula la venta: el pedido sigue vivo y el
+    // cliente aún tiene que recoger el resto.
+    it('un reembolso PARCIAL apunta el importe pero NO cambia el estado', async () => {
+      prismaMock.order.findFirst.mockResolvedValue(paidOrder());
+
+      const result = await service.registerRefund({
+        paymentIntentId: 'pi_1',
+        amountRefundedCents: 2_500,
+      });
+
+      expect(result.outcome).toBe('partially_refunded');
+      const call = firstUpdate<{ status?: string; refundedCents: number }>();
+      expect(call.data.status).toBeUndefined();
+      expect(call.data.refundedCents).toBe(2_500);
+    });
+
+    // Stripe manda el ACUMULADO devuelto, no el delta: reprocesar el evento debe
+    // dejar el mismo valor, nunca sumar dos veces.
+    it('es idempotente ante el mismo evento repetido', async () => {
+      prismaMock.order.findFirst.mockResolvedValue(
+        paidOrder({ refundedCents: 2_500 }),
+      );
+
+      const result = await service.registerRefund({
+        paymentIntentId: 'pi_1',
+        amountRefundedCents: 2_500,
+      });
+
+      expect(result.outcome).toBe('noop');
+      expect(prismaMock.order.update).not.toHaveBeenCalled();
+    });
+
+    it('NO repone stock: el artículo puede estar ya en manos del cliente', async () => {
+      prismaMock.order.findFirst.mockResolvedValue(
+        paidOrder({
+          lines: [{ itemType: 'PRODUCT', itemId: 'p1', quantity: 2 }],
+        }),
+      );
+
+      await service.registerRefund({
+        paymentIntentId: 'pi_1',
+        amountRefundedCents: 10_000,
+      });
+
+      expect(prismaMock.product.update).not.toHaveBeenCalled();
+      expect(prismaMock.lot.update).not.toHaveBeenCalled();
+    });
+
+    it('un pedido en disputa se queda DISPUTED aunque se reembolse', async () => {
+      prismaMock.order.findFirst.mockResolvedValue(
+        paidOrder({ status: 'DISPUTED' }),
+      );
+
+      await service.registerRefund({
+        paymentIntentId: 'pi_1',
+        amountRefundedCents: 10_000,
+      });
+
+      const call = firstUpdate<{ status?: string }>();
+      expect(call.data.status).toBeUndefined();
+    });
+  });
+
+  describe('disputas', () => {
+    const disputable = (extra: Record<string, unknown> = {}) => ({
+      id: 'o1',
+      userId: 'u1',
+      status: 'READY_FOR_PICKUP',
+      stripePaymentIntentId: 'pi_1',
+      totalCents: 10_000,
+      refundedCents: 0,
+      refundedAt: null,
+      preDisputeStatus: null,
+      lines: [],
+      reservations: [],
+      ...extra,
+    });
+
+    it('abre la disputa guardando el estado previo', async () => {
+      prismaMock.order.findFirst.mockResolvedValue(disputable());
+      prismaMock.user.findUnique.mockResolvedValue({ email: 'c@x.dev' });
+
+      const result = await service.openDispute({ paymentIntentId: 'pi_1' });
+
+      expect(result.outcome).toBe('disputed');
+      expect(result.previousStatus).toBe('READY_FOR_PICKUP');
+      expect(result.customerEmail).toBe('c@x.dev');
+      const call = firstUpdate<{ status: string; preDisputeStatus: string }>();
+      expect(call.data.status).toBe('DISPUTED');
+      expect(call.data.preDisputeStatus).toBe('READY_FOR_PICKUP');
+    });
+
+    it('es idempotente si la disputa ya estaba abierta', async () => {
+      prismaMock.order.findFirst.mockResolvedValue(
+        disputable({ status: 'DISPUTED' }),
+      );
+
+      const result = await service.openDispute({ paymentIntentId: 'pi_1' });
+
+      expect(result.outcome).toBe('already_disputed');
+      expect(prismaMock.order.update).not.toHaveBeenCalled();
+    });
+
+    // Lo importante de guardar preDisputeStatus: ganar una disputa sobre un pedido
+    // YA RECOGIDO no debe devolverlo a la cola del almacén.
+    it('al ganar, restaura el estado previo en vez de volver a PAID', async () => {
+      prismaMock.order.findFirst.mockResolvedValue(
+        disputable({ status: 'DISPUTED', preDisputeStatus: 'PICKED_UP' }),
+      );
+
+      const result = await service.resolveDispute({
+        paymentIntentId: 'pi_1',
+        lost: false,
+      });
+
+      expect(result.outcome).toBe('won');
+      expect(result.restoredStatus).toBe('PICKED_UP');
+      const call = firstUpdate<{ status: string; preDisputeStatus: null }>();
+      expect(call.data.status).toBe('PICKED_UP');
+      expect(call.data.preDisputeStatus).toBeNull();
+    });
+
+    it('al perder, el pedido queda REFUNDED por el importe completo', async () => {
+      prismaMock.order.findFirst.mockResolvedValue(
+        disputable({ status: 'DISPUTED', preDisputeStatus: 'PAID' }),
+      );
+
+      const result = await service.resolveDispute({
+        paymentIntentId: 'pi_1',
+        lost: true,
+      });
+
+      expect(result.outcome).toBe('lost');
+      const call = firstUpdate<{ status: string; refundedCents: number }>();
+      expect(call.data.status).toBe('REFUNDED');
+      expect(call.data.refundedCents).toBe(10_000);
+    });
+
+    it('cerrar una disputa que no está abierta no hace nada', async () => {
+      prismaMock.order.findFirst.mockResolvedValue(disputable());
+
+      const result = await service.resolveDispute({
+        paymentIntentId: 'pi_1',
+        lost: true,
+      });
+
+      expect(result.outcome).toBe('not_disputed');
+      expect(prismaMock.order.update).not.toHaveBeenCalled();
+    });
+  });
+
   describe('confirmOrderPaid', () => {
     it('descuenta stock, consume reservas y marca PAID un pedido PENDING', async () => {
       const future = new Date(Date.now() + 60_000);
@@ -270,6 +457,104 @@ describe('OrdersService', () => {
       const updateCalls = prismaMock.order.update.mock
         .calls as unknown as Array<[{ data: { status: string } }]>;
       expect(updateCalls[0][0].data.status).toBe('PAID');
+    });
+
+    // Regresión de seguridad: antes se marcaba PAID sin mirar cuánto se había
+    // cobrado, así que un cobro por menos importe entregaba la mercancía igual.
+    it('rechaza el cobro si el importe no coincide con el total del pedido', async () => {
+      const future = new Date(Date.now() + 60_000);
+      prismaMock.order.findFirst.mockResolvedValue({
+        id: 'o1',
+        status: 'PENDING',
+        stripePaymentIntentId: 'pi_1',
+        totalCents: 10_000,
+        currency: 'eur',
+        lines: [{ itemType: 'PRODUCT', itemId: 'p1', quantity: 2 }],
+        reservations: [{ expiresAt: future }],
+      });
+
+      const result = await service.confirmOrderPaid({
+        paymentIntentId: 'pi_1',
+        amountPaidCents: 100, // un euro por un pedido de cien
+        currency: 'eur',
+      });
+
+      expect(result.outcome).toBe('amount_mismatch');
+      expect(result.expectedCents).toBe(10_000);
+      expect(result.receivedCents).toBe(100);
+      // Lo importante: no se toca ni el stock ni el estado del pedido.
+      expect(prismaMock.product.update).not.toHaveBeenCalled();
+      expect(prismaMock.order.update).not.toHaveBeenCalled();
+    });
+
+    it('rechaza el cobro si la moneda no coincide', async () => {
+      const future = new Date(Date.now() + 60_000);
+      prismaMock.order.findFirst.mockResolvedValue({
+        id: 'o1',
+        status: 'PENDING',
+        stripePaymentIntentId: 'pi_1',
+        totalCents: 10_000,
+        currency: 'eur',
+        lines: [{ itemType: 'PRODUCT', itemId: 'p1', quantity: 2 }],
+        reservations: [{ expiresAt: future }],
+      });
+
+      const result = await service.confirmOrderPaid({
+        paymentIntentId: 'pi_1',
+        amountPaidCents: 10_000,
+        currency: 'usd',
+      });
+
+      expect(result.outcome).toBe('amount_mismatch');
+      expect(prismaMock.order.update).not.toHaveBeenCalled();
+    });
+
+    it('acepta el cobro cuando importe y moneda cuadran', async () => {
+      const future = new Date(Date.now() + 60_000);
+      prismaMock.order.findFirst.mockResolvedValue({
+        id: 'o1',
+        status: 'PENDING',
+        stripePaymentIntentId: 'pi_1',
+        totalCents: 10_000,
+        currency: 'eur',
+        lines: [{ itemType: 'PRODUCT', itemId: 'p1', quantity: 2 }],
+        reservations: [{ expiresAt: future }],
+      });
+
+      const result = await service.confirmOrderPaid({
+        paymentIntentId: 'pi_1',
+        amountPaidCents: 10_000,
+        currency: 'EUR', // Stripe la manda en minúsculas; comparamos sin distinguir
+      });
+
+      expect(result.outcome).toBe('paid');
+    });
+
+    // Regresión: doble clic en "Pagar" → dos sesiones. El pedido guarda el PI de la
+    // segunda, pero el cliente paga con la primera. Antes ese cobro se perdía
+    // ('not_found'); ahora el orderId de la metadata lo rescata.
+    it('encuentra el pedido por orderId si el PaymentIntent del evento ya no es el guardado', async () => {
+      const future = new Date(Date.now() + 60_000);
+      prismaMock.order.findFirst.mockResolvedValue(null); // el PI viejo no está en BD
+      prismaMock.order.findUnique.mockResolvedValue({
+        id: 'o1',
+        status: 'PENDING',
+        stripePaymentIntentId: 'pi_2', // el de la segunda sesión
+        totalCents: 10_000,
+        currency: 'eur',
+        lines: [{ itemType: 'PRODUCT', itemId: 'p1', quantity: 1 }],
+        reservations: [{ expiresAt: future }],
+      });
+
+      const result = await service.confirmOrderPaid({
+        paymentIntentId: 'pi_1', // se pagó con la primera sesión
+        orderId: 'o1',
+        amountPaidCents: 10_000,
+        currency: 'eur',
+      });
+
+      expect(result.outcome).toBe('paid');
+      expect(result.orderId).toBe('o1');
     });
 
     it('es idempotente: un evento duplicado sobre un pedido ya PAID no descuenta stock', async () => {

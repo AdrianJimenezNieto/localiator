@@ -1,9 +1,11 @@
 // Antisniping (tarea 05): si llega una puja válida cuando quedan menos de estos
 // minutos para el cierre, el cierre se mueve a `now + ventana`, dando siempre una
-// ventana de reacción constante para responder. Umbral = extensión = 5 min según
-// CLAUDE.md. Como constante (no número mágico repartido) para poder ajustarlo en
-// un solo sitio y testear con valores pequeños.
-export const ANTISNIPE_WINDOW_MINUTES = 5;
+// ventana de reacción constante para responder. Umbral = extensión = 3 min según
+// CLAUDE.md (bajado desde 5 para que una subasta muy disputada no se alargue
+// indefinidamente: cada puja de último minuto regala una ventana entera). Como
+// constante (no número mágico repartido) para poder ajustarlo en un solo sitio y
+// testear con valores pequeños.
+export const ANTISNIPE_WINDOW_MINUTES = 3;
 export const ANTISNIPE_WINDOW_MS = ANTISNIPE_WINDOW_MINUTES * 60_000;
 
 // Plazo de pago del ganador (tarea 07): al cerrar con ganador se fija
@@ -16,10 +18,14 @@ export const PAYMENT_WINDOW_MS = PAYMENT_WINDOW_HOURS * 60 * 60_000;
 
 // Aviso "a punto de cerrar" (tarea 08): se avisa a los pujadores cuando faltan
 // menos de estos minutos para `endsAt`. DELIBERADAMENTE MÁS CORTA que la ventana
-// del antisniping (2 < 5 min): al extenderse el cierre reiniciamos el flag de
+// del antisniping (2 < 3 min): al extenderse el cierre reiniciamos el flag de
 // "ya avisado" para poder reavisar, y si esta ventana fuese >= la del antisniping,
 // tras cada extensión la subasta quedaría de inmediato dentro de rango y reavisaría
-// en cada puja de último minuto (spam). Con 2 < 5, tras extender a `now + 5 min` el
+// en cada puja de último minuto (spam). Con 2 < 3, tras extender a `now + 3 min` el
 // aviso no rearma hasta que la subasta vuelva a decaer a 2 min de calma.
+//
+// INVARIANTE: ENDING_SOON_WINDOW_MINUTES < ANTISNIPE_WINDOW_MINUTES. El margen es
+// ahora de un solo minuto, así que si algún día se vuelve a bajar el antisniping
+// hay que bajar también este aviso.
 export const ENDING_SOON_WINDOW_MINUTES = 2;
 export const ENDING_SOON_WINDOW_MS = ENDING_SOON_WINDOW_MINUTES * 60_000;

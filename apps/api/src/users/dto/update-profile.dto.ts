@@ -11,6 +11,7 @@ export class UpdateProfileDto extends PickType(RegisterDto, [
   'lastName',
   'birthDate',
   'phone',
+  'taxId',
   'addressLine1',
   'addressLine2',
   'postalCode',

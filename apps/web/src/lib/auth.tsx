@@ -27,6 +27,8 @@ export interface PersonalData {
   lastName: string;
   birthDate: string;
   phone?: string;
+  // NIF/NIE/CIF opcional: determina si la factura es completa o simplificada.
+  taxId?: string;
   addressLine1: string;
   addressLine2?: string;
   postalCode: string;

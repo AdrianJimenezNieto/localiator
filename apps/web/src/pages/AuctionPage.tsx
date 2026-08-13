@@ -20,12 +20,14 @@ export function AuctionPage() {
     closed,
     endingSoon,
     notice,
+    myMaxCents,
+    isLeading,
     placeBid,
   } = useAuctionSocket(id)
 
-  // Mínimo válido de la próxima puja: precio de salida si no hay pujas, o la
-  // máxima + el incremento. Solo para prefijar el formulario; la verdad la impone
-  // el servidor (misma regla que la tarea 02).
+  // Mínimo válido del próximo máximo: precio de salida si no hay pujas, o el
+  // precio actual + el incremento. Solo para prefijar el formulario; la verdad la
+  // impone el servidor (misma regla que la tarea 02).
   const minNextCents = useMemo(() => {
     if (!state) return 0
     return highestBidCents != null
@@ -92,7 +94,7 @@ export function AuctionPage() {
             ? `¡Has ganado la subasta por ${formatPrice(notice.amountCents)}!${
                 notice.secondChance ? ' (segunda oportunidad)' : ''
               } Revisa tu email para pagar.`
-            : `Te han superado: la puja va por ${formatPrice(notice.amountCents)}.`}
+            : `Han superado tu máximo: la puja va por ${formatPrice(notice.amountCents)}. Si aún te interesa, indica un máximo mayor.`}
         </div>
       )}
 
@@ -105,28 +107,65 @@ export function AuctionPage() {
 
       {closed ? (
         <div className="mt-4 rounded-md bg-neutral-100 px-4 py-3 text-sm">
-          {closed.winnerMasked
-            ? `Subasta cerrada. Ganador: ${closed.winnerMasked} · ${formatPrice(closed.amountCents ?? 0)}`
-            : 'Subasta cerrada sin pujas (desierta).'}
+          {state.status === 'CANCELLED'
+            ? 'Subasta cancelada.'
+            : closed.winnerMasked
+              ? `Subasta cerrada. Ganador: ${closed.winnerMasked} · ${formatPrice(closed.amountCents ?? 0)}`
+              : 'Subasta cerrada sin pujas (desierta).'}
+        </div>
+      ) : state.status === 'SCHEDULED' ? (
+        <div className="mt-4 rounded-md bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          La subasta aún no ha empezado. Abre el{' '}
+          {new Date(state.startsAt).toLocaleString('es-ES')}; cuando arranque
+          podrás pujar sin recargar.
         </div>
       ) : user ? (
-        <form onSubmit={onSubmit} className="mt-4 flex gap-2">
-          <input
-            type="number"
-            step="0.01"
-            min={minNextCents / 100}
-            value={amountEuros}
-            onChange={(e) => setAmountEuros(e.target.value)}
-            placeholder={`Mínimo ${formatPrice(minNextCents)}`}
-            className="flex-1 rounded-md border border-neutral-300 px-3 py-2"
-          />
-          <button
-            type="submit"
-            className="rounded-md bg-neutral-900 px-5 py-2 font-semibold text-white hover:bg-neutral-700"
-          >
-            Pujar
-          </button>
-        </form>
+        <div className="mt-4">
+          {/* Estado personal: si voy ganando y con qué techo. El máximo es MÍO y
+              solo lo ve su dueño; el resto de la sala no sabe que existe. */}
+          {myMaxCents != null && (
+            <div
+              className={`mb-3 rounded-md px-4 py-3 text-sm ${
+                isLeading
+                  ? 'bg-green-50 text-green-800'
+                  : 'bg-neutral-100 text-neutral-700'
+              }`}
+            >
+              {isLeading ? 'Vas ganando. ' : 'Ya no vas ganando. '}
+              Tu máximo autorizado es {formatPrice(myMaxCents)}
+              {isLeading &&
+                ' — solo pujaremos más si alguien te disputa, y nunca por encima de esa cifra.'}
+            </div>
+          )}
+
+          <form onSubmit={onSubmit} className="flex gap-2">
+            <input
+              type="number"
+              step="0.01"
+              min={minNextCents / 100}
+              value={amountEuros}
+              onChange={(e) => setAmountEuros(e.target.value)}
+              placeholder={`Tu máximo (mínimo ${formatPrice(minNextCents)})`}
+              className="flex-1 rounded-md border border-neutral-300 px-3 py-2"
+            />
+            <button
+              type="submit"
+              className="rounded-md bg-neutral-900 px-5 py-2 font-semibold text-white hover:bg-neutral-700"
+            >
+              {myMaxCents != null ? 'Subir mi máximo' : 'Pujar'}
+            </button>
+          </form>
+
+          {/* Sin esta explicación, quien escribe 100 € y ve que la puja marca 20 €
+              cree que ha habido un error. Es la parte menos intuitiva del sistema. */}
+          <p className="mt-2 text-xs text-neutral-500">
+            Indica el máximo que estás dispuesto a pagar. Pujaremos por ti solo lo
+            necesario para ir en cabeza (de {formatPrice(state.minIncrementCents)}{' '}
+            en {formatPrice(state.minIncrementCents)}) y subiremos solos si alguien
+            te supera, sin pasar nunca de tu máximo. Solo te avisamos si llegan a
+            superarlo.
+          </p>
+        </div>
       ) : (
         <p className="mt-4 text-sm text-neutral-600">
           Inicia sesión para pujar. Puedes seguir la subasta en directo sin cuenta.
@@ -145,7 +184,16 @@ export function AuctionPage() {
           {bids.map((bid, i) => (
             <li key={i} className="flex justify-between px-4 py-3 text-sm">
               <span className="font-medium">{formatPrice(bid.amountCents)}</span>
-              <span className="text-neutral-500">{bid.userMasked}</span>
+              <span className="text-neutral-500">
+                {bid.userMasked}
+                {/* Explica por qué el precio sube sin que nadie haya escrito nada:
+                    es el proxy defendiendo el máximo de alguien. */}
+                {bid.isAutomatic && (
+                  <span className="ml-2 rounded bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-600">
+                    automática
+                  </span>
+                )}
+              </span>
             </li>
           ))}
         </ul>

@@ -8,6 +8,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { IsStrongPassword } from './password.decorator';
+import { IsSpanishTaxId } from './tax-id.decorator';
 import { IsAdult } from './is-adult.decorator';
 import { AntiBotDto } from './anti-bot.dto';
 
@@ -36,6 +37,15 @@ export class RegisterDto extends AntiBotDto {
   @MinLength(1, { message: 'Los apellidos son obligatorios' })
   @MaxLength(100)
   lastName!: string;
+
+  // NIF/NIE/CIF: OPCIONAL. Sin él la venta se documenta con factura SIMPLIFICADA,
+  // válida en venta al por menor a particulares. Solo hace falta si el cliente
+  // quiere factura completa (para deducirse el gasto).
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  @IsSpanishTaxId()
+  taxId?: string;
 
   // Fecha de nacimiento en formato ISO 'YYYY-MM-DD' (lo que produce un <input
   // type="date">). IsAdult exige mayoría de edad.

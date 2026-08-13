@@ -94,6 +94,22 @@ en boilerplate repetitivo o config puedes ir más directo.
 - **Plan de respuesta ante incidentes**: fuera del MVP (se considera cosa de producción
   avanzada, menor prioridad de momento).
 
+### Invariantes de seguridad (no romper sin pensarlo)
+- **`JWT_ACCESS_SECRET` es obligatorio en producción.** Con `NODE_ENV=production`
+  la API no arranca si falta, mide menos de 32 caracteres o es el fallback de
+  desarrollo. Fuente única: `auth/jwt-secret.util.ts`; nadie debe volver a leer la
+  variable directamente con un `|| 'dev-insecure-secret'`.
+- **Nada de `$queryRawUnsafe` / `$executeRawUnsafe`.** Las consultas crudas (locks
+  `FOR UPDATE`, contador de facturas) usan tagged templates, que parametrizan de
+  verdad. Un test (`prisma/no-raw-sql.spec.ts`) falla si aparece una variante
+  Unsafe en cualquier fichero.
+- **El webhook de Stripe solo confirma si el cobro es real y cuadra.** Exige firma
+  válida, `livemode` acorde al entorno, `payment_status === 'paid'` (una sesión
+  "completada" NO es una sesión cobrada: los métodos asíncronos la completan sin
+  dinero) e importe + moneda idénticos al total del pedido. Si algo no cuadra, se
+  registra y NO se entrega: el dinero es recuperable, la mercancía no.
+- **El importe siempre sale de la BD**, nunca de nada que mande el cliente.
+
 ## Despliegue
 - **Hosting**: VPS propio ya pagado (coste no es preocupación).
 - **Separación de entornos**: fundamental (desarrollo / staging / producción).
@@ -104,6 +120,20 @@ en boilerplate repetitivo o config puedes ir más directo.
 - **Logs centralizados** y trazabilidad de errores en producción: sí.
 - **Estrategia de rollback** si un despliegue falla: sí.
 - **Plan de recuperación ante desastres**: pendiente, a más largo plazo.
+- **La API corre en UNA sola instancia, y hoy eso es un requisito, no un detalle.**
+  Tres cosas dependen de ello y se romperían en silencio (sin fallar, dando resultados
+  incorrectos) si algún día se escala a varias réplicas:
+  1. Las **rooms de Socket.IO viven en memoria**: con dos réplicas, un pujador
+     conectado a la instancia A no recibiría los eventos emitidos por la B. Haría
+     falta el adaptador de Redis de Socket.IO.
+  2. El **rate limit de pujas del gateway** es un mapa en memoria: cada réplica
+     tendría su propio cupo.
+  3. Los **crons del ciclo de vida** (abrir, cerrar, impagos, aviso de cierre)
+     correrían en todas las réplicas a la vez. Esto es lo único de los tres que ya
+     está protegido: las cuatro operaciones son idempotentes y transaccionales con
+     `SELECT … FOR UPDATE`, así que solaparse no duplica cierres ni bans.
+  El `docker-compose.prod.yml` fija `container_name`, lo que impide escalar sin
+  tocarlo: es la salvaguarda de facto que hace que el requisito se cumpla hoy.
 
 ## Pasarela de pagos
 - **Pasarela única**: **Stripe** (sin transferencia bancaria). Los métodos concretos
@@ -117,18 +147,60 @@ en boilerplate repetitivo o config puedes ir más directo.
   y su expiración — ver Inventario).
 - **Reembolsos/cancelaciones**: mínimos. Al ser productos de subasta, se limita la
   responsabilidad al máximo dentro de lo legal.
+- **Reembolsos y disputas (chargebacks)**: los gestiona el webhook a partir de
+  `charge.refunded`, `charge.dispute.created` y `charge.dispute.closed`. Reglas:
+  - Un reembolso **parcial** no cambia el estado (la venta sigue viva); solo el
+    **total** lleva el pedido a `REFUNDED`. El importe devuelto vive en
+    `Order.refundedCents`, que guarda el **acumulado** que manda Stripe (no el
+    delta), de donde sale la idempotencia.
+  - Una disputa pasa el pedido a `DISPUTED` y **guarda el estado previo**
+    (`preDisputeStatus`): al ganarla se restaura ese estado, no `PAID`, para no
+    devolver a la cola del almacén un pedido que el cliente ya recogió. Al
+    perderla, el pedido queda `REFUNDED`.
+  - **Nunca se repone stock automáticamente.** Un reembolso no prueba que el
+    artículo haya vuelto al almacén; reponerlo a ciegas provocaría sobreventa. Lo
+    hace el admin cuando recibe la devolución física.
+  - `REFUNDED` y `DISPUTED` **no son fijables desde el backoffice** (409): el
+    estado del dinero lo dicta Stripe.
+  - Una disputa se avisa por email a `ADMIN_ALERT_EMAIL` y con log de nivel
+    `error`: hay plazo de respuesta y dejarlo pasar pierde importe y mercancía.
+- **PENDIENTE — factura rectificativa**: un reembolso obliga legalmente a emitir
+  una factura rectificativa con su propia serie correlativa. Hoy **no se genera**;
+  el webhook solo deja un aviso en el log para emitirla a mano.
 - **Cumplimiento normativo de pagos (PCI DSS)**: delegar la responsabilidad en la pasarela
   (no manejar datos de tarjeta directamente).
 
 ## Subastas propias
-- **Antisniping**: extensión automática del cierre a **5 minutos** ante pujas de último
-  segundo.
+- **Antisniping**: extensión automática del cierre a **3 minutos** ante pujas de último
+  segundo. (Antes eran 5; se bajó a 3 para que una subasta muy disputada no se alargue
+  indefinidamente.) La ventana del aviso "a punto de cerrar" debe seguir siendo **menor**
+  que esta, o cada extensión volvería a disparar el aviso en bucle.
+- **Puja proxy (puja automática por máximo)**: el usuario introduce el **máximo** que está
+  dispuesto a pagar, no el importe a pujar. El sistema puja en su nombre lo mínimo
+  necesario para ir en cabeza y va subiendo automáticamente, salto mínimo a salto mínimo,
+  cuando otro le disputa, **sin pasar nunca de su máximo**. Si dos usuarios tienen máximo,
+  gana el más alto pagando lo justo para superar al segundo; **un empate lo gana quien
+  puso su máximo primero**.
+  - El **máximo del líder en pie es privado**: no se emite jamás por el canal en vivo ni
+    aparece en el historial. Es el dato crítico del sistema: quien lo conociera ganaría
+    por un céntimo. Solo se publica el precio efectivo actual.
+    - Matiz deliberado: lo que un pujador **ya batido** llegó a comprometer **sí** es
+      público en el historial, porque es el registro veraz de la subasta y es lo único
+      que explica por qué el proxy del líder subió el precio solo. Mismo criterio que
+      eBay, y no es explotable: ese usuario ya está fuera y, si vuelve, fija un máximo
+      nuevo. Fijado con un test e2e de regresión que cubre las dos mitades de la regla.
+  - **Notificación de "te han superado" solo cuando se supera el MÁXIMO**, no en cada
+    subida automática dentro del propio techo.
 - **Impago del ganador**: **segunda oportunidad** al siguiente pujador y **ban automático**
   al que no paga.
 - **Notificaciones en tiempo real** a los pujadores: superado, ganado, subasta a punto de
-  cerrar.
+  cerrar. Respaldadas por email (Resend) para que lleguen con la pestaña cerrada.
 - **Concurrencia**: evitar condiciones de carrera cuando llegan varias pujas casi
   simultáneas (transacciones / bloqueos a nivel de BD).
+- **PENDIENTE — pago de la subasta**: el cobro del ganador está **implementado** (al cerrar
+  se crea el pedido PENDING con reserva de stock y se cobra por el flujo Stripe existente),
+  pero **queda pendiente validarlo end-to-end con claves reales de Stripe**. Está **fuera
+  del alcance** del trabajo de subastas en tiempo real; se aborda como tarea aparte.
 
 ## Inventario y almacén
 - **Sincronización de stock físico**: no es una preocupación (almacén no ordenado).
@@ -145,6 +217,41 @@ en boilerplate repetitivo o config puedes ir más directo.
 ## Aspectos legales y fiscales
 - **Condiciones de venta y aviso legal** publicados en la web.
 - **Facturación con IVA correcto** según tipo de cliente/producto.
+- **Normativa aplicable: ESTATAL, no autonómica.** La facturación y el IVA se rigen
+  por el RD 1619/2012 y la Ley 37/1992. Aragón es territorio común: regula IRPF
+  autonómico, Sucesiones e ITP/AJD, pero **no** la facturación. (Solo País Vasco y
+  Navarra tienen normativa foral propia por Concierto/Convenio Económico.)
+- **Régimen de IVA: REBU** (régimen especial de bienes usados, arts. 135-139 LIVA),
+  configurable con `INVOICE_REGIME`. Consecuencias en el documento:
+  - El IVA se liquida sobre el **margen**, no sobre el precio de venta.
+  - La factura **NO desglosa base ni cuota**: solo el total, más la mención legal
+    obligatoria del régimen (art. 6.1.j RD 1619/2012). Que el cliente no vea IVA
+    **no es un bug**: es el requisito.
+  - El desglose (`netCents`/`vatCents`/`vatRateBps`) es nullable y solo se rellena
+    en régimen general.
+  - **Pendiente**: liquidar por margen exige el **precio de compra** de cada
+    artículo, que hoy NO se modela (CLAUDE.md descartó el coste de origen). Hace
+    falta para el libro registro y el modelo 303, aunque no para el documento que
+    ve el cliente. Consultar con el gestor si procede margen operación a operación
+    o **margen global** (más habitual cuando se compra por lotes).
+- **Tipo de documento según los datos del cliente**: con NIF se emite factura
+  **completa** (identifica al destinatario); sin NIF, **simplificada**, válida en
+  venta al por menor hasta 3.000 € IVA incluido. Por encima de ese tope sin datos
+  fiscales se emite igualmente pero se registra un `error`: mejor un documento
+  incompleto que un pedido cobrado sin ninguno.
+- **Rectificativas** (art. 15): serie propia `R`, numeración independiente,
+  importes en **negativo** y motivo impreso. Las emite el webhook automáticamente
+  ante un reembolso (por el importe de ESA operación, no el acumulado) y ante una
+  disputa perdida.
+- **La factura es un snapshot inmutable**: copia emisor, cliente y líneas al
+  emitirse. No es purismo — el derecho al olvido vacía nombre y dirección del
+  `User`, y el emisor sale de `.env`; sin snapshot, ejercer el RGPD o tocar una
+  variable reescribía facturas ya emitidas.
+- **PENDIENTE — VERI\*FACTU (RD 1007/2023 y RD 254/2025)**: registro de facturación
+  encadenado por huella, inalterabilidad, QR y declaración responsable del
+  software. **No implementado.** Las fechas de entrada en vigor (1-1-2026
+  sociedades, 1-7-2026 resto) ya han pasado; verificar el estado real en la AEAT,
+  porque se han prorrogado varias veces.
 - **Política de cookies y consentimiento**: sí.
 - **Garantías legales al consumidor**: sí.
 - **Subasta extranjera / aduanas**: no aplica, todo comprado en España.

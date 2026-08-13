@@ -8,6 +8,9 @@ import { useAuth } from './auth'
 export interface LiveBid {
   amountCents: number
   userMasked: string
+  // true si la puso automáticamente el proxy en nombre del pujador (no fue una
+  // acción humana). Sirve para explicar en la ficha por qué el precio sube solo.
+  isAutomatic?: boolean
   createdAt?: string
 }
 
@@ -18,9 +21,21 @@ export interface AuctionState {
   status: string
   startingPriceCents: number
   minIncrementCents: number
+  startsAt: string
   endsAt: string
+  // Precio EFECTIVO actual: lo que pagaría ahora mismo quien va ganando. No es el
+  // máximo de nadie (los máximos son privados y no salen del servidor).
   highestBidCents: number | null
+  // Si el usuario que mira va ganando ahora mismo. El servidor no dice QUIÉN
+  // lidera, solo si eres tú: así se puede pintar "vas ganando" sin filtrar nada.
+  isLeading: boolean
+  // MI propio máximo autorizado (null si aún no he pujado o soy invitado). El
+  // servidor solo devuelve el del que pregunta, nunca el de otro.
+  myMaxCents: number | null
   bids: LiveBid[]
+  // Resultado del cierre si la subasta YA estaba cerrada al entrar (null si sigue
+  // viva). Misma forma que el evento `auction:closed`.
+  closed: AuctionClosed | null
 }
 
 // Motivo de rechazo de una puja (evento `bid:rejected`), con código estable.
@@ -62,6 +77,11 @@ export function useAuctionSocket(auctionId: string) {
   const [closed, setClosed] = useState<AuctionClosed | null>(null)
   const [endingSoon, setEndingSoon] = useState(false)
   const [notice, setNotice] = useState<AuctionNotice | null>(null)
+  // Máximo propio y si voy ganando: los dos se siembran del estado inicial y se
+  // mantienen a mano según van llegando eventos, porque el servidor no reenvía el
+  // estado completo en cada puja (solo el precio nuevo).
+  const [myMaxCents, setMyMaxCents] = useState<number | null>(null)
+  const [isLeading, setIsLeading] = useState(false)
 
   useEffect(() => {
     // El token viaja en el handshake (auth). Si el usuario es invitado (sin
@@ -85,6 +105,12 @@ export function useAuctionSocket(auctionId: string) {
       setBids(s.bids)
       setHighestBidCents(s.highestBidCents)
       setEndsAt(s.endsAt)
+      setMyMaxCents(s.myMaxCents)
+      setIsLeading(s.isLeading)
+      // Si la subasta ya estaba cerrada al entrar no llegará `auction:closed`
+      // (ese evento se emitió en su momento a quien estuviera mirando), así que
+      // el cierre se siembra desde el estado inicial.
+      setClosed(s.closed)
     })
 
     socket.on('bid:accepted', (bid: LiveBid & { endsAt: string }) => {
@@ -93,8 +119,27 @@ export function useAuctionSocket(auctionId: string) {
       setEndsAt(bid.endsAt) // se actualizará con el antisniping (tarea 05).
     })
 
+    // Confirmación privada de que MI puja entró. El servidor devuelve el máximo
+    // que ha quedado registrado para mí: puede no ser el que envié si ya tenía uno
+    // mayor. Se guarda aquí porque el máximo no viaja en el evento público.
+    socket.on(
+      'bid:accepted:self',
+      (payload?: { myMaxCents?: number; isLeading?: boolean }) => {
+        if (payload?.myMaxCents != null) setMyMaxCents(payload.myMaxCents)
+        if (payload?.isLeading != null) setIsLeading(payload.isLeading)
+      },
+    )
+
     socket.on('bid:rejected', (rejection: BidRejection) => {
       setLastRejection(rejection)
+    })
+
+    // Apertura (tarea 10): una subasta programada acaba de pasar a LIVE. Movemos
+    // el `status` del estado local para que la ficha habilite el formulario sin
+    // recargar. El `endsAt` definitivo lo fija el servidor al abrir.
+    socket.on('auction:opened', ({ endsAt: newEndsAt }: { endsAt: string }) => {
+      setState((prev) => (prev ? { ...prev, status: 'LIVE' } : prev))
+      setEndsAt(newEndsAt)
     })
 
     // Antisniping (tarea 05): el servidor movió el cierre; actualizamos la cuenta
@@ -117,10 +162,14 @@ export function useAuctionSocket(auctionId: string) {
 
     // Avisos PERSONALES (tarea 08): llegan por la room de usuario. Solo se reciben
     // si el usuario tiene sesión (el token entra en el handshake).
+    // Con puja proxy esto ya NO llega en cada puja que te pasa por encima: solo
+    // cuando han superado tu MÁXIMO y de verdad te has quedado fuera. Mientras tu
+    // techo aguante, el sistema sube por ti en silencio.
     socket.on(
       'notification:outbid',
       ({ amountCents }: { amountCents: number }) => {
         setNotice({ kind: 'outbid', amountCents })
+        setIsLeading(false)
       },
     )
     socket.on(
@@ -142,9 +191,11 @@ export function useAuctionSocket(auctionId: string) {
     }
   }, [auctionId, token])
 
-  const placeBid = useCallback((amountCents: number) => {
+  // `maxAmountCents` es el TECHO que autoriza el usuario, no lo que se pujará: el
+  // servidor puja por él lo mínimo necesario (ver auctions.proxy.ts en la API).
+  const placeBid = useCallback((maxAmountCents: number) => {
     setLastRejection(null)
-    socketRef.current?.emit('bid', { auctionId, amountCents })
+    socketRef.current?.emit('bid', { auctionId, maxAmountCents })
   }, [auctionId])
 
   return {
@@ -157,6 +208,8 @@ export function useAuctionSocket(auctionId: string) {
     closed,
     endingSoon,
     notice,
+    myMaxCents,
+    isLeading,
     placeBid,
   }
 }

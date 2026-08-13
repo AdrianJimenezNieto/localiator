@@ -8,6 +8,7 @@ import { AuctionsGateway } from './auctions.gateway';
 import { AuctionsLifecycleService } from './auctions.lifecycle.service';
 import { MailModule } from '../mail/mail.module';
 import { OrdersModule } from '../orders/orders.module';
+import { resolveAccessSecret } from '../auth/jwt-secret.util';
 
 // Módulo de subastas (Fase 5). Reglas de puja (tarea 02) + canal en vivo (tarea
 // 03); en tareas siguientes suma la concurrencia (04), el antisniping (05), el
@@ -21,8 +22,7 @@ import { OrdersModule } from '../orders/orders.module';
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret:
-          config.get<string>('JWT_ACCESS_SECRET') || 'dev-insecure-secret',
+        secret: resolveAccessSecret(config),
       }),
     }),
     // Emails de subasta (tarea 08): respaldo del WebSocket para superado/ganado.

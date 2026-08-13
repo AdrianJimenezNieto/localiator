@@ -28,9 +28,20 @@ type AuctionSocket = Socket<
 >;
 
 // Rate limit propio del canal WS: una puja como mucho cada MIN_BID_INTERVAL_MS por
-// socket. El ThrottlerGuard global es para HTTP y no ve los mensajes de Socket.IO,
+// USUARIO. El ThrottlerGuard global es para HTTP y no ve los mensajes de Socket.IO,
 // así que el flood de pujas se frena aquí (punto sensible, CLAUDE.md).
+//
+// Por usuario y no por socket a propósito: con la clave puesta en `client.id`
+// bastaba abrir dos pestañas (dos sockets, misma persona) para duplicar el ritmo
+// permitido, y el límite dejaba de significar nada.
 const MIN_BID_INTERVAL_MS = 1000;
+
+// El mapa del rate limit se poda de forma perezosa: cada RATE_LIMIT_SWEEP_MS, la
+// siguiente puja que llegue tira las entradas ya caducadas. Sin esto el mapa crece
+// para siempre (una entrada por usuario que haya pujado alguna vez) en un proceso
+// que corre semanas. Se hace aprovechando el tráfico en vez de con un `setInterval`
+// porque un timer mantendría el proceso ocupado y habría que pararlo en los tests.
+const RATE_LIMIT_SWEEP_MS = 60_000;
 
 // Origen permitido para el WebSocket: el mismo que el CORS HTTP de main.ts. Se lee
 // de process.env directamente (no de ConfigService) porque el decorador se evalúa
@@ -46,7 +57,9 @@ const CORS_ORIGIN =
 })
 export class AuctionsGateway implements OnGatewayConnection {
   private readonly logger = new Logger(AuctionsGateway.name);
+  // userId -> instante de su última puja aceptada por el rate limit.
   private readonly lastBidAt = new Map<string, number>();
+  private lastSweepAt = 0;
 
   @WebSocketServer()
   private readonly server!: Server;
@@ -89,7 +102,12 @@ export class AuctionsGateway implements OnGatewayConnection {
     if (!auctionId) return;
     await client.join(this.room(auctionId));
     try {
-      const state = await this.auctions.getAuctionState(auctionId);
+      // Se le pasa SU identidad para que el estado incluya su propio máximo (y solo
+      // el suyo). Un invitado no manda nada y no recibe ningún dato privado.
+      const state = await this.auctions.getAuctionState(
+        auctionId,
+        client.data.user?.userId,
+      );
       client.emit('auction:state', state);
     } catch {
       client.emit('bid:rejected', {
@@ -105,7 +123,8 @@ export class AuctionsGateway implements OnGatewayConnection {
   @SubscribeMessage('bid')
   async onBid(
     @ConnectedSocket() client: AuctionSocket,
-    @MessageBody() body: { auctionId: string; amountCents: number },
+    // `maxAmountCents`: el techo del pujador, no el importe a pujar (puja proxy).
+    @MessageBody() body: { auctionId: string; maxAmountCents: number },
   ) {
     const user = client.data.user;
     if (!user) {
@@ -117,7 +136,7 @@ export class AuctionsGateway implements OnGatewayConnection {
     }
 
     const now = Date.now();
-    const last = this.lastBidAt.get(client.id) ?? 0;
+    const last = this.lastBidAt.get(user.userId) ?? 0;
     if (now - last < MIN_BID_INTERVAL_MS) {
       client.emit('bid:rejected', {
         code: 'RATE_LIMITED',
@@ -125,24 +144,41 @@ export class AuctionsGateway implements OnGatewayConnection {
       });
       return;
     }
-    this.lastBidAt.set(client.id, now);
+    this.lastBidAt.set(user.userId, now);
+    this.sweepRateLimit(now);
 
     try {
-      await this.auctions.placeBid(body.auctionId, user.userId, {
-        amountCents: body.amountCents,
+      const bid = await this.auctions.placeBid(body.auctionId, user.userId, {
+        maxAmountCents: body.maxAmountCents,
       });
-      // Confirmación al emisor; el nuevo precio a la room lo emite el servicio.
-      client.emit('bid:accepted:self');
+      // Confirmación al EMISOR, y solo a él: lleva su propio máximo registrado y si
+      // ha quedado en cabeza. Son datos privados, por eso van por `client.emit`
+      // (socket concreto) y no por la room.
+      client.emit('bid:accepted:self', {
+        myMaxCents: bid.maxAmountCents,
+        isLeading: bid.isLeading,
+      });
     } catch (error) {
       client.emit('bid:rejected', this.toRejection(error));
     }
   }
 
-  // Difunde a toda la room de la subasta que hay una nueva puja máxima. Lo llama
+  // Difunde a toda la room de la subasta que hay un precio nuevo. Lo llama
   // AuctionsService.placeBid tras registrar la puja (único punto de emisión).
+  //
+  // `isAutomatic` distingue la puja humana de la subida que el proxy hizo solo en
+  // nombre del líder. Sin ese dato, quien mira la ficha en vivo ve el precio subir
+  // sin que nadie haya pujado y parece un fallo; al recargar sí lo veía, porque el
+  // historial de `auction:state` sí lo traía. Es el mismo campo, ahora también en
+  // vivo. Nunca lleva importes privados: solo el precio efectivo, que es público.
   broadcastBidAccepted(
     auctionId: string,
-    payload: { amountCents: number; userMasked: string; endsAt: Date },
+    payload: {
+      amountCents: number;
+      userMasked: string;
+      endsAt: Date;
+      isAutomatic: boolean;
+    },
   ): void {
     this.server.to(this.room(auctionId)).emit('bid:accepted', payload);
   }
@@ -195,6 +231,21 @@ export class AuctionsGateway implements OnGatewayConnection {
     payload: { auctionId: string; amountCents: number; secondChance: boolean },
   ): void {
     this.server.to(this.userRoom(userId)).emit('notification:won', payload);
+  }
+
+  // Tira las entradas del rate limit que ya no pueden frenar nada (más viejas que
+  // la ventana). Se llama tras cada puja aceptada, pero solo hace trabajo una vez
+  // por RATE_LIMIT_SWEEP_MS: el coste amortizado es despreciable y el mapa queda
+  // acotado a los usuarios que están pujando ahora mismo, no a todos los que
+  // pujaron alguna vez desde que arrancó el proceso.
+  private sweepRateLimit(now: number): void {
+    if (now - this.lastSweepAt < RATE_LIMIT_SWEEP_MS) return;
+    this.lastSweepAt = now;
+    for (const [userId, at] of this.lastBidAt) {
+      if (now - at >= MIN_BID_INTERVAL_MS) {
+        this.lastBidAt.delete(userId);
+      }
+    }
   }
 
   private room(auctionId: string): string {

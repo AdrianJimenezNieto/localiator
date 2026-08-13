@@ -190,10 +190,26 @@ async function main() {
       startsAt: new Date(ahora - 60 * 60 * 1000), // empezó hace 1 h.
       endsAt: new Date(ahora + 60 * 60 * 1000), // cierra en 1 h.
       status: AuctionStatus.LIVE,
+      // Estado del proxy coherente con las pujas de abajo: el comprador lidera a
+      // 5000 con un techo de 7000. Así se puede probar en local que otro usuario
+      // pujando 5500 NO se lleva la subasta: el proxy sube solo hasta 6000.
+      currentPriceCents: 5000,
+      leaderUserId: buyer.id,
+      leaderMaxCents: 7000,
       bids: {
         create: [
-          { id: 'seed-bid-1', userId: buyer.id, amountCents: 4500 },
-          { id: 'seed-bid-2', userId: buyer.id, amountCents: 5000 },
+          {
+            id: 'seed-bid-1',
+            userId: buyer.id,
+            amountCents: 4500,
+            maxAmountCents: 4500,
+          },
+          {
+            id: 'seed-bid-2',
+            userId: buyer.id,
+            amountCents: 5000,
+            maxAmountCents: 7000,
+          },
         ],
       },
     },

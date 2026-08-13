@@ -54,6 +54,18 @@ export function PersonalDataFields<T extends PersonalData>({
             className={inputClass}
           />
         </Field>
+        {/* Opcional a propósito: sin NIF la compra se documenta con factura
+            simplificada, que es válida para un particular. Solo hace falta si
+            quieres factura completa a tu nombre (p. ej. para deducirlo). */}
+        <Field id="taxId" label="NIF/NIE/CIF (opcional)">
+          <input
+            id="taxId"
+            value={form.taxId ?? ''}
+            onChange={(e) => set('taxId', e.target.value)}
+            placeholder="Solo si necesitas factura completa"
+            className={inputClass}
+          />
+        </Field>
       </div>
 
       <fieldset className="mt-2 flex flex-col gap-4 border-t border-ink-200 pt-4">

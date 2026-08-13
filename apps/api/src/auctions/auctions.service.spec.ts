@@ -12,6 +12,7 @@ import {
   BidRejectReason,
 } from './auctions.service';
 import { AuctionsGateway } from './auctions.gateway';
+import { ANTISNIPE_WINDOW_MS } from './auctions.constants';
 import { AuctionMailService } from '../mail/auction-mail.service';
 import { OrdersService } from '../orders/orders.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -34,6 +35,9 @@ const prismaMock = {
   bid: {
     findFirst: jest.fn(),
     create: jest.fn(),
+    // La edición de admin comprueba "¿ya hay pujas?" con un count (antes miraba la
+    // puja máxima, que con proxy ya no es quien manda).
+    count: jest.fn(),
   },
   // order: la rama "moroso baneado y sin siguiente" busca su pedido PENDING
   // huérfano para cancelarlo (tarea 09) y borrar su reserva (tarea 15).
@@ -85,7 +89,23 @@ const lockedRow = {
   endsAt: new Date(now + 60 * 60 * 1000),
   startingPriceCents: 4500,
   minIncrementCents: 500,
+  // Estado de la puja proxy. Por defecto la subasta está virgen; los tests que
+  // necesitan un líder usan `conLider(...)`.
+  currentPriceCents: null as number | null,
+  leaderUserId: null as string | null,
+  leaderMaxCents: null as number | null,
 };
+
+// Estado de subasta con alguien liderando: precio efectivo visible y techo oculto.
+// Se aplica a la vez a la fila bloqueada y a la del fast path, porque placeBid
+// resuelve el proxy en las dos fases y ambas deben contar lo mismo.
+function conLider(
+  leaderUserId: string,
+  currentPriceCents: number,
+  leaderMaxCents: number,
+) {
+  return { currentPriceCents, leaderUserId, leaderMaxCents };
+}
 
 const verifiedUser = { emailVerifiedAt: new Date(), bannedAt: null };
 
@@ -102,6 +122,9 @@ const liveAuction = {
   status: AuctionStatus.LIVE,
   winnerUserId: null,
   winningBidId: null,
+  currentPriceCents: null as number | null,
+  leaderUserId: null as string | null,
+  leaderMaxCents: null as number | null,
 };
 
 // Lee el `code` del payload del 409 para aserciones legibles.
@@ -119,6 +142,7 @@ describe('AuctionsService', () => {
     prismaMock.user.findUnique.mockResolvedValue(verifiedUser);
     prismaMock.auction.findUnique.mockResolvedValue(liveAuction);
     prismaMock.bid.findFirst.mockResolvedValue(null);
+    prismaMock.bid.count.mockResolvedValue(0);
     prismaMock.bid.create.mockImplementation(({ data }) =>
       Promise.resolve({ id: 'bid-new', createdAt: new Date(), ...data }),
     );
@@ -142,39 +166,51 @@ describe('AuctionsService', () => {
     service = moduleRef.get(AuctionsService);
   });
 
-  it('acepta la primera puja igual al precio de salida', async () => {
+  it('la primera puja se queda en el PRECIO DE SALIDA aunque el máximo sea enorme', async () => {
     const bid = await service.placeBid('auction-1', 'user-1', {
-      amountCents: 4500,
+      maxAmountCents: 50_000,
     });
 
+    // Lo esencial del proxy: autorizar 500 € no significa pagar 500 €.
     expect(bid).toMatchObject({ auctionId: 'auction-1', amountCents: 4500 });
     expect(prismaMock.bid.create).toHaveBeenCalledWith({
-      data: { auctionId: 'auction-1', userId: 'user-1', amountCents: 4500 },
+      data: {
+        auctionId: 'auction-1',
+        userId: 'user-1',
+        amountCents: 4500,
+        maxAmountCents: 50_000,
+      },
     });
-    // Se difunde el nuevo precio a la room, con identidad enmascarada.
+    // Se difunde SOLO el precio efectivo, nunca el techo.
     expect(gatewayMock.broadcastBidAccepted).toHaveBeenCalledWith(
       'auction-1',
       expect.objectContaining({ amountCents: 4500 }),
     );
+    const [, payload] = gatewayMock.broadcastBidAccepted.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(JSON.stringify(payload)).not.toContain('50000');
   });
 
   it('rechaza la primera puja por debajo del precio de salida', async () => {
     await expect(
-      service.placeBid('auction-1', 'user-1', { amountCents: 4499 }),
+      service.placeBid('auction-1', 'user-1', { maxAmountCents: 4499 }),
     ).rejects.toBeInstanceOf(ConflictException);
     expect(prismaMock.bid.create).not.toHaveBeenCalled();
   });
 
-  it('rechaza una puja que no supera la máxima por el incremento mínimo', async () => {
-    prismaMock.bid.findFirst.mockResolvedValue({
-      id: 'bid-1',
-      userId: 'other',
-      amountCents: 5000,
+  it('rechaza un máximo que no supera el precio actual + el incremento', async () => {
+    const conOtroLider = conLider('other', 5000, 5000);
+    prismaMock.auction.findUnique.mockResolvedValue({
+      ...liveAuction,
+      ...conOtroLider,
     });
+    prismaMock.$queryRaw.mockResolvedValue([{ ...lockedRow, ...conOtroLider }]);
 
-    // Máxima 5000 + incremento 500 = 5500 mínimo; 5400 no llega.
+    // Precio 5000 + incremento 500 = 5500 mínimo; 5400 no llega.
     const error = await service
-      .placeBid('auction-1', 'user-1', { amountCents: 5400 })
+      .placeBid('auction-1', 'user-1', { maxAmountCents: 5400 })
       .catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(ConflictException);
@@ -182,90 +218,186 @@ describe('AuctionsService', () => {
     expect(prismaMock.bid.create).not.toHaveBeenCalled();
   });
 
-  it('acepta una puja que iguala máxima + incremento', async () => {
-    prismaMock.bid.findFirst.mockResolvedValue({
-      id: 'bid-1',
-      userId: 'other',
-      amountCents: 5000,
+  it('el proxy del líder aguanta: sube solo lo justo y el retador nace superado', async () => {
+    // Ana lidera a 5000 con un techo OCULTO de 20 000.
+    const anaLidera = conLider('ana', 5000, 20_000);
+    prismaMock.auction.findUnique.mockResolvedValue({
+      ...liveAuction,
+      ...anaLidera,
     });
+    prismaMock.$queryRaw.mockResolvedValue([{ ...lockedRow, ...anaLidera }]);
 
-    const bid = await service.placeBid('auction-1', 'user-1', {
-      amountCents: 5500,
+    await service.placeBid('auction-1', 'bruno', { maxAmountCents: 6000 });
+
+    // El precio sube a 6500 (6000 + incremento), MUY lejos del techo de Ana.
+    expect(prismaMock.auction.update).toHaveBeenCalledWith({
+      where: { id: 'auction-1' },
+      data: {
+        currentPriceCents: 6500,
+        leaderUserId: 'ana',
+        leaderMaxCents: 20_000,
+      },
     });
+    // Al que se avisa es a Bruno, que ya está superado. A Ana NO se la molesta:
+    // su máximo sigue en pie y ese es justo el sentido del proxy.
+    expect(gatewayMock.notifyOutbid).toHaveBeenCalledTimes(1);
+    expect(gatewayMock.notifyOutbid).toHaveBeenCalledWith(
+      'bruno',
+      expect.objectContaining({ amountCents: 6500 }),
+    );
+    expect(mailMock.sendOutbid).toHaveBeenCalledWith('bruno', 'auction-1');
+    // El precio que ve la sala lo puso el PROXY de Ana, no una persona: va marcado
+    // como automático para que la ficha en vivo explique por qué sube solo. Y va a
+    // nombre de Ana (la líder), enmascarada, nunca con su techo.
+    expect(gatewayMock.broadcastBidAccepted).toHaveBeenCalledWith(
+      'auction-1',
+      expect.objectContaining({ amountCents: 6500, isAutomatic: true }),
+    );
+  });
 
-    expect(bid).toMatchObject({ amountCents: 5500 });
+  it('el retador que supera el techo del líder se lleva la subasta pagando el salto justo', async () => {
+    const anaLidera = conLider('ana', 5000, 20_000);
+    prismaMock.auction.findUnique.mockResolvedValue({
+      ...liveAuction,
+      ...anaLidera,
+    });
+    prismaMock.$queryRaw.mockResolvedValue([{ ...lockedRow, ...anaLidera }]);
+
+    await service.placeBid('auction-1', 'bruno', { maxAmountCents: 100_000 });
+
+    // Bruno no paga sus 100 000: solo 20 000 + 500.
+    expect(prismaMock.auction.update).toHaveBeenCalledWith({
+      where: { id: 'auction-1' },
+      data: {
+        currentPriceCents: 20_500,
+        leaderUserId: 'bruno',
+        leaderMaxCents: 100_000,
+      },
+    });
+    // Ahora sí: a Ana le han superado el máximo y hay que avisarla (WS + email).
+    expect(gatewayMock.notifyOutbid).toHaveBeenCalledWith(
+      'ana',
+      expect.objectContaining({ amountCents: 20_500 }),
+    );
+    expect(mailMock.sendOutbid).toHaveBeenCalledWith('ana', 'auction-1');
+    // Aquí el precio SÍ lo puso una persona (Bruno), así que no va marcado.
+    expect(gatewayMock.broadcastBidAccepted).toHaveBeenCalledWith(
+      'auction-1',
+      expect.objectContaining({ amountCents: 20_500, isAutomatic: false }),
+    );
+  });
+
+  it('el líder puede subir su propio techo sin mover el precio ni avisar a nadie', async () => {
+    const anaLidera = conLider('ana', 5000, 20_000);
+    prismaMock.auction.findUnique.mockResolvedValue({
+      ...liveAuction,
+      ...anaLidera,
+    });
+    prismaMock.$queryRaw.mockResolvedValue([{ ...lockedRow, ...anaLidera }]);
+
+    await service.placeBid('auction-1', 'ana', { maxAmountCents: 50_000 });
+
+    // Solo cambia el techo; el precio y el líder siguen igual.
+    expect(prismaMock.auction.update).toHaveBeenCalledWith({
+      where: { id: 'auction-1' },
+      data: { leaderMaxCents: 50_000 },
+    });
+    // La sala no percibe NADA: ni precio nuevo, ni extensión, ni avisos.
+    expect(gatewayMock.broadcastBidAccepted).not.toHaveBeenCalled();
+    expect(gatewayMock.notifyOutbid).not.toHaveBeenCalled();
+  });
+
+  it('rechaza al líder que intenta bajar o repetir su propio máximo', async () => {
+    const anaLidera = conLider('ana', 5000, 20_000);
+    prismaMock.auction.findUnique.mockResolvedValue({
+      ...liveAuction,
+      ...anaLidera,
+    });
+    prismaMock.$queryRaw.mockResolvedValue([{ ...lockedRow, ...anaLidera }]);
+
+    const error = await service
+      .placeBid('auction-1', 'ana', { maxAmountCents: 20_000 })
+      .catch((e: unknown) => e);
+
+    expect(rejectCode(error)).toBe(BidRejectReason.MAX_NOT_INCREASED);
+    expect(prismaMock.bid.create).not.toHaveBeenCalled();
   });
 
   it('toma el bloqueo de fila (SELECT ... FOR UPDATE) al registrar la puja', async () => {
-    await service.placeBid('auction-1', 'user-1', { amountCents: 4500 });
+    await service.placeBid('auction-1', 'user-1', { maxAmountCents: 4500 });
 
     expect(prismaMock.$transaction).toHaveBeenCalled();
     expect(prismaMock.$queryRaw).toHaveBeenCalled();
   });
 
   it('rechaza con OUTBID cuando otra puja se cuela entre el fast path y el lock', async () => {
-    // Fast path ve la máxima en 5000 (mín. 5500); la puja de 5500 pasa la fase 1.
-    // Bajo el lock, la máxima ya avanzó a 5500 (otra puja ganó la carrera): ahora
-    // el mínimo es 6000, así que 5500 se rechaza como OUTBID, no como BID_TOO_LOW.
-    prismaMock.bid.findFirst
-      .mockResolvedValueOnce({ id: 'b1', userId: 'other', amountCents: 5000 })
-      .mockResolvedValueOnce({ id: 'b2', userId: 'other2', amountCents: 5500 });
+    // Fast path ve el precio en 5000 (mín. 5500): la puja de 5500 pasa la fase 1.
+    // Bajo el lock el precio ya avanzó a 5500 (otra puja ganó la carrera): ahora el
+    // mínimo es 6000, así que 5500 se rechaza como OUTBID, no como BID_TOO_LOW.
+    prismaMock.auction.findUnique.mockResolvedValue({
+      ...liveAuction,
+      ...conLider('other', 5000, 5000),
+    });
+    prismaMock.$queryRaw.mockResolvedValue([
+      { ...lockedRow, ...conLider('other2', 5500, 5500) },
+    ]);
 
     const error = await service
-      .placeBid('auction-1', 'user-1', { amountCents: 5500 })
+      .placeBid('auction-1', 'user-1', { maxAmountCents: 5500 })
       .catch((e: unknown) => e);
 
     expect(rejectCode(error)).toBe(BidRejectReason.OUTBID);
     expect(prismaMock.bid.create).not.toHaveBeenCalled();
   });
 
+  // Toda puja escribe ya el estado del proxy con auction.update, así que "no hubo
+  // extensión" no puede afirmarse mirando si update se llamó: hay que mirar si
+  // ALGUNA de esas escrituras tocó `endsAt`.
+  function huboExtensionEnBd(): boolean {
+    const calls = prismaMock.auction.update.mock.calls as Array<
+      [{ data: Record<string, unknown> }]
+    >;
+    return calls.some((c) => 'endsAt' in c[0].data);
+  }
+
   it('antisniping: NO extiende el cierre si la puja llega con margen (10 min)', async () => {
     prismaMock.$queryRaw.mockResolvedValue([
       { ...lockedRow, endsAt: new Date(now + 10 * 60 * 1000) },
     ]);
 
-    await service.placeBid('auction-1', 'user-1', { amountCents: 4500 });
+    await service.placeBid('auction-1', 'user-1', { maxAmountCents: 4500 });
 
-    expect(prismaMock.auction.update).not.toHaveBeenCalled();
+    expect(huboExtensionEnBd()).toBe(false);
     expect(gatewayMock.broadcastExtended).not.toHaveBeenCalled();
   });
 
-  it('antisniping: extiende el cierre a now + 5 min si la puja llega en los últimos minutos', async () => {
+  it('antisniping: extiende el cierre a now + la ventana si la puja llega en los últimos minutos', async () => {
     prismaMock.$queryRaw.mockResolvedValue([
-      { ...lockedRow, endsAt: new Date(now + 2 * 60 * 1000) }, // quedan 2 min.
+      // Dentro de la ventana del antisniping, sea cual sea su valor: la mitad.
+      { ...lockedRow, endsAt: new Date(now + ANTISNIPE_WINDOW_MS / 2) },
     ]);
 
     const before = Date.now();
-    await service.placeBid('auction-1', 'user-1', { amountCents: 4500 });
+    await service.placeBid('auction-1', 'user-1', { maxAmountCents: 4500 });
 
-    // Se movió el cierre en BD a ~ now + 5 min y se avisó a la room.
-    expect(prismaMock.auction.update).toHaveBeenCalledTimes(1);
+    // Se movió el cierre en BD a ~ now + la ventana y se avisó a la room.
     const updateCalls = prismaMock.auction.update.mock.calls as Array<
-      [{ data: { endsAt: Date } }]
+      [{ data: { endsAt?: Date } }]
     >;
-    const updateArg = updateCalls[0][0];
+    const updateArg = updateCalls.find((c) => 'endsAt' in c[0].data)![0] as {
+      data: { endsAt: Date };
+    };
     const newEndsMs = updateArg.data.endsAt.getTime();
-    expect(newEndsMs).toBeGreaterThanOrEqual(before + 5 * 60 * 1000 - 1000);
-    expect(newEndsMs).toBeLessThanOrEqual(Date.now() + 5 * 60 * 1000 + 1000);
+    expect(newEndsMs).toBeGreaterThanOrEqual(
+      before + ANTISNIPE_WINDOW_MS - 1000,
+    );
+    expect(newEndsMs).toBeLessThanOrEqual(
+      Date.now() + ANTISNIPE_WINDOW_MS + 1000,
+    );
     expect(gatewayMock.broadcastExtended).toHaveBeenCalledWith(
       'auction-1',
       updateArg.data.endsAt,
     );
-  });
-
-  it('rechaza pujar contra uno mismo cuando ya eres el líder', async () => {
-    prismaMock.bid.findFirst.mockResolvedValue({
-      id: 'bid-1',
-      userId: 'user-1',
-      amountCents: 5000,
-    });
-
-    const error = await service
-      .placeBid('auction-1', 'user-1', { amountCents: 6000 })
-      .catch((e: unknown) => e);
-
-    expect(rejectCode(error)).toBe(BidRejectReason.SELF_OUTBID);
-    expect(prismaMock.bid.create).not.toHaveBeenCalled();
   });
 
   it('rechaza pujar tras endsAt (subasta cerrada)', async () => {
@@ -275,7 +407,7 @@ describe('AuctionsService', () => {
     });
 
     const error = await service
-      .placeBid('auction-1', 'user-1', { amountCents: 9999 })
+      .placeBid('auction-1', 'user-1', { maxAmountCents: 9999 })
       .catch((e: unknown) => e);
 
     expect(rejectCode(error)).toBe(BidRejectReason.AUCTION_CLOSED);
@@ -288,7 +420,7 @@ describe('AuctionsService', () => {
     });
 
     const error = await service
-      .placeBid('auction-1', 'user-1', { amountCents: 9999 })
+      .placeBid('auction-1', 'user-1', { maxAmountCents: 9999 })
       .catch((e: unknown) => e);
 
     expect(rejectCode(error)).toBe(BidRejectReason.AUCTION_CLOSED);
@@ -298,7 +430,7 @@ describe('AuctionsService', () => {
     prismaMock.user.findUnique.mockResolvedValue({ emailVerifiedAt: null });
 
     await expect(
-      service.placeBid('auction-1', 'user-1', { amountCents: 4500 }),
+      service.placeBid('auction-1', 'user-1', { maxAmountCents: 4500 }),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(prismaMock.bid.create).not.toHaveBeenCalled();
   });
@@ -307,7 +439,7 @@ describe('AuctionsService', () => {
     prismaMock.auction.findUnique.mockResolvedValue(null);
 
     await expect(
-      service.placeBid('missing', 'user-1', { amountCents: 4500 }),
+      service.placeBid('missing', 'user-1', { maxAmountCents: 4500 }),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
@@ -318,7 +450,7 @@ describe('AuctionsService', () => {
     });
 
     const error = await service
-      .placeBid('auction-1', 'user-1', { amountCents: 4500 })
+      .placeBid('auction-1', 'user-1', { maxAmountCents: 4500 })
       .catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(ConflictException);
@@ -327,14 +459,16 @@ describe('AuctionsService', () => {
   });
 
   it('avisa "superado" al líder anterior una sola vez (tarea 08)', async () => {
-    // Había un líder ('other') con 5000; user-1 puja 5500 y lo destrona.
-    prismaMock.bid.findFirst.mockResolvedValue({
-      id: 'bid-1',
-      userId: 'other',
-      amountCents: 5000,
+    // Había un líder ('other') a 5000 con techo 5000; user-1 sube a 5500 y lo
+    // destrona superando su máximo, que es la única condición que dispara el aviso.
+    const otroLidera = conLider('other', 5000, 5000);
+    prismaMock.auction.findUnique.mockResolvedValue({
+      ...liveAuction,
+      ...otroLidera,
     });
+    prismaMock.$queryRaw.mockResolvedValue([{ ...lockedRow, ...otroLidera }]);
 
-    await service.placeBid('auction-1', 'user-1', { amountCents: 5500 });
+    await service.placeBid('auction-1', 'user-1', { maxAmountCents: 5500 });
 
     // Se avisa SOLO al líder superado, por WS y por email de respaldo.
     expect(gatewayMock.notifyOutbid).toHaveBeenCalledTimes(1);
@@ -346,7 +480,7 @@ describe('AuctionsService', () => {
   });
 
   it('no avisa "superado" en la primera puja (no había líder)', async () => {
-    await service.placeBid('auction-1', 'user-1', { amountCents: 4500 });
+    await service.placeBid('auction-1', 'user-1', { maxAmountCents: 4500 });
 
     expect(gatewayMock.notifyOutbid).not.toHaveBeenCalled();
     expect(mailMock.sendOutbid).not.toHaveBeenCalled();
@@ -357,15 +491,15 @@ describe('AuctionsService', () => {
       { ...lockedRow, endsAt: new Date(now + 2 * 60 * 1000) }, // quedan 2 min.
     ]);
 
-    await service.placeBid('auction-1', 'user-1', { amountCents: 4500 });
+    await service.placeBid('auction-1', 'user-1', { maxAmountCents: 4500 });
 
     const updateCalls = prismaMock.auction.update.mock.calls as Array<
       [{ data: Record<string, unknown> }]
     >;
     // El update del antisniping también pone endingSoonNotifiedAt a null (reevaluar).
-    expect(updateCalls[0][0].data).toMatchObject({
-      endingSoonNotifiedAt: null,
-    });
+    // Es el que toca `endsAt`; el otro update de la puja escribe el estado del proxy.
+    const extension = updateCalls.find((c) => 'endsAt' in c[0].data)![0];
+    expect(extension.data).toMatchObject({ endingSoonNotifiedAt: null });
   });
 
   // Listado público (tarea 12): lo que permite descubrir las subastas. Hasta esta
@@ -417,9 +551,9 @@ describe('AuctionsService', () => {
       expect(result.total).toBe(1);
     });
 
-    it('muestra la puja más alta como precio actual', async () => {
+    it('muestra el precio efectivo del proxy como precio actual', async () => {
       prismaMock.auction.findMany.mockResolvedValue([
-        { ...row, bids: [{ amountCents: 7000 }], _count: { bids: 3 } },
+        { ...row, currentPriceCents: 7000, _count: { bids: 3 } },
       ]);
 
       const result = await service.listPublicAuctions({});
@@ -434,7 +568,7 @@ describe('AuctionsService', () => {
     // no necesita saber QUIÉN puja, así que no se devuelve ni enmascarado.
     it('no devuelve ningún dato de los pujadores', async () => {
       prismaMock.auction.findMany.mockResolvedValue([
-        { ...row, bids: [{ amountCents: 7000 }], _count: { bids: 3 } },
+        { ...row, currentPriceCents: 7000, _count: { bids: 3 } },
       ]);
 
       const result = await service.listPublicAuctions({});
@@ -543,7 +677,7 @@ describe('AuctionsService', () => {
 
     it('devuelve las mismas tarjetas que el listado', async () => {
       prismaMock.auction.findMany.mockResolvedValue([
-        { ...row, bids: [{ amountCents: 7000 }], _count: { bids: 3 } },
+        { ...row, currentPriceCents: 7000, _count: { bids: 3 } },
       ]);
 
       const items = await service.listAuctionsForCalendar(range);
@@ -692,11 +826,7 @@ describe('AuctionsService', () => {
       // incremento invalidaría pujas hechas bajo las reglas viejas.
       it('congela las reglas de una subasta en curso con pujas', async () => {
         prismaMock.auction.findUnique.mockResolvedValue(liveAuction);
-        prismaMock.bid.findFirst.mockResolvedValue({
-          id: 'bid-1',
-          userId: 'user-1',
-          amountCents: 5000,
-        });
+        prismaMock.bid.count.mockResolvedValue(1); // ya hay pujas.
 
         await expect(
           service.updateAuction('auction-1', { startingPriceCents: 9900 }),
@@ -707,11 +837,7 @@ describe('AuctionsService', () => {
 
       it('deja alargar el cierre de una subasta con pujas, pero no acortarlo', async () => {
         prismaMock.auction.findUnique.mockResolvedValue(liveAuction);
-        prismaMock.bid.findFirst.mockResolvedValue({
-          id: 'bid-1',
-          userId: 'user-1',
-          amountCents: 5000,
-        });
+        prismaMock.bid.count.mockResolvedValue(1); // ya hay pujas.
         prismaMock.auction.update.mockResolvedValue({});
 
         // Acortar: sería un sniping legal del propio admin.
@@ -786,7 +912,7 @@ describe('AuctionsService', () => {
       it('devuelve el detalle con el nombre del artículo y el nº de pujas', async () => {
         prismaMock.auction.findUnique.mockResolvedValue({
           ...liveAuction,
-          bids: [{ amountCents: 7000 }],
+          currentPriceCents: 7000,
           _count: { bids: 3 },
         });
         prismaMock.product.findMany.mockResolvedValue([
@@ -913,11 +1039,17 @@ describe('AuctionsService', () => {
     const dueRow = { ...lockedRow, endsAt: new Date(now - 1000) };
 
     it('cierra con ganador la subasta vencida con pujas', async () => {
-      prismaMock.$queryRaw.mockResolvedValue([dueRow]);
+      // El ganador y el precio salen del estado del proxy, no de ordenar pujas: su
+      // techo (20 000) queda muy por encima de lo que de verdad paga (5000).
+      prismaMock.$queryRaw.mockResolvedValue([
+        { ...dueRow, ...conLider('winner-1', 5000, 20_000) },
+      ]);
+      // La fila Bid solo sirve para apuntar `winningBidId` a algo real.
       prismaMock.bid.findFirst.mockResolvedValue({
         id: 'bid-top',
         userId: 'winner-1',
         amountCents: 5000,
+        maxAmountCents: 20_000,
       });
       prismaMock.auction.update.mockResolvedValue({});
 
@@ -1006,15 +1138,19 @@ describe('AuctionsService', () => {
       status: AuctionStatus.CLOSED,
       winnerUserId: 'winner-1',
       paymentDueAt: new Date(now - 1000),
+      // Precio que debía el moroso: es el techo del precio que pagará el siguiente.
+      currentPriceCents: 8000,
     };
 
     it('banea al moroso y reasigna al siguiente pujador (segunda oportunidad)', async () => {
       prismaMock.$queryRaw.mockResolvedValue([unpaidRow]);
-      // El siguiente pujador no baneado.
+      // El siguiente en la fila es quien tenía el MÁXIMO más alto de los que
+      // quedan vivos, no quien tenía el importe visible más alto.
       prismaMock.bid.findFirst.mockResolvedValue({
         id: 'bid-2',
         userId: 'user-2',
-        amountCents: 5000,
+        amountCents: 3000,
+        maxAmountCents: 5000,
       });
       prismaMock.user.updateMany.mockResolvedValue({ count: 1 });
       prismaMock.auction.update.mockResolvedValue({});
@@ -1035,10 +1171,16 @@ describe('AuctionsService', () => {
       expect(banCalls[0][0].where).toEqual({ id: 'winner-1', bannedAt: null });
       expect(banCalls[0][0].data.bannedAt).toBeInstanceOf(Date);
       expect(banCalls[0][0].data.banReason).toContain('auction-1');
-      // El siguiente se busca SOLO entre usuarios no baneados (salta al moroso).
+      // El siguiente se busca SOLO entre usuarios no baneados (salta al moroso) y
+      // por MÁXIMO, no por importe: con proxy, quien va detrás en la fila es quien
+      // tenía el techo más alto. Se excluyen las filas automáticas del proxy.
       expect(prismaMock.bid.findFirst).toHaveBeenCalledWith({
-        where: { auctionId: 'auction-1', user: { bannedAt: null } },
-        orderBy: { amountCents: 'desc' },
+        where: {
+          auctionId: 'auction-1',
+          isAutomatic: false,
+          user: { bannedAt: null },
+        },
+        orderBy: [{ maxAmountCents: 'desc' }, { createdAt: 'asc' }],
       });
       const calls = prismaMock.auction.update.mock.calls as Array<
         [{ data: Record<string, unknown> }]
@@ -1095,6 +1237,11 @@ describe('AuctionsService', () => {
           winnerUserId: null,
           winningBidId: null,
           paymentDueAt: null,
+          // Se limpia también el estado del proxy: si no, la subasta cancelada
+          // seguiría diciendo que la lidera el moroso ya baneado.
+          currentPriceCents: null,
+          leaderUserId: null,
+          leaderMaxCents: null,
         },
       });
       expect(gatewayMock.broadcastClosed).toHaveBeenCalledWith('auction-1', {

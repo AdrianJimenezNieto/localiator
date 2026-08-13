@@ -14,6 +14,7 @@ import { SessionCleanupService } from './session-cleanup.service';
 import { JwtStrategy } from './jwt.strategy';
 import { TurnstileService } from './turnstile.service';
 import { AntiBotGuard } from './anti-bot.guard';
+import { resolveAccessSecret } from './jwt-secret.util';
 
 // PrismaModule y ConfigModule son globales, por eso no hace falta importarlos.
 // MailModule → MailService; PassportModule → estrategias (Google/JWT); JwtModule
@@ -26,9 +27,9 @@ import { AntiBotGuard } from './anti-bot.guard';
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        // || (no ??) para cubrir también el caso de secreto vacío en .env.
-        secret:
-          config.get<string>('JWT_ACCESS_SECRET') || 'dev-insecure-secret',
+        // Fuente única del secreto: en producción falla al arrancar si falta o es
+        // débil, en vez de firmar con el fallback público (ver jwt-secret.util).
+        secret: resolveAccessSecret(config),
       }),
     }),
   ],

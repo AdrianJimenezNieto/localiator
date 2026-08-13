@@ -4,7 +4,8 @@ import { useAuth } from '../../lib/auth';
 import {
   adminListOrders,
   adminSetOrderStatus,
-  openInvoice,
+  openInvoiceByNumber,
+  INVOICE_TYPE_LABELS,
   ORDER_STATUS_LABELS,
   type ApiOrderStatus,
   type OrderRecord,
@@ -34,6 +35,10 @@ const FILTERS: { value: ApiOrderStatus | 'ALL'; label: string }[] = [
   { value: 'PICKED_UP', label: ORDER_STATUS_LABELS.PICKED_UP },
   { value: 'PENDING', label: ORDER_STATUS_LABELS.PENDING },
   { value: 'CANCELLED', label: ORDER_STATUS_LABELS.CANCELLED },
+  // Un pedido en disputa deja de estar PAID, así que sin estos filtros
+  // desaparecería de las listas de gestión justo cuando más hay que atenderlo.
+  { value: 'DISPUTED', label: 'En disputa' },
+  { value: 'REFUNDED', label: ORDER_STATUS_LABELS.REFUNDED },
 ];
 
 export function OrdersAdminPage() {
@@ -132,15 +137,19 @@ export function OrdersAdminPage() {
                 <span className="mr-auto font-semibold">
                   {formatPrice(order.totalCents)}
                 </span>
-                {order.invoice && token && (
-                  <button
-                    type="button"
-                    onClick={() => void openInvoice(order.id, token)}
-                    className="text-sm text-ink-600 underline hover:text-ink-900"
-                  >
-                    Factura {order.invoice.number}
-                  </button>
-                )}
+                {token &&
+                  (order.invoices ?? []).map((doc) => (
+                    <button
+                      key={doc.number}
+                      type="button"
+                      onClick={() =>
+                        void openInvoiceByNumber(order.id, doc.number, token)
+                      }
+                      className="text-sm text-ink-600 underline hover:text-ink-900"
+                    >
+                      {INVOICE_TYPE_LABELS[doc.type]} {doc.number}
+                    </button>
+                  ))}
                 {(ACTIONS[order.status] ?? []).map((action) => (
                   <button
                     key={action.to}

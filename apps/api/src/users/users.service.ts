@@ -93,6 +93,7 @@ export class UsersService {
           lastName: null,
           birthDate: null,
           phone: null,
+          taxId: null,
           addressLine1: null,
           addressLine2: null,
           postalCode: null,

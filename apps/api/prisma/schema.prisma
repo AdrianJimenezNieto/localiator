@@ -39,6 +39,13 @@ model User {
   birthDate DateTime? @db.Date // solo fecha (sin hora ni zona); se valida ≥18 años.
   phone     String? // opcional (lo pidió Adrián como no obligatorio).
 
+  // NIF/NIE/CIF del comprador. OPCIONAL: una venta al por menor a un particular se
+  // documenta con factura SIMPLIFICADA, que no exige identificar al destinatario.
+  // Solo hace falta cuando el cliente pide factura completa (típicamente autónomo o
+  // empresa que quiere deducirse el gasto). Si está, se emite completa.
+  // RGPD: dato personal → se limpia al ejercer el derecho al olvido.
+  taxId String?
+
   // Dirección de FACTURACIÓN (no de envío: la recogida es en el almacén). Se
   // guarda desglosada en campos para poder validar y componer la factura.
   addressLine1 String? // calle y número.
@@ -74,6 +81,9 @@ model User {
   orders             Order[]
   bids               Bid[]
   wonAuctions        Auction[]
+  // Subastas en las que este usuario va ganando AHORA MISMO (estado del proxy).
+  // Relación nombrada porque ya hay otra entre User y Auction (la del ganador).
+  ledAuctions        Auction[] @relation("AuctionLeader")
 }
 
 // Sesión persistente (patrón decidido en CLAUDE.md): el access token (JWT corto)
@@ -285,13 +295,23 @@ model AuditLog {
 //   READY_FOR_PICKUP → el admin lo preparó en el almacén (tarea 11).
 //   PICKED_UP → entregado al cliente en el almacén (tarea 11).
 //   CANCELLED → reserva expirada/pago fallido, o cancelación de admin (07/11).
-// Las transiciones legales se validan en el servicio (tarea 11), no aquí.
+//   REFUNDED  → el dinero se devolvió ENTERO al cliente (reembolso total desde el
+//               panel de Stripe, o disputa perdida). Terminal.
+//   DISPUTED  → el cliente abrió un chargeback en su banco; Stripe retiene el
+//               importe hasta resolverlo. Terminal en la práctica: lo resuelve el
+//               webhook (a REFUNDED si se pierde, o al estado previo si se gana).
+// Las transiciones legales se validan en el servicio (tarea 11), no aquí. OJO:
+// REFUNDED y DISPUTED los pone SOLO el webhook de Stripe, nunca el admin a mano:
+// el estado del dinero lo dicta Stripe, y ponerlo desde el backoffice sería una
+// mentira que no se corresponde con ningún movimiento real.
 enum OrderStatus {
   PENDING
   PAID
   READY_FOR_PICKUP
   PICKED_UP
   CANCELLED
+  REFUNDED
+  DISPUTED
 }
 
 // Producto y Lote son entidades SEPARADAS (CLAUDE.md), sin una FK común. Una
@@ -324,6 +344,22 @@ model Order {
 
   paidAt DateTime? // se rellena al confirmar el cobro (tarea 06).
 
+  // --- Reembolsos y disputas (chargebacks) ---
+  // Importe devuelto al cliente, en céntimos. Campo propio y no solo un estado
+  // porque los reembolsos PARCIALES existen (devolver un artículo de tres): en ese
+  // caso el pedido sigue PAID y solo cambia esta cifra. El estado pasa a REFUNDED
+  // únicamente cuando lo devuelto iguala al total.
+  refundedCents Int       @default(0)
+  refundedAt    DateTime? // fecha del último reembolso registrado.
+
+  // Cuándo se abrió el chargeback. Se conserva aunque la disputa se gane y el
+  // pedido vuelva a PAID: es el rastro de que este cliente disputó una vez.
+  disputedAt DateTime?
+  // Estado del pedido ANTES de la disputa, para poder restaurarlo si se gana. Sin
+  // esto, ganar una disputa sobre un pedido ya entregado lo devolvería a PAID y se
+  // volvería a pedir al almacén algo que el cliente ya se llevó.
+  preDisputeStatus OrderStatus?
+
   // Origen SUBASTA (tarea 09): si el pedido nace de ganar una subasta, apunta a
   // ella. Nullable: los pedidos de venta directa no la tienen. NO es @unique a
   // propósito: en la segunda oportunidad (tarea 07) se crea un pedido nuevo para el
@@ -338,7 +374,8 @@ model Order {
 
   lines        OrderLine[]
   reservations StockReservation[]
-  invoice      Invoice?
+  // Varias: la original más una rectificativa por cada reembolso registrado.
+  invoices     Invoice[]
 
   @@index([userId])
   @@index([status])
@@ -394,29 +431,112 @@ model StockReservation {
 // el cobro (webhook, tarea 06). Los precios del catálogo son IVA INCLUIDO, así que
 // el desglose va "hacia atrás": grossCents = total del pedido; netCents = base
 // imponible; vatCents = grossCents − netCents.
+// Tipo de documento. La ley distingue tres cosas que aquí conviven en una tabla:
+//   FULL        → factura completa (art. 6 RD 1619/2012): exige identificar al
+//                 destinatario con nombre, NIF y domicilio.
+//   SIMPLIFIED  → factura simplificada (art. 4): el "ticket". Permitida en venta
+//                 al por menor por debajo del umbral legal y sin datos del
+//                 destinatario. Es lo que se emite si el cliente no dio NIF.
+//   CORRECTIVE  → factura RECTIFICATIVA (art. 15), que corrige una anterior. Va en
+//                 SERIE PROPIA y correlativa, obligatoriamente separada.
+enum InvoiceType {
+  FULL
+  SIMPLIFIED
+  CORRECTIVE
+}
+
+// Régimen de IVA con el que se emitió el documento. Se guarda POR FACTURA y no se
+// lee de configuración al renderizar: si el negocio cambia de régimen, las
+// facturas ya emitidas deben seguir mostrando el que se les aplicó.
+//   REBU    → régimen especial de bienes usados (arts. 135-139 LIVA), el de este
+//             negocio: se revenden artículos de segunda mano comprados en lotes.
+//             El IVA se liquida sobre el MARGEN, no sobre el precio de venta, y la
+//             factura NO puede desglosar la cuota repercutida: solo el total, con
+//             la mención obligatoria del régimen. Que el cliente no vea IVA no es
+//             un olvido: es el requisito.
+//   GENERAL → régimen general, con base imponible y cuota desglosadas.
+enum InvoiceRegime {
+  REBU
+  GENERAL
+}
+
 model Invoice {
   id String @id @default(cuid())
 
-  orderId String @unique // un pedido, una factura (idempotencia de la generación).
+  // SIN @unique: un pedido puede acumular varios documentos (la factura original
+  // más una rectificativa por cada reembolso). La regla "una sola factura original
+  // por pedido" la impone InvoicingService dentro de su transacción.
+  orderId String
   order   Order  @relation(fields: [orderId], references: [id])
 
-  // Serie legal correlativa sin huecos (p. ej. "2026-000123"). El número lo asigna
-  // un contador atómico por año (InvoiceCounter): requisito legal.
+  type   InvoiceType   @default(SIMPLIFIED)
+  regime InvoiceRegime @default(REBU)
+
+  // Serie legal correlativa sin huecos. Las rectificativas van en serie SEPARADA
+  // (prefijo "R"), como exige el art. 15: "2026-000123" frente a "R2026-000004".
   number   String   @unique
+  series   String // "" para la serie ordinaria, "R" para rectificativas.
   issuedAt DateTime @default(now())
 
-  // Dinero en céntimos (Int), como el resto del proyecto. vatRateBps = tipo de IVA
-  // en puntos básicos (2100 = 21 %): entero, sin decimales flotantes en impuestos.
-  netCents   Int
-  vatRateBps Int
-  vatCents   Int
+  // Dinero en céntimos (Int), como el resto del proyecto. En una rectificativa los
+  // importes son NEGATIVOS: representan la corrección, no el nuevo total.
   grossCents Int
 
-  // Snapshot mínimo del cliente (el emisor es constante y se lee de configuración
-  // al renderizar). El email puede cambiar/borrarse después; la factura no.
-  customerEmail String
+  // Desglose de IVA. NULLABLE porque bajo REBU no existe cuota repercutida que
+  // mostrar: son null y la plantilla no imprime desglose. Solo se rellenan en
+  // régimen general. vatRateBps = tipo en puntos básicos (2100 = 21 %).
+  netCents   Int?
+  vatRateBps Int?
+  vatCents   Int?
+
+  // --- Snapshot fiscal ---
+  // La factura es un documento INMUTABLE con deber de conservación, así que copia
+  // los datos en el momento de emitirse en vez de leerlos por relación. Dos razones
+  // concretas, ambas reales en este proyecto:
+  //  1. El derecho al olvido (RGPD) vacía nombre y dirección del User. Sin este
+  //     snapshot, ejercerlo destruía datos que la factura debe conservar.
+  //  2. El emisor sale de .env: cambiar una variable reescribía retroactivamente
+  //     todas las facturas ya emitidas.
+  issuerName    String
+  issuerTaxId   String
+  issuerAddress String
+
+  customerEmail   String
+  customerName    String? // null en una simplificada (no exige destinatario).
+  customerTaxId   String? // NIF/NIE/CIF; obligatorio en la factura completa.
+  customerAddress String? // domicilio compuesto en una línea.
+
+  // --- Rectificativas (art. 15 RD 1619/2012) ---
+  // Documento al que rectifica y motivo. Ambos obligatorios en la rectificativa, y
+  // el motivo debe constar impreso en el documento.
+  correctsInvoiceId String?
+  corrects          Invoice?  @relation("Rectificacion", fields: [correctsInvoiceId], references: [id])
+  corrections       Invoice[] @relation("Rectificacion")
+  correctionReason  String?
+
+  // Líneas: la descripción de las operaciones es obligatoria en TODOS los formatos,
+  // incluida la simplificada. Se copian de OrderLine al emitir, por lo mismo que el
+  // resto del snapshot.
+  lines InvoiceLine[]
 
   createdAt DateTime @default(now())
+
+  @@index([orderId])
+}
+
+// Línea de factura: copia congelada de la OrderLine en el momento de emitir.
+model InvoiceLine {
+  id String @id @default(cuid())
+
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  description    String // descripción del bien entregado (art. 6.1.f).
+  quantity       Int
+  unitPriceCents Int
+  lineTotalCents Int
+
+  @@index([invoiceId])
 }
 
 // Contador correlativo de facturas por año. Fila por año; el número se incrementa
@@ -424,8 +544,14 @@ model Invoice {
 // facturas simultáneas no se salten ni repitan número (sin huecos, requisito
 // legal). Tabla propia en vez de contar filas de Invoice: evita carreras.
 model InvoiceCounter {
-  year       Int @id
+  // Clave compuesta año + serie: la serie ordinaria y la de rectificativas llevan
+  // numeraciones INDEPENDIENTES, cada una correlativa y sin huecos.
+  year   Int
+  series String // "" ordinaria, "R" rectificativas.
+
   lastNumber Int @default(0)
+
+  @@id([year, series])
 }
 
 // ---------------------------------------------------------------------------
@@ -467,10 +593,41 @@ model Auction {
 
   startsAt DateTime
   // Columna normal MUTABLE (no calculada): el antisniping (tarea 05) la mueve a
-  // `now + 5 min` ante pujas de último segundo, y el cierre (tarea 06) la relee.
+  // `now + 3 min` ante pujas de último segundo, y el cierre (tarea 06) la relee.
   endsAt   DateTime
 
   status AuctionStatus @default(SCHEDULED)
+
+  // --- Estado de la puja proxy (puja automática por máximo) ---
+  //
+  // Estas tres columnas son la FUENTE DE VERDAD del precio y de quién va ganando.
+  // Antes se derivaban de las filas Bid (`ORDER BY amountCents DESC LIMIT 1`), pero
+  // con puja proxy eso deja de valer: el líder no es quien tiene el importe visible
+  // más alto, sino quien tiene el MÁXIMO más alto, y el precio efectivo depende de
+  // los dos máximos más altos a la vez.
+  //
+  // Se desnormaliza aquí, y no en una consulta sobre Bid, porque esta fila YA se
+  // bloquea con SELECT ... FOR UPDATE en cada puja: el estado del proxy queda
+  // protegido por el mismo lock que ya serializaba las pujas, sin añadir ningún
+  // mecanismo de concurrencia nuevo. Además permite resolver el empate de máximos
+  // con una regla explícita ("a un empate no se destrona al líder") en lugar de
+  // depender de la resolución en milisegundos de `createdAt`.
+  //
+  // Las escribe UN SOLO SITIO: AuctionsService.placeBid, dentro del lock.
+
+  // Precio efectivo actual (lo que pagaría hoy el líder). null = aún sin pujas.
+  currentPriceCents Int?
+
+  // Quién va ganando ahora mismo. null = aún sin pujas.
+  leaderUserId String?
+  leader       User?   @relation("AuctionLeader", fields: [leaderUserId], references: [id])
+
+  // Techo del líder: lo máximo que su proxy llegará a pujar por él.
+  //
+  // PRIVADO. No se emite JAMÁS por el canal en vivo ni aparece en el historial de
+  // pujas: quien lo conociera podría ganar la subasta por un céntimo. Se trata con
+  // el mismo cuidado que los datos personales enmascarados (ver auctions.mask.ts).
+  leaderMaxCents Int?
 
   // Ganador DESNORMALIZADO: se fija al cerrar (tarea 06) para no recalcular la
   // puja máxima en cada lectura ni en el cobro (tarea 09) / impago (tarea 07).
@@ -524,7 +681,24 @@ model Bid {
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
+  // Importe EFECTIVO de esta puja: el precio al que quedó la subasta en ese
+  // instante. Es el dato público (va al historial y al canal en vivo).
   amountCents Int
+
+  // Techo del pujador en el momento de pujar: hasta dónde autorizó a su proxy a
+  // llegar. En una puja sin proxy coincide con `amountCents`.
+  //
+  // PRIVADO, igual que Auction.leaderMaxCents: nunca sale por el canal en vivo.
+  // Se guarda por puja (y no solo el vigente en Auction) porque la segunda
+  // oportunidad por impago (tarea 07) necesita saber cuál era el SEGUNDO máximo
+  // más alto para ofrecerle la subasta al siguiente de la fila.
+  maxAmountCents Int
+
+  // true si la generó el proxy subiendo automáticamente por el usuario, en vez de
+  // una acción humana. Se usa para pintar el historial ("puja automática") y para
+  // NO disparar el antisniping: solo una puja humana debe extender el cierre, o una
+  // guerra de proxies lo extendería dos veces por cada puja recibida.
+  isAutomatic Boolean @default(false)
 
   createdAt DateTime @default(now())
 

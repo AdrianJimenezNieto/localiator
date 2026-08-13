@@ -3,7 +3,8 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import {
   getMyOrders,
-  openInvoice,
+  openInvoiceByNumber,
+  INVOICE_TYPE_LABELS,
   payOrder,
   type OrderRecord,
 } from '../lib/orders';
@@ -117,16 +118,19 @@ export function MyOrdersPage() {
                   {payingId === order.id ? 'Redirigiendo…' : 'Pagar'}
                 </button>
               ) : (
-                order.invoice &&
-                token && (
+                token &&
+                (order.invoices ?? []).map((doc) => (
                   <button
+                    key={doc.number}
                     type="button"
-                    onClick={() => void openInvoice(order.id, token)}
+                    onClick={() =>
+                      void openInvoiceByNumber(order.id, doc.number, token)
+                    }
                     className="text-sm text-ink-700 underline hover:text-ink-900"
                   >
-                    Factura {order.invoice.number}
+                    {INVOICE_TYPE_LABELS[doc.type]} {doc.number}
                   </button>
-                )
+                ))
               )}
             </div>
           </li>

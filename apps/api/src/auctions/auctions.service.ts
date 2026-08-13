@@ -18,6 +18,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuctionsGateway } from './auctions.gateway';
 import { maskBidder } from './auctions.mask';
 import {
+  ProxyRejection,
+  ProxyRules,
+  ProxyState,
+  resolveProxyBid,
+} from './auctions.proxy';
+import {
   ANTISNIPE_WINDOW_MS,
   PAYMENT_WINDOW_MS,
   ENDING_SOON_WINDOW_MS,
@@ -42,8 +48,11 @@ import {
 // que el front dé feedback útil sin parsear el mensaje (que es solo humano).
 export const BidRejectReason = {
   AUCTION_CLOSED: 'AUCTION_CLOSED', // no LIVE, o fuera de la ventana startsAt–endsAt.
-  BID_TOO_LOW: 'BID_TOO_LOW', // no supera precio de salida / máxima + incremento.
-  SELF_OUTBID: 'SELF_OUTBID', // el pujador ya es el líder actual.
+  BID_TOO_LOW: 'BID_TOO_LOW', // no supera precio de salida / precio actual + incremento.
+  // Ya lideras y el máximo que envías no supera al que ya tenías. Sustituye al
+  // antiguo SELF_OUTBID: con puja proxy el líder SÍ puede volver a pujar, pero solo
+  // para SUBIR su techo; bajarlo sería retractarse de una puja ya comprometida.
+  MAX_NOT_INCREASED: 'MAX_NOT_INCREASED',
   OUTBID: 'OUTBID', // era válida al enviarla, pero otra puja te adelantó (carrera).
   BANNED: 'BANNED', // usuario baneado por impago (tarea 07).
 } as const;
@@ -51,12 +60,14 @@ export const BidRejectReason = {
 // Los campos de la subasta que necesitan las validaciones de puja. Sirve tanto
 // para la fila leída con findUnique (fast path) como para la bloqueada con
 // SELECT ... FOR UPDATE (fase autoritativa): ambas comparten esta forma.
-interface BiddableAuction {
+//
+// Incluye a la vez las REGLAS (precio de salida, incremento) y el ESTADO DEL PROXY
+// (precio actual, líder y su techo), que es exactamente lo que necesita
+// resolveProxyBid: por eso se le pasa esta misma fila como `state` y como `rules`.
+interface BiddableAuction extends ProxyState, ProxyRules {
   status: string;
   startsAt: Date;
   endsAt: Date;
-  startingPriceCents: number;
-  minIncrementCents: number;
 }
 
 // Motivos estables de rechazo de las operaciones de admin (tarea 11). Se envían
@@ -89,7 +100,10 @@ export type CloseResult =
   | {
       outcome: 'closed_won';
       winnerUserId: string;
-      winningBidId: string;
+      // Fila Bid del líder a la que apunta el cierre. Nullable por defensa: el
+      // ganador sale del estado del proxy (`leaderUserId`) y siempre debería tener
+      // al menos una fila, pero no se hace depender el cierre de esa invariante.
+      winningBidId: string | null;
       amountCents: number;
     };
 
@@ -165,7 +179,6 @@ export class AuctionsService {
       orderBy: { createdAt: 'desc' },
       include: {
         // La puja más alta trae el precio actual sin una consulta por fila (N+1).
-        bids: { orderBy: { amountCents: 'desc' }, take: 1 },
         // El backoffice necesita saber si hay pujas para deshabilitar los campos
         // que ya no se pueden tocar (ver updateAuction).
         _count: { select: { bids: true } },
@@ -181,7 +194,8 @@ export class AuctionsService {
       status: row.status,
       startingPriceCents: row.startingPriceCents,
       minIncrementCents: row.minIncrementCents,
-      currentPriceCents: row.bids[0]?.amountCents ?? row.startingPriceCents,
+      // Precio efectivo del estado del proxy; el de salida mientras no haya pujas.
+      currentPriceCents: row.currentPriceCents ?? row.startingPriceCents,
       bidCount: row._count.bids,
       startsAt: row.startsAt,
       endsAt: row.endsAt,
@@ -198,7 +212,6 @@ export class AuctionsService {
     const row = await this.prisma.auction.findUnique({
       where: { id: auctionId },
       include: {
-        bids: { orderBy: { amountCents: 'desc' }, take: 1 },
         _count: { select: { bids: true } },
         winner: { select: { id: true, email: true } },
       },
@@ -215,7 +228,8 @@ export class AuctionsService {
       status: row.status,
       startingPriceCents: row.startingPriceCents,
       minIncrementCents: row.minIncrementCents,
-      currentPriceCents: row.bids[0]?.amountCents ?? row.startingPriceCents,
+      // Precio efectivo del estado del proxy; el de salida mientras no haya pujas.
+      currentPriceCents: row.currentPriceCents ?? row.startingPriceCents,
       bidCount: row._count.bids,
       startsAt: row.startsAt,
       endsAt: row.endsAt,
@@ -254,7 +268,7 @@ export class AuctionsService {
     const endsAt = dto.endsAt ? new Date(dto.endsAt) : auction.endsAt;
     this.assertValidWindow(startsAt, endsAt);
 
-    const hasBids = (await this.highestBid(this.prisma, auctionId)) !== null;
+    const hasBids = (await this.prisma.bid.count({ where: { auctionId } })) > 0;
     if (hasBids) {
       const touchesRules =
         (dto.startingPriceCents !== undefined &&
@@ -513,9 +527,6 @@ export class AuctionsService {
         skip,
         take: pageSize,
         include: {
-          // La puja más alta da el precio actual sin una consulta por fila (N+1).
-          // Se apoya en el índice [auctionId, amountCents] de la tarea 01.
-          bids: { orderBy: { amountCents: 'desc' }, take: 1 },
           _count: { select: { bids: true } },
         },
       }),
@@ -573,7 +584,6 @@ export class AuctionsService {
       },
       orderBy: { endsAt: 'asc' },
       include: {
-        bids: { orderBy: { amountCents: 'desc' }, take: 1 },
         _count: { select: { bids: true } },
       },
     });
@@ -586,8 +596,10 @@ export class AuctionsService {
   // el listado paginado y el calendario; vive aquí para que ambos no puedan
   // divergir en lo que exponen (que es justo donde se filtran datos de más).
   private toListItem(
+    // Ya no hace falta traerse la puja más alta: el precio actual vive en la propia
+    // fila de Auction (estado del proxy), lo que ahorra un join por listado.
     row: Prisma.AuctionGetPayload<{
-      include: { bids: true; _count: { select: { bids: true } } };
+      include: { _count: { select: { bids: true } } };
     }>,
     items: Map<string, { name: string; photo: string | null }>,
   ): AuctionListItem {
@@ -605,7 +617,8 @@ export class AuctionsService {
       // el fallback evita que una fila huérfana tumbe el listado entero.
       name: item?.name ?? 'Artículo no disponible',
       photo: item?.photo ?? null,
-      currentPriceCents: row.bids[0]?.amountCents ?? row.startingPriceCents,
+      // Precio efectivo del estado del proxy; el de salida mientras no haya pujas.
+      currentPriceCents: row.currentPriceCents ?? row.startingPriceCents,
       startingPriceCents: row.startingPriceCents,
       minIncrementCents: row.minIncrementCents,
       bidCount: row._count.bids,
@@ -617,28 +630,81 @@ export class AuctionsService {
   // Estado inicial que se envía a un socket al unirse a la subasta (evento
   // `auction:state`), para que el front pinte sin un GET REST aparte. Solo datos
   // públicos + identidad enmascarada de los postores (RGPD).
-  async getAuctionState(auctionId: string) {
+  //
+  // `viewerUserId` es la identidad autenticada del socket que pregunta (undefined
+  // si es un invitado). Sirve solo para devolverle SU PROPIO máximo: es el único
+  // dato privado que sale de aquí, y solo a su dueño.
+  async getAuctionState(auctionId: string, viewerUserId?: string) {
     const auction = await this.prisma.auction.findUnique({
       where: { id: auctionId },
-      include: { bids: { orderBy: { createdAt: 'desc' }, take: 20 } },
+      // `id: desc` como desempate: las filas automáticas del proxy se crean en la
+      // misma transacción que la puja humana, así que pueden compartir `createdAt`
+      // al milisegundo y el historial saldría en orden arbitrario. El cuid es
+      // creciente en el tiempo, así que rompe el empate en el orden correcto.
+      include: {
+        bids: { orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 20 },
+      },
     });
     if (!auction) {
       throw new NotFoundException('Subasta no encontrada');
     }
-    const highest = auction.bids.reduce<(typeof auction.bids)[number] | null>(
-      (max, b) => (!max || b.amountCents > max.amountCents ? b : max),
-      null,
-    );
+    // Resultado del cierre, con la MISMA forma que el evento `auction:closed`
+    // (tarea 06). Quien entra a la ficha DESPUÉS del cierre no vio pasar ese
+    // evento, así que sin esto el front no tendría forma de saber que la subasta
+    // ya no admite pujas. `null` mientras siga viva.
+    const closed =
+      auction.status === AuctionStatus.SCHEDULED ||
+      auction.status === AuctionStatus.LIVE
+        ? null
+        : {
+            // Ganador enmascarado (RGPD), igual que los postores.
+            winnerMasked: auction.winnerUserId
+              ? maskBidder(auction.winnerUserId)
+              : null,
+            amountCents: auction.winningBidId
+              ? ((
+                  await this.prisma.bid.findUnique({
+                    where: { id: auction.winningBidId },
+                    select: { amountCents: true },
+                  })
+                )?.amountCents ?? null)
+              : null,
+          };
+
+    // El máximo PROPIO del que mira, y solo el suyo. Se busca su puja humana de
+    // mayor techo: es lo que tiene autorizado ahora mismo. Un invitado no recibe
+    // nada. Nunca se devuelve el máximo de otro (ni el del líder): quien lo
+    // conociera ganaría la subasta por un céntimo.
+    const myMaxCents = viewerUserId
+      ? ((
+          await this.prisma.bid.findFirst({
+            where: { auctionId, userId: viewerUserId, isAutomatic: false },
+            orderBy: { maxAmountCents: 'desc' },
+            select: { maxAmountCents: true },
+          })
+        )?.maxAmountCents ?? null)
+      : null;
+
     return {
       id: auction.id,
       status: auction.status,
       startingPriceCents: auction.startingPriceCents,
       minIncrementCents: auction.minIncrementCents,
+      startsAt: auction.startsAt,
       endsAt: auction.endsAt,
-      highestBidCents: highest?.amountCents ?? null,
+      // Precio efectivo actual (estado del proxy), no "la puja más alta".
+      highestBidCents: auction.currentPriceCents,
+      // Si el que mira va ganando ahora mismo. Le permite al front distinguir
+      // "te han superado" de "sigues en cabeza" sin revelar quién es el líder.
+      isLeading: viewerUserId != null && auction.leaderUserId === viewerUserId,
+      myMaxCents,
+      closed,
       bids: auction.bids.map((b) => ({
         amountCents: b.amountCents,
         userMasked: maskBidder(b.userId),
+        // Marca la puja generada por el proxy, para que en la ficha se entienda
+        // por qué el precio sube sin que nadie haya tocado nada.
+        isAutomatic: b.isAutomatic,
         createdAt: b.createdAt,
       })),
     };
@@ -802,7 +868,20 @@ export class AuctionsService {
           return { outcome: 'not_due' };
         }
 
-        const highest = await this.highestBid(tx, auctionId);
+        // Con puja proxy el ganador es el LÍDER del estado desnormalizado y paga el
+        // precio efectivo actual, no "la puja más alta": su techo pudo quedar muy
+        // por encima de lo que realmente llegó a pagar.
+        const highest =
+          locked.leaderUserId != null && locked.currentPriceCents != null
+            ? {
+                userId: locked.leaderUserId,
+                amountCents: locked.currentPriceCents,
+                // Fila real a la que apuntar `winningBidId` (es @unique y hay
+                // integridad referencial que respetar).
+                id: (await this.latestBidOf(tx, auctionId, locked.leaderUserId))
+                  ?.id,
+              }
+            : null;
         // Un ÚNICO instante para el plazo de pago: lo comparten la subasta y la
         // reserva de stock del ganador (tarea 15). Calcularlo dos veces daría dos
         // fechas con milisegundos distintos y dos relojes que pueden divergir.
@@ -838,7 +917,7 @@ export class AuctionsService {
           ? {
               outcome: 'closed_won',
               winnerUserId: highest.userId,
-              winningBidId: highest.id,
+              winningBidId: highest.id ?? null,
               amountCents: highest.amountCents,
             }
           : { outcome: 'closed_empty' };
@@ -891,10 +970,11 @@ export class AuctionsService {
   //  - Relee estado/ganador/plazo BAJO el lock; si ya no está CLOSED, ya no hay
   //    ganador, o el plazo no ha vencido, no hace nada (dos pasadas del cron o un
   //    reinicio no rebanean ni reasignan dos veces).
-  //  - El "siguiente pujador" es la puja más alta de un usuario NO baneado. Como el
-  //    moroso queda baneado en esta misma transacción, su(s) puja(s) quedan
-  //    excluidas automáticamente, igual que las de morosos anteriores en cadena: no
-  //    hace falta llevar una lista de descartados.
+  //  - El "siguiente pujador" es quien tenía el MÁXIMO más alto entre los usuarios
+  //    NO baneados (ver la consulta más abajo: con proxy ya no vale ordenar por
+  //    importe). Como el moroso queda baneado en esta misma transacción, sus pujas
+  //    quedan excluidas automáticamente, igual que las de morosos anteriores en
+  //    cadena: no hace falta llevar una lista de descartados.
   async handleUnpaidWinner(auctionId: string): Promise<UnpaidResult> {
     const now = new Date();
     const result = await this.prisma.$transaction(
@@ -906,9 +986,10 @@ export class AuctionsService {
             status: string;
             winnerUserId: string | null;
             paymentDueAt: Date | null;
+            currentPriceCents: number | null;
           }[]
         >`
-          SELECT status, "winnerUserId", "paymentDueAt"
+          SELECT status, "winnerUserId", "paymentDueAt", "currentPriceCents"
           FROM "Auction" WHERE id = ${auctionId} FOR UPDATE`;
         const locked = rows[0];
         if (!locked) {
@@ -937,14 +1018,33 @@ export class AuctionsService {
           },
         });
 
-        // Siguiente pujador: la puja más alta de alguien NO baneado. Excluye al
-        // moroso recién baneado (y a cualquier moroso anterior) sin lista manual.
+        // Siguiente pujador. Con puja proxy NO es "la puja de importe más alto":
+        // es quien tenía el MÁXIMO más alto entre los que siguen vivos. Un usuario
+        // pudo quedar segundo con un importe visible bajo pero un techo altísimo, y
+        // es él quien de verdad va detrás en la fila.
+        //
+        // El desempate por `createdAt` asc mantiene la misma regla que el resto del
+        // sistema: a igualdad de máximo gana quien lo puso primero. Se excluyen las
+        // filas automáticas: son ecos del proxy, no compromisos nuevos, y su techo
+        // ya está representado por la puja humana del mismo usuario.
         const next = await tx.bid.findFirst({
-          where: { auctionId, user: { bannedAt: null } },
-          orderBy: { amountCents: 'desc' },
+          where: {
+            auctionId,
+            isAutomatic: false,
+            user: { bannedAt: null },
+          },
+          orderBy: [{ maxAmountCents: 'desc' }, { createdAt: 'asc' }],
         });
 
         if (next) {
+          // Precio del nuevo ganador: su propio máximo, pero nunca por encima de lo
+          // que la subasta llegó a alcanzar. Las dos cotas importan: no se le puede
+          // cobrar más de lo que autorizó (su techo), ni más de lo que el artículo
+          // llegó a valer en la puja (el precio que debía el moroso).
+          const nextPriceCents = Math.min(
+            next.maxAmountCents,
+            locked.currentPriceCents ?? next.maxAmountCents,
+          );
           // Mismo instante para el plazo de la subasta y para la reserva del nuevo
           // ganador (tarea 15): dos relojes separados podrían divergir.
           const paymentDueAt = new Date(now.getTime() + PAYMENT_WINDOW_MS);
@@ -955,6 +1055,11 @@ export class AuctionsService {
               winningBidId: next.id,
               // Reinicia el plazo para el nuevo ganador. Sigue CLOSED (aún sin pago).
               paymentDueAt,
+              // El estado del proxy pasa también al nuevo ganador: si no, la subasta
+              // seguiría diciendo que lidera el moroso ya baneado.
+              currentPriceCents: nextPriceCents,
+              leaderUserId: next.userId,
+              leaderMaxCents: next.maxAmountCents,
             },
           });
           // Cobro (tarea 09): pedido del nuevo ganador. createAuctionOrder cancela
@@ -964,7 +1069,7 @@ export class AuctionsService {
           await this.orders.createAuctionOrder(tx, {
             userId: next.userId,
             auctionId,
-            amountCents: next.amountCents,
+            amountCents: nextPriceCents,
             paymentDueAt,
           });
           return {
@@ -972,7 +1077,7 @@ export class AuctionsService {
             bannedUserId,
             winnerUserId: next.userId,
             winningBidId: next.id,
-            amountCents: next.amountCents,
+            amountCents: nextPriceCents,
           };
         }
 
@@ -984,6 +1089,12 @@ export class AuctionsService {
             winnerUserId: null,
             winningBidId: null,
             paymentDueAt: null,
+            // Se limpia también el estado del proxy: dejar apuntando al moroso
+            // baneado como "líder" de una subasta cancelada sería basura que
+            // reaparecería en la ficha y en el listado.
+            currentPriceCents: null,
+            leaderUserId: null,
+            leaderMaxCents: null,
           },
         });
         // Cobro (tarea 09): el moroso no pagó y no hay quien herede la subasta, así
@@ -1038,19 +1149,23 @@ export class AuctionsService {
     return result;
   }
 
-  // Registra una puja aplicando las reglas de negocio de la subasta. Esta es la
-  // ÚNICA puerta de entrada de una puja: el gateway de tiempo real (tarea 03)
+  // Registra una puja PROXY aplicando las reglas de negocio de la subasta. Esta es
+  // la ÚNICA puerta de entrada de una puja: el gateway de tiempo real (tarea 03)
   // reutiliza este método en vez de duplicar la validación.
   //
+  // OJO al cambio de significado: `dto.maxAmountCents` NO es lo que se puja, es el
+  // MÁXIMO que el usuario autoriza. Cuánto se puja de verdad lo decide
+  // resolveProxyBid (ver auctions.proxy.ts), que es donde vive toda la regla.
+  //
   // Dos fases (control de concurrencia, tarea 04):
-  //  1. FAST PATH sin lock: rechaza lo obvio (subasta cerrada, auto-superarse,
-  //     puja por debajo de la máxima conocida) sin coger el lock, para no
-  //     serializar pujas inválidas ni spam.
+  //  1. FAST PATH sin lock: rechaza lo obvio (subasta cerrada, máximo por debajo
+  //     del mínimo exigible) sin coger el lock, para no serializar pujas inválidas
+  //     ni spam.
   //  2. FASE AUTORITATIVA en transacción: bloquea la fila de la subasta con
-  //     SELECT ... FOR UPDATE, relee la máxima BAJO el lock y valida otra vez. Si
-  //     la máxima avanzó desde el fast path (otra puja ganó la carrera), rechaza
-  //     con OUTBID. Así dos pujas casi simultáneas sobre el mismo precio se
-  //     serializan y solo una queda como máxima. Mismo mecanismo que la reserva
+  //     SELECT ... FOR UPDATE, RESUELVE EL PROXY BAJO EL LOCK y escribe el nuevo
+  //     estado. Si el precio avanzó desde el fast path (otra puja ganó la carrera)
+  //     y el máximo ya no da, rechaza con OUTBID. Así dos pujas casi simultáneas se
+  //     serializan y solo queda un líder coherente. Mismo mecanismo que la reserva
   //     de stock (Fase 3).
   async placeBid(auctionId: string, userId: string, dto: PlaceBidDto) {
     // Solo puja quien puede: email verificado y cuenta no baneada por impago
@@ -1066,78 +1181,196 @@ export class AuctionsService {
       throw new NotFoundException('Subasta no encontrada');
     }
     this.assertOpen(auction);
-    const seenHighest = await this.highestBid(this.prisma, auctionId);
-    // Con la máxima que ve ahora, una puja por debajo es un error del propio
-    // pujador → BID_TOO_LOW (no una carrera).
-    this.assertBeats(
+    // Se resuelve "en seco" con el estado sin bloquear, solo para descartar lo que
+    // ya es inválido de partida. Un rechazo aquí es un error del propio pujador
+    // (BID_TOO_LOW), no una carrera perdida.
+    const preview = resolveProxyBid(
       auction,
-      seenHighest,
+      auction,
       userId,
-      dto.amountCents,
-      BidRejectReason.BID_TOO_LOW,
+      dto.maxAmountCents,
     );
+    if (preview.kind === 'rejected') {
+      throw this.rejectProxy(preview, BidRejectReason.BID_TOO_LOW);
+    }
 
     // --- Fase 2: fase autoritativa bajo bloqueo de fila ---
-    const { bid, endsAt, extended, previousLeaderId } =
-      await this.prisma.$transaction(async (tx) => {
-        const locked = await this.lockAuction(tx, auctionId);
-        if (!locked) {
-          throw new NotFoundException('Subasta no encontrada');
-        }
-        this.assertOpen(locked); // pudo cerrarse entre el fast path y el lock.
+    const {
+      bid,
+      endsAt,
+      extended,
+      priceChanged,
+      currentPriceCents,
+      outbidId,
+      leaderUserId,
+      priceIsAutomatic,
+    } = await this.prisma.$transaction(async (tx) => {
+      const locked = await this.lockAuction(tx, auctionId);
+      if (!locked) {
+        throw new NotFoundException('Subasta no encontrada');
+      }
+      this.assertOpen(locked); // pudo cerrarse entre el fast path y el lock.
 
-        const highest = await this.highestBid(tx, auctionId);
-        // Si aquí la puja ya no supera la máxima es porque OTRA puja se coló entre
-        // el fast path y este lock: no es culpa del pujador, es una carrera perdida.
-        this.assertBeats(
-          locked,
-          highest,
-          userId,
-          dto.amountCents,
-          BidRejectReason.OUTBID,
-        );
+      // La fila bloqueada lleva a la vez las reglas y el estado del proxy, por
+      // eso va como `state` y como `rules` (ver BiddableAuction).
+      const resolution = resolveProxyBid(
+        locked,
+        locked,
+        userId,
+        dto.maxAmountCents,
+      );
+      // Si aquí ya no vale es porque OTRA puja se coló entre el fast path y este
+      // lock: no es culpa del pujador, es una carrera perdida.
+      if (resolution.kind === 'rejected') {
+        throw this.rejectProxy(resolution, BidRejectReason.OUTBID);
+      }
 
-        // El líder ANTES de crear esta puja es el que queda superado (tarea 08).
-        // Puede no haber (primera puja); nunca es el propio pujador (SELF_OUTBID lo
-        // habría rechazado en assertBeats).
-        const previousLeaderId = highest?.userId ?? null;
-
-        const created = await tx.bid.create({
-          data: { auctionId, userId, amountCents: dto.amountCents },
+      // Caso "solo subo mi propio techo": no cambia ni el precio ni el líder, así
+      // que nadie más se entera. Se registra igualmente la fila Bid porque la
+      // segunda oportunidad por impago necesita conocer los máximos de cada uno.
+      if (resolution.kind === 'raised-own-max') {
+        await tx.auction.update({
+          where: { id: auctionId },
+          data: { leaderMaxCents: resolution.leaderMaxCents },
         });
+        const created = await tx.bid.create({
+          data: {
+            auctionId,
+            userId,
+            amountCents: locked.currentPriceCents ?? 0,
+            maxAmountCents: resolution.leaderMaxCents,
+          },
+        });
+        // NO se aplica antisniping: el precio no se ha movido, así que no hay
+        // nada a lo que los demás deban tener tiempo de reaccionar. Extender aquí
+        // dejaría además que el líder alargase la subasta él solo, a base de
+        // subirse el techo un céntimo cada vez.
+        return {
+          bid: created,
+          endsAt: locked.endsAt,
+          extended: false,
+          priceChanged: false,
+          currentPriceCents: locked.currentPriceCents ?? 0,
+          outbidId: null as string | null,
+          leaderUserId: userId, // sigue liderando él; no cambia nada.
+          priceIsAutomatic: false, // no se emite nada; el valor es irrelevante.
+        };
+      }
 
-        // Antisniping (tarea 05): si la puja llega en los últimos minutos, se
-        // mueve el cierre a `now + ventana`. DENTRO de la misma transacción y del
-        // mismo lock que la puja: así puja aceptada y cierre extendido son
-        // atómicos; un proceso aparte podría perder la extensión por una carrera.
-        const now = Date.now();
-        let endsAt = locked.endsAt;
-        let extended = false;
-        if (endsAt.getTime() - now < ANTISNIPE_WINDOW_MS) {
-          endsAt = new Date(now + ANTISNIPE_WINDOW_MS);
-          extended = true;
-          await tx.auction.update({
-            where: { id: auctionId },
-            data: {
-              endsAt,
-              // Se reinicia el guard de "a punto de cerrar" (tarea 08): el cierre se
-              // ha movido, así que un aviso previo ya no vale y hay que poder
-              // reavisar cuando la subasta se acerque de nuevo a su nuevo cierre.
-              endingSoonNotifiedAt: null,
-            },
-          });
-        }
-
-        return { bid: created, endsAt, extended, previousLeaderId };
+      // Casos 'lead' y 'held': el precio se mueve y hay que reescribir el estado
+      // del proxy. Es la ÚNICA escritura de estas tres columnas en todo el
+      // proyecto, y ocurre siempre bajo este lock.
+      await tx.auction.update({
+        where: { id: auctionId },
+        data: {
+          currentPriceCents: resolution.currentPriceCents,
+          leaderUserId: resolution.leaderUserId,
+          leaderMaxCents: resolution.leaderMaxCents,
+        },
       });
+
+      // Filas del historial. Se escriben en orden cronológico para que la ficha
+      // cuente bien lo ocurrido: primero la defensa automática del proxy que
+      // estaba en cabeza, después la puja que provocó todo.
+      if (resolution.kind === 'lead' && resolution.defendedPriceCents != null) {
+        // El líder anterior cayó, pero su proxy llegó a agotar su techo
+        // defendiéndose. Sin esta fila, el salto de precio parecería magia.
+        await tx.bid.create({
+          data: {
+            auctionId,
+            userId: locked.leaderUserId!,
+            amountCents: resolution.defendedPriceCents,
+            maxAmountCents: resolution.defendedPriceCents,
+            isAutomatic: true,
+          },
+        });
+      }
+
+      const created = await tx.bid.create({
+        data: {
+          auctionId,
+          userId,
+          // En 'lead' el pujador se queda con el precio nuevo. En 'held' su puja
+          // muere en su propio techo: es hasta donde llegó a comprometerse.
+          amountCents:
+            resolution.kind === 'lead'
+              ? resolution.currentPriceCents
+              : dto.maxAmountCents,
+          maxAmountCents: dto.maxAmountCents,
+        },
+      });
+
+      if (resolution.kind === 'held') {
+        // El líder aguantó: su proxy sube automáticamente hasta tapar al retador.
+        await tx.bid.create({
+          data: {
+            auctionId,
+            userId: resolution.leaderUserId,
+            amountCents: resolution.currentPriceCents,
+            maxAmountCents: resolution.leaderMaxCents,
+            isAutomatic: true,
+          },
+        });
+      }
+
+      // Antisniping (tarea 05): si la puja llega en los últimos minutos, se
+      // mueve el cierre a `now + ventana`. DENTRO de la misma transacción y del
+      // mismo lock que la puja: así puja aceptada y cierre extendido son
+      // atómicos; un proceso aparte podría perder la extensión por una carrera.
+      //
+      // Lo dispara la acción HUMANA que acaba de llegar, no las filas automáticas
+      // que ha generado el proxy: si contáramos también esas, una guerra de
+      // proxies extendería el cierre dos veces por cada puja recibida.
+      const now = Date.now();
+      let endsAt = locked.endsAt;
+      let extended = false;
+      if (endsAt.getTime() - now < ANTISNIPE_WINDOW_MS) {
+        endsAt = new Date(now + ANTISNIPE_WINDOW_MS);
+        extended = true;
+        await tx.auction.update({
+          where: { id: auctionId },
+          data: {
+            endsAt,
+            // Se reinicia el guard de "a punto de cerrar" (tarea 08): el cierre se
+            // ha movido, así que un aviso previo ya no vale y hay que poder
+            // reavisar cuando la subasta se acerque de nuevo a su nuevo cierre.
+            endingSoonNotifiedAt: null,
+          },
+        });
+      }
+
+      return {
+        bid: created,
+        endsAt,
+        extended,
+        priceChanged: true,
+        currentPriceCents: resolution.currentPriceCents,
+        // A quién hay que avisar de que su MÁXIMO ha sido superado. En 'lead' es
+        // el líder destronado; en 'held', el propio retador, que nace superado.
+        outbidId: resolution.outbidUserId,
+        // El líder que se anuncia a la sala es el que queda tras resolver, no
+        // necesariamente quien acaba de pujar.
+        leaderUserId: resolution.leaderUserId,
+        // En 'held' el precio que se anuncia lo puso el PROXY del líder, no una
+        // persona: la sala debe verlo marcado como automático. En 'lead' es la
+        // puja humana del retador.
+        priceIsAutomatic: resolution.kind === 'held',
+      };
+    });
 
     // Punto ÚNICO de emisión, ya con la puja confirmada en BD. Da igual si entró
     // por HTTP o por WS: todos los que miran reciben el nuevo precio (enmascarado).
-    this.gateway.broadcastBidAccepted(auctionId, {
-      amountCents: bid.amountCents,
-      userMasked: maskBidder(userId),
-      endsAt,
-    });
+    //
+    // Si solo se subió el techo propio NO se emite nada: el precio no ha cambiado y
+    // el máximo es privado, así que la sala no debe percibir movimiento alguno.
+    if (priceChanged) {
+      this.gateway.broadcastBidAccepted(auctionId, {
+        amountCents: currentPriceCents,
+        userMasked: maskBidder(leaderUserId),
+        endsAt,
+        isAutomatic: priceIsAutomatic,
+      });
+    }
 
     // Si el antisniping movió el cierre, se avisa a la room para que todos los
     // relojes del front actualicen la cuenta atrás (la verdad del endsAt está en
@@ -1146,18 +1379,46 @@ export class AuctionsService {
       this.gateway.broadcastExtended(auctionId, endsAt);
     }
 
-    // Superado (tarea 08): si esta puja destronó a un líder anterior, se le avisa
-    // SOLO a él (WS a su room personal + email de respaldo). Una vez por pérdida de
-    // liderato: no se notifica en cada puja intermedia.
-    if (previousLeaderId) {
-      this.gateway.notifyOutbid(previousLeaderId, {
+    // Superado (tarea 08): se avisa SOLO al usuario cuyo MÁXIMO ha sido superado
+    // (WS a su room personal + email de respaldo por Resend). Con puja proxy esto
+    // es mucho menos frecuente que antes, y a propósito: mientras tu techo aguante,
+    // el sistema sube por ti en silencio y no te molesta. Solo se avisa cuando de
+    // verdad te has quedado fuera y tienes que decidir si subes.
+    //
+    // Puede ser el líder destronado ('lead') o el propio pujador que acaba de nacer
+    // superado porque su techo no llegaba al del líder ('held').
+    if (outbidId) {
+      this.gateway.notifyOutbid(outbidId, {
         auctionId,
-        amountCents: bid.amountCents,
+        amountCents: currentPriceCents,
       });
-      void this.mail.sendOutbid(previousLeaderId, auctionId);
+      void this.mail.sendOutbid(outbidId, auctionId);
     }
 
-    return bid;
+    // Se devuelve la puja MÁS si el pujador ha quedado en cabeza. Este dato solo
+    // llega a su dueño (respuesta HTTP o evento `bid:accepted:self`), nunca a la
+    // room: saber quién lidera con qué techo es justo lo que no debe salir.
+    return { ...bid, isLeading: leaderUserId === userId };
+  }
+
+  // Traduce el rechazo de resolveProxyBid al 409 con código estable del canal.
+  // `raceReason` es el código a usar cuando el motivo es "no llegas al mínimo":
+  // BID_TOO_LOW en el fast path (error del pujador) y OUTBID bajo el lock (carrera
+  // perdida). El caso "no has subido tu techo" no depende de la fase.
+  private rejectProxy(
+    rejection: { reason: string; minValidCents: number },
+    raceReason: string,
+  ): ConflictException {
+    if (rejection.reason === ProxyRejection.MAX_NOT_INCREASED) {
+      return this.reject(
+        BidRejectReason.MAX_NOT_INCREASED,
+        'Ya vas ganando: para reforzar tu puja indica un máximo mayor que el actual',
+      );
+    }
+    return this.reject(
+      raceReason,
+      `Tu máximo debe ser de al menos ${rejection.minValidCents} céntimos`,
+    );
   }
 
   // Bloquea la fila de la subasta con SELECT ... FOR UPDATE y devuelve los campos
@@ -1170,20 +1431,24 @@ export class AuctionsService {
     auctionId: string,
   ): Promise<BiddableAuction | null> {
     const rows = await tx.$queryRaw<BiddableAuction[]>`
-      SELECT status, "startsAt", "endsAt", "startingPriceCents", "minIncrementCents"
+      SELECT status, "startsAt", "endsAt", "startingPriceCents", "minIncrementCents",
+             "currentPriceCents", "leaderUserId", "leaderMaxCents"
       FROM "Auction" WHERE id = ${auctionId} FOR UPDATE`;
     return rows[0] ?? null;
   }
 
-  // Puja máxima actual (la más alta). Si empatan importes gana la más antigua,
-  // pero al exigir superar por el incremento no puede haber empate en el líder.
-  private highestBid(
+  // Última puja registrada del líder actual. Con puja proxy, quién va ganando sale
+  // del estado desnormalizado de la subasta (`leaderUserId`), no de ordenar las
+  // filas Bid; esto solo sirve para apuntar `winningBidId` a una fila real al
+  // cerrar. Se toma la más reciente porque es la que refleja el precio final.
+  private latestBidOf(
     client: PrismaService | Prisma.TransactionClient,
     auctionId: string,
+    userId: string,
   ) {
     return client.bid.findFirst({
-      where: { auctionId },
-      orderBy: { amountCents: 'desc' },
+      where: { auctionId, userId },
+      orderBy: { createdAt: 'desc' },
     });
   }
 
@@ -1199,33 +1464,6 @@ export class AuctionsService {
       throw this.reject(
         BidRejectReason.AUCTION_CLOSED,
         'La subasta no está abierta a pujas',
-      );
-    }
-  }
-
-  // Valida que el importe supera a la máxima (o al precio de salida si no hay
-  // pujas) y que el pujador no es ya el líder. `tooLowReason` distingue el mismo
-  // fallo según la fase: BID_TOO_LOW en el fast path, OUTBID bajo el lock.
-  private assertBeats(
-    auction: BiddableAuction,
-    highest: { userId: string; amountCents: number } | null,
-    userId: string,
-    amountCents: number,
-    tooLowReason: string,
-  ): void {
-    if (highest && highest.userId === userId) {
-      throw this.reject(
-        BidRejectReason.SELF_OUTBID,
-        'Ya eres el mejor postor de esta subasta',
-      );
-    }
-    const minValidCents = highest
-      ? highest.amountCents + auction.minIncrementCents
-      : auction.startingPriceCents;
-    if (amountCents < minValidCents) {
-      throw this.reject(
-        tooLowReason,
-        `La puja debe ser de al menos ${minValidCents} céntimos`,
       );
     }
   }

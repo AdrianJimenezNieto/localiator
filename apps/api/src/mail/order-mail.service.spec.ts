@@ -29,7 +29,7 @@ describe('OrderMailService', () => {
     prismaMock.order.findUnique.mockResolvedValue({
       totalCents: 3400,
       user: { email: 'buyer@x.dev' },
-      invoice: { number: '2026-000001' },
+      invoices: [{ number: '2026-000001', type: 'SIMPLIFIED' }],
       lines: [{ nameSnapshot: 'Taladro', quantity: 2, lineTotalCents: 3400 }],
     });
 
@@ -62,7 +62,7 @@ describe('OrderMailService', () => {
     prismaMock.order.findUnique.mockResolvedValue({
       totalCents: 100,
       user: { email: 'buyer@x.dev' },
-      invoice: null,
+      invoices: [],
       lines: [],
     });
     mailMock.send.mockRejectedValue(new Error('resend caído'));

@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { AccessTokenPayload } from './session.service';
+import { resolveAccessSecret } from './jwt-secret.util';
 
 // Lo que queda en req.user tras validar el access token. Es la identidad en la
 // que se apoya el RBAC (tarea 12).
@@ -21,10 +22,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      // || (no ??): en .env el secreto puede venir como cadena VACÍA; passport
-      // exige un valor no vacío o no arranca. El fallback es solo para desarrollo.
-      secretOrKey:
-        config.get<string>('JWT_ACCESS_SECRET') || 'dev-insecure-secret',
+      // El fallback de desarrollo vive en jwt-secret.util, que además impide que
+      // se cuele en producción (allí falta de secreto = no arranca).
+      secretOrKey: resolveAccessSecret(config),
     });
   }
 

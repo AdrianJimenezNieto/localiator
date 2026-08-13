@@ -53,9 +53,22 @@ export class PaymentsService {
         quantity: line.quantity,
       }));
 
+    // Caducidad de la sesión. Por defecto Stripe la deja viva 24 HORAS, mientras
+    // que la reserva de stock dura 15 minutos: en ese hueco el cliente podía pagar
+    // un pedido cuya reserva ya había expirado (stock quizá vendido a otro), y
+    // acabábamos con dinero cobrado y un pedido `not_payable` a reembolsar a mano.
+    // El mínimo que admite Stripe son 30 minutos, así que no se puede alinear del
+    // todo con la reserva, pero pasar de 24 h a 30 min recorta casi toda la
+    // exposición. Cerrar el hueco restante exige reembolso automático, fuera del
+    // MVP (CLAUDE.md: reembolsos mínimos).
+    const STRIPE_MIN_EXPIRY_SECONDS = 30 * 60;
+    const expiresAt =
+      Math.floor(Date.now() / 1000) + STRIPE_MIN_EXPIRY_SECONDS + 60;
+
     const session = await this.stripe.checkout.sessions.create({
       mode: 'payment',
       line_items: lineItems,
+      expires_at: expiresAt,
       // metadata (en la sesión Y en el PaymentIntent) enlaza el cobro con nuestro
       // pedido para el webhook (06) y la conciliación (08).
       metadata: { orderId },
