@@ -18,6 +18,26 @@ overrides:
   # postcss (GHSA-r28c-9q8g-f849, path traversal en source maps): lo arrastra
   # vite (@tailwindcss/vite). Parche menor no disruptivo. Retirar cuando vite suba.
   postcss: "^8.5.18"
+  # js-yaml (GHSA-5p4m-2wfm-xmqj / CVE-2026-59870, consumo cuadrático de CPU al
+  # resolver !!omap): afecta a las dos líneas vivas y cada una tiene su parche, así
+  # que se fijan por separado (subir el 3.x a 4.x rompería a istanbul, que espera la
+  # API de la 3). Entra por tooling: jest/istanbul en la 3, eslint y @nestjs/cli en
+  # la 4. Retirar cuando el árbol actualice solo.
+  "js-yaml@3": "^3.15.2"
+  "js-yaml@4": "^4.3.2"
+  # nanoid (GHSA-2v37-7h3g-55p8, bucle infinito con size 0 en generadores custom):
+  # lo arrastra postcss, que pide ^3.3.x. Se fija la línea 3 a la parcheada; no se
+  # unifica a 5.x/6.x porque postcss no las soporta. Parche, no disruptivo.
+  "nanoid@3": "^3.3.18"
+  # deepmerge-ts (GHSA-ggr8-5vv4-36mx, agotamiento de pila al fusionar grafos de
+  # objetos recursivos): lo arrastra el CLI de Prisma vía @prisma/config. El único
+  # parche es la 8.x, así que es un salto de major en una dependencia transitiva.
+  # Verificado a mano con el CLI 6.19.3: `prisma generate` y `prisma validate` pasan,
+  # y `prisma migrate status` (lo que corre al arrancar el contenedor) carga su
+  # configuración y llega a intentar la conexión. Subir Prisma entero no es opción
+  # aquí: la estable es ya 7.x y ese salto de major se hace aparte, con su prueba.
+  # Retirar cuando @prisma/config suba a deepmerge-ts 8 por su cuenta.
+  deepmerge-ts: "^8.0.2"
 
 # Silenciado JUSTIFICADO de advisories que no aplican a nuestro uso (ver
 # docs/dependencies.md). No se silencia nada sin motivo ni sin fix disponible.

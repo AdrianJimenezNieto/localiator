@@ -75,6 +75,25 @@ commiteas → CI/producción hace `migrate deploy` para aplicar ese mismo SQL.
   `upsert` en todos los modelos para ser **idempotente** (se puede correr varias
   veces sin duplicar datos).
 
+### Cuenta de administrador
+El registro público siempre crea usuarios con rol `BUYER`; el rol `ADMIN` solo se
+concede desde una máquina con acceso a la base de datos. No hay endpoint para esto a
+propósito (una ruta "hazme admin" sería un agujero de seguridad).
+
+```bash
+# desarrollo, desde apps/api
+pnpm admin:create -- --email admin@localiator.com
+
+# producción, dentro del contenedor de la API
+docker compose exec api node dist/src/scripts/create-admin.js --email admin@localiator.com
+```
+
+La contraseña se pide por consola con el eco oculto (nunca como argumento: quedaría
+en el historial del shell y visible en `ps`); para uso no interactivo se puede pasar
+en `ADMIN_PASSWORD`. Si el email ya existe, el script no toca nada salvo que se lo
+pidas: `--promote` le cambia el rol a `ADMIN` y `--set-password` le fija una
+contraseña nueva.
+
 ## Scripts (raíz)
 - `pnpm dev` — arranca api y web en paralelo
 - `pnpm build` — compila ambas apps
