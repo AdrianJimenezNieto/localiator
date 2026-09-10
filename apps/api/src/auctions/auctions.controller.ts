@@ -20,8 +20,8 @@ import { CalendarAuctionsDto } from './dto/calendar-auctions.dto';
 // Es a propósito y no es un descuido. RolesGuard no mira @Public(): si la clase
 // llevara @Roles(BUYER, ADMIN), la ruta pública seguiría viendo ese requisito y,
 // como @Public() hace que JwtAuthGuard no rellene `req.user`, el guard devolvería
-// 403 a los invitados. Mismo patrón que category.controller.ts (público + admin en
-// el mismo controlador). El "denegar por defecto" lo sigue garantizando el
+// 403 a los invitados (público + admin conviviendo en el mismo controlador). El
+// "denegar por defecto" lo sigue garantizando el
 // JwtAuthGuard global: sin @Public(), una ruta exige token igualmente.
 @Controller('auctions')
 export class AuctionsController {

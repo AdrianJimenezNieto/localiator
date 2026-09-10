@@ -164,26 +164,6 @@ model VerificationToken {
 // productos). Se duplica el esquema a propósito para que puedan diverger en el
 // futuro sin una migración dolorosa.
 
-// Base de la búsqueda y el filtrado del catálogo. `parentId` es una auto-relación
-// opcional: deja la puerta abierta a subcategorías con coste casi nulo, pero si al
-// final las categorías son planas, queda siempre null y no estorba.
-model Category {
-  id String @id @default(cuid())
-
-  name String
-  slug String @unique // URLs amigables y SEO (ver Fase 5).
-
-  parentId String?
-  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
-  children Category[] @relation("CategoryHierarchy")
-
-  products Product[]
-  lots     Lot[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
 model Product {
   id String @id @default(cuid())
 
@@ -200,14 +180,8 @@ model Product {
   // URLs de las fotos. La subida real es Fase 3; de momento un array escalar basta.
   photos String[]
 
-  // Obligatoria: todo producto debe ser filtrable por categoría desde el alta.
-  categoryId String
-  category   Category @relation(fields: [categoryId], references: [id])
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  @@index([categoryId])
 }
 
 model Lot {
@@ -223,13 +197,8 @@ model Lot {
 
   photos String[]
 
-  categoryId String
-  category   Category @relation(fields: [categoryId], references: [id])
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  @@index([categoryId])
 }
 
 // Auditoría de cambios sensibles (precio y stock), exigida por CLAUDE.md. No es

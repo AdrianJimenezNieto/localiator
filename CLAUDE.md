@@ -53,11 +53,14 @@ en boilerplate repetitivo o config puedes ir más directo.
 - **Lote** y **producto individual** son entidades **separadas e independientes**: un lote
   NO contiene productos individuales. Se tratan como el mismo *tipo* de cosa (misma forma /
   atributos), pero sin relación de contención entre ellos.
-- **Atributos** (comunes a lote y producto): nombre, descripción, precio, descuento, fotos,
-  categoría.
+- **Atributos** (comunes a lote y producto): nombre, descripción, precio, descuento, fotos.
 - **Stock**: fijo sobre los productos ya en posesión. Diseñar dejando la puerta abierta a
   **añadir nuevos lotes en el futuro** (no bloquear ese caso, pero no es prioridad ahora).
-- **Categorización**: sí, los productos van categorizados (base de la búsqueda/filtrado).
+- **Categorización**: **descartada** (decisión revertida en septiembre de 2026). Los
+  artículos vienen de subasta y son demasiado heterogéneos y efímeros para mantener una
+  taxonomía viva; clasificar cada lote a mano costaba más de lo que aportaba. La tabla
+  `Category` se eliminó del esquema, la API y el frontend. La búsqueda se sostiene sobre
+  texto libre (nombre y descripción) y precio.
 - **Pedidos**: con líneas de pedido y estados. Los productos se **recogen en el almacén de
   origen** (no hay envíos), así que los estados reflejan ese flujo (p. ej. pendiente,
   pagado, listo para recoger, recogido/entregado, cancelado).
@@ -150,7 +153,8 @@ en boilerplate repetitivo o config puedes ir más directo.
 - **Subasta extranjera / aduanas**: no aplica, todo comprado en España.
 
 ## Búsqueda, catálogo y UX
-- **Filtros y búsqueda** por categoría y precio.
+- **Filtros y búsqueda** por texto libre (nombre y descripción) y precio. Sin categorías
+  (ver Modelado de datos).
 - **Paginación/rendimiento** del catálogo con muchos productos.
 - **SEO** para que los productos sean encontrables en buscadores.
 - **Diseño responsive 100%**.

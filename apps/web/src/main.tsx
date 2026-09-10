@@ -40,7 +40,6 @@ import { ProtectedAdmin } from './pages/admin/ProtectedAdmin.tsx'
 import { AdminLayout } from './pages/admin/AdminLayout.tsx'
 import { ItemsAdminPage } from './pages/admin/ItemsAdminPage.tsx'
 import { ItemFormPage } from './pages/admin/ItemFormPage.tsx'
-import { CategoriesAdminPage } from './pages/admin/CategoriesAdminPage.tsx'
 import { AuctionsAdminPage } from './pages/admin/AuctionsAdminPage.tsx'
 import { AuctionFormPage } from './pages/admin/AuctionFormPage.tsx'
 
@@ -105,7 +104,6 @@ const router = createBrowserRouter([
           { path: 'lotes', element: <ItemsAdminPage kind="lot" /> },
           { path: 'lotes/nuevo', element: <ItemFormPage kind="lot" /> },
           { path: 'lotes/:id', element: <ItemFormPage kind="lot" /> },
-          { path: 'categorias', element: <CategoriesAdminPage /> },
           { path: 'pedidos', element: <OrdersAdminPage /> },
           { path: 'subastas', element: <AuctionsAdminPage /> },
           { path: 'subastas/nuevo', element: <AuctionFormPage /> },

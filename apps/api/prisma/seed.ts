@@ -46,24 +46,6 @@ async function main() {
     },
   });
 
-  const electronica = await prisma.category.upsert({
-    where: { slug: 'electronica' },
-    update: {},
-    create: { name: 'Electrónica', slug: 'electronica' },
-  });
-
-  const herramientas = await prisma.category.upsert({
-    where: { slug: 'herramientas' },
-    update: {},
-    create: { name: 'Herramientas', slug: 'herramientas' },
-  });
-
-  const hogar = await prisma.category.upsert({
-    where: { slug: 'hogar' },
-    update: {},
-    create: { name: 'Hogar', slug: 'hogar' },
-  });
-
   // Product y Lot no tienen ningún campo único aparte de `id` (son entidades
   // de seed, no de negocio, así que no se les añade un slug solo para esto).
   // Se fuerza el `id` en el `create` y se usa como clave del `upsert` para que
@@ -79,7 +61,6 @@ async function main() {
       discountCents: 0,
       stock: 3,
       photos: [],
-      categoryId: herramientas.id,
     },
   });
 
@@ -94,7 +75,6 @@ async function main() {
       discountCents: 500,
       stock: 10,
       photos: [],
-      categoryId: electronica.id,
     },
   });
 
@@ -109,7 +89,6 @@ async function main() {
       discountCents: 0,
       stock: 5,
       photos: [],
-      categoryId: hogar.id,
     },
   });
 
@@ -124,7 +103,6 @@ async function main() {
       discountCents: 2000,
       stock: 1,
       photos: [],
-      categoryId: electronica.id,
     },
   });
 
@@ -139,7 +117,6 @@ async function main() {
       discountCents: 0,
       stock: 2,
       photos: [],
-      categoryId: herramientas.id,
     },
   });
 
@@ -219,7 +196,6 @@ async function main() {
 
   console.log('Seed completado:', {
     usuarios: [admin.email, buyer.email],
-    categorias: [electronica.slug, herramientas.slug, hogar.slug],
     pedidos: ['seed-order-buyer-pagado'],
     subastas: ['seed-auction-taladro', 'seed-auction-programada'],
   });

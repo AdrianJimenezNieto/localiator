@@ -19,7 +19,7 @@ export function CatalogPage() {
   useSeo({
     title: 'Catálogo — Localiator',
     description:
-      'Explora lotes y productos individuales de subasta disponibles para recoger en almacén. Filtra por categoría y precio.',
+      'Explora lotes y productos individuales de subasta disponibles para recoger en almacén. Busca por nombre y filtra por precio.',
     canonicalPath: '/catalogo',
   });
 
@@ -27,7 +27,6 @@ export function CatalogPage() {
   const page = Math.max(1, Number(searchParams.get('page') ?? '1') || 1);
   const filters: CatalogFilters = {
     q: searchParams.get('q') ?? '',
-    categoryId: searchParams.get('categoryId') ?? '',
     minPrice: searchParams.get('minPrice') ?? '',
     maxPrice: searchParams.get('maxPrice') ?? '',
   };
@@ -37,7 +36,6 @@ export function CatalogPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const activeFilterCount =
     (filters.q ? 1 : 0) +
-    (filters.categoryId ? 1 : 0) +
     (filters.minPrice || filters.maxPrice ? 1 : 0);
 
   // Un único flujo de datos: los filtros construyen el path, y useApi re-pide al
@@ -46,7 +44,6 @@ export function CatalogPage() {
     page,
     pageSize: PAGE_SIZE,
     q: filters.q,
-    categoryId: filters.categoryId,
     minPriceCents: eurosToCents(filters.minPrice),
     maxPriceCents: eurosToCents(filters.maxPrice),
   });
@@ -62,7 +59,6 @@ export function CatalogPage() {
   function applyFilters(next: CatalogFilters) {
     const params = new URLSearchParams();
     if (next.q) params.set('q', next.q);
-    if (next.categoryId) params.set('categoryId', next.categoryId);
     if (next.minPrice) params.set('minPrice', next.minPrice);
     if (next.maxPrice) params.set('maxPrice', next.maxPrice);
     setSearchParams(params);

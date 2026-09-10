@@ -11,7 +11,6 @@ const prismaMock = {
     update: jest.fn(),
     delete: jest.fn(),
   },
-  category: { findUnique: jest.fn() },
   auditLog: { createMany: jest.fn() },
   $transaction: jest.fn(),
 };
@@ -28,7 +27,6 @@ const baseDto = {
   priceCents: 5000,
   discountCents: 500,
   stock: 3,
-  categoryId: 'cat-1',
 };
 
 describe('ProductService', () => {
@@ -49,8 +47,7 @@ describe('ProductService', () => {
   });
 
   describe('create', () => {
-    it('crea el producto cuando la categoría existe', async () => {
-      prismaMock.category.findUnique.mockResolvedValue({ id: 'cat-1' });
+    it('crea el producto con los campos del DTO', async () => {
       prismaMock.product.create.mockResolvedValue({ id: 'p1' });
 
       await service.create(baseDto);
@@ -62,14 +59,12 @@ describe('ProductService', () => {
           priceCents: 5000,
           discountCents: 500,
           stock: 3,
-          categoryId: 'cat-1',
           photos: [],
         },
       });
     });
 
     it('aplica descuento 0 y fotos [] por defecto', async () => {
-      prismaMock.category.findUnique.mockResolvedValue({ id: 'cat-1' });
       prismaMock.product.create.mockResolvedValue({ id: 'p1' });
 
       // Alta sin descuento ni fotos: deben quedar en 0 y [] respectivamente.
@@ -78,7 +73,6 @@ describe('ProductService', () => {
         description: 'Martillo de carpintero',
         priceCents: 1200,
         stock: 10,
-        categoryId: 'cat-1',
       });
 
       expect(prismaMock.product.create).toHaveBeenCalledWith({
@@ -88,19 +82,9 @@ describe('ProductService', () => {
           priceCents: 1200,
           discountCents: 0,
           stock: 10,
-          categoryId: 'cat-1',
           photos: [],
         },
       });
-    });
-
-    it('rechaza con 400 si la categoría no existe', async () => {
-      prismaMock.category.findUnique.mockResolvedValue(null);
-
-      await expect(service.create(baseDto)).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
-      expect(prismaMock.product.create).not.toHaveBeenCalled();
     });
   });
 
