@@ -40,12 +40,6 @@ export class CreateProductDto {
   @Min(0)
   stock!: number;
 
-  // Obligatoria: todo producto nace filtrable por categoría. El service valida que
-  // la categoría exista (400 legible en vez del P2003 opaco de la FK).
-  @IsString()
-  @MinLength(1, { message: 'La categoría es obligatoria' })
-  categoryId!: string;
-
   // La subida real de fotos es la tarea 05; aquí se aceptan como array de URLs ya
   // existentes en el esquema.
   @IsOptional()

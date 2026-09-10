@@ -40,10 +40,6 @@ export class CreateLotDto {
   @Min(0)
   stock!: number;
 
-  @IsString()
-  @MinLength(1, { message: 'La categoría es obligatoria' })
-  categoryId!: string;
-
   @IsOptional()
   @IsArray()
   @IsUrl(

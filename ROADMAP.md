@@ -55,7 +55,7 @@ Objetivo: usuarios, roles y sesión seguros + esquema base de catálogo.
 
 - [x] Esquema Prisma: Usuario + roles (invitado / comprador / administrador)
 - [x] Esquema Prisma: Producto y Lote (entidades separadas, mismos atributos)
-- [x] Esquema Prisma: Categoría
+- [x] ~~Esquema Prisma: Categoría~~ — revertido: categorización descartada (ver `CLAUDE.md`)
 - [x] Esquema Prisma: tablas de auditoría (cambios de precio y stock)
 - [x] Migraciones y seed de datos de prueba
 - [x] Registro con verificación de email (Resend)
@@ -73,10 +73,10 @@ Objetivo: dar de alta productos/lotes y que se vean/filtren en la web.
 
 - [x] CRUD de productos y lotes (solo admin)
 - [x] Subida y gestión de fotos + estado real del artículo
-- [x] Gestión de categorías
+- [x] ~~Gestión de categorías~~ — revertido: categorización descartada (ver `CLAUDE.md`)
 - [x] Registro de auditoría al cambiar precio/stock
 - [x] Listado público de catálogo con paginación
-- [x] Búsqueda y filtros (categoría, precio, estado)
+- [x] Búsqueda y filtros (texto libre y precio; categoría y estado descartados)
 - [x] Ficha de producto/lote (vista pública)
 - [x] Diseño responsive del catálogo y ficha
 - [x] Panel de administración (backoffice) básico

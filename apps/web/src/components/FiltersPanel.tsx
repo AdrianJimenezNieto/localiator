@@ -1,18 +1,10 @@
 import { useEffect, useState } from 'react';
-import { useApi } from '../lib/useApi';
 import { useDebounce } from '../lib/useDebounce';
-
-// Categoría tal como la devuelve GET /categories (solo lo que usa el selector).
-interface Category {
-  id: string;
-  name: string;
-}
 
 // Filtros activos, tal como viven en la URL. Precio en euros (lo que teclea el
 // usuario); la conversión a céntimos la hace la página al llamar a la API.
 export interface CatalogFilters {
   q: string;
-  categoryId: string;
   minPrice: string;
   maxPrice: string;
 }
@@ -30,8 +22,6 @@ export function FiltersPanel({
   onChange,
   onClear,
 }: FiltersPanelProps) {
-  const { data: categories } = useApi<Category[]>('/categories');
-
   // La búsqueda por texto se maneja con estado local + debounce para no reescribir
   // la URL (ni llamar a la API) en cada tecla. El resto de filtros se aplican al
   // instante porque son un clic puntual.
@@ -70,25 +60,6 @@ export function FiltersPanel({
           placeholder="Nombre o descripción…"
           className="w-full rounded-md border border-ink-300 px-3 py-2 text-sm focus:border-ink-900 focus:outline-none"
         />
-      </div>
-
-      <div>
-        <label htmlFor="category" className="mb-1 block text-sm font-medium">
-          Categoría
-        </label>
-        <select
-          id="category"
-          value={filters.categoryId}
-          onChange={(e) => onChange({ categoryId: e.target.value })}
-          className="w-full rounded-md border border-ink-300 px-3 py-2 text-sm focus:border-ink-900 focus:outline-none"
-        >
-          <option value="">Todas</option>
-          {categories?.map((cat) => (
-            <option key={cat.id} value={cat.id}>
-              {cat.name}
-            </option>
-          ))}
-        </select>
       </div>
 
       <div>

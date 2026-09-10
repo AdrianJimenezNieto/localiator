@@ -3,10 +3,7 @@ import { AuditEntity } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
-import {
-  assertCategoryExists,
-  assertDiscountNotAbovePrice,
-} from './catalog-support';
+import { assertDiscountNotAbovePrice } from './catalog-support';
 import { diffAuditableFields } from './audit.util';
 
 @Injectable()
@@ -14,12 +11,10 @@ export class ProductService {
   constructor(private readonly prisma: PrismaService) {}
 
   // Listado de gestión (backoffice): TODOS los productos, incluidos los agotados
-  // (a diferencia del catálogo público, que solo muestra stock > 0). Incluye el
-  // nombre de la categoría para pintar la tabla sin una segunda consulta.
+  // (a diferencia del catálogo público, que solo muestra stock > 0).
   listAll() {
     return this.prisma.product.findMany({
       orderBy: { createdAt: 'desc' },
-      include: { category: { select: { id: true, name: true } } },
     });
   }
 
@@ -33,8 +28,6 @@ export class ProductService {
   }
 
   async create(dto: CreateProductDto) {
-    await assertCategoryExists(this.prisma, dto.categoryId);
-
     return this.prisma.product.create({
       data: {
         name: dto.name,
@@ -42,7 +35,6 @@ export class ProductService {
         priceCents: dto.priceCents,
         discountCents: dto.discountCents ?? 0,
         stock: dto.stock,
-        categoryId: dto.categoryId,
         photos: dto.photos ?? [],
       },
     });
@@ -51,10 +43,6 @@ export class ProductService {
   // `actorId` = id del admin autenticado (lo pasa el controller desde @CurrentUser).
   async update(id: string, dto: UpdateProductDto, actorId: string) {
     const current = await this.findOne(id);
-
-    if (dto.categoryId) {
-      await assertCategoryExists(this.prisma, dto.categoryId);
-    }
 
     // En un PATCH parcial el DTO no puede comparar descuento y precio si solo llega
     // uno: re-comprobamos contra el valor persistido del otro.
@@ -70,7 +58,6 @@ export class ProductService {
         discountCents: dto.discountCents,
       }),
       ...(dto.stock !== undefined && { stock: dto.stock }),
-      ...(dto.categoryId !== undefined && { categoryId: dto.categoryId }),
       ...(dto.photos !== undefined && { photos: dto.photos }),
     };
 

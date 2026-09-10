@@ -3,10 +3,7 @@ import { AuditEntity } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateLotDto } from './dto/create-lot.dto';
 import { UpdateLotDto } from './dto/update-lot.dto';
-import {
-  assertCategoryExists,
-  assertDiscountNotAbovePrice,
-} from './catalog-support';
+import { assertDiscountNotAbovePrice } from './catalog-support';
 import { diffAuditableFields } from './audit.util';
 
 // Espejo de ProductService. Se replica a propósito (Product y Lot son entidades
@@ -19,7 +16,6 @@ export class LotService {
   listAll() {
     return this.prisma.lot.findMany({
       orderBy: { createdAt: 'desc' },
-      include: { category: { select: { id: true, name: true } } },
     });
   }
 
@@ -32,8 +28,6 @@ export class LotService {
   }
 
   async create(dto: CreateLotDto) {
-    await assertCategoryExists(this.prisma, dto.categoryId);
-
     return this.prisma.lot.create({
       data: {
         name: dto.name,
@@ -41,7 +35,6 @@ export class LotService {
         priceCents: dto.priceCents,
         discountCents: dto.discountCents ?? 0,
         stock: dto.stock,
-        categoryId: dto.categoryId,
         photos: dto.photos ?? [],
       },
     });
@@ -51,10 +44,6 @@ export class LotService {
   // igual que en producto: ver la explicación en product.service.
   async update(id: string, dto: UpdateLotDto, actorId: string) {
     const current = await this.findOne(id);
-
-    if (dto.categoryId) {
-      await assertCategoryExists(this.prisma, dto.categoryId);
-    }
 
     const nextPrice = dto.priceCents ?? current.priceCents;
     const nextDiscount = dto.discountCents ?? current.discountCents;
@@ -68,7 +57,6 @@ export class LotService {
         discountCents: dto.discountCents,
       }),
       ...(dto.stock !== undefined && { stock: dto.stock }),
-      ...(dto.categoryId !== undefined && { categoryId: dto.categoryId }),
       ...(dto.photos !== undefined && { photos: dto.photos }),
     };
 

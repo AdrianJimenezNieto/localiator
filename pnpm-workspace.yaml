@@ -5,7 +5,9 @@ packages:
 # arrastra una multer <2.2.0 vulnerable (GHSA-72gw-mp4g-v24j). El override la sube
 # a la parcheada en toda la resolución. Revisar/retirar cuando Nest actualice.
 overrides:
-  multer: "^2.2.0"
+  # multer (GHSA-535w-7cp7-47q4 y compañía, varios DoS): lo arrastra
+  # @nestjs/platform-express. Parche dentro de la misma línea 2.x.
+  multer: "^2.3.0"
   # brace-expansion (DoS, GHSA-mh99-v99m-4gvg / CVE-2025-5889): fijamos cada línea a
   # su release parcheada. NO se puede unificar a 5.x: su export dejó de ser una
   # función CommonJS y rompe a minimatch@3 (`require('brace-expansion')()`).
@@ -14,7 +16,10 @@ overrides:
   "brace-expansion@5": "^5.0.8"
   # fast-uri (host confusion vía URL literal): dependencia transitiva; subimos a la
   # parcheada. Revisar/retirar cuando el árbol la actualice.
-  fast-uri: "^3.1.4"
+  fast-uri: "^3.1.6"
+  # browserslist (crecimiento de memoria sin tope y escritura en prototype): entra
+  # por el tooling de build (vite/tailwind). Parche menor. Retirar cuando suba solo.
+  browserslist: "^4.28.7"
   # postcss (GHSA-r28c-9q8g-f849, path traversal en source maps): lo arrastra
   # vite (@tailwindcss/vite). Parche menor no disruptivo. Retirar cuando vite suba.
   postcss: "^8.5.18"

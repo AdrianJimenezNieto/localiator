@@ -12,7 +12,6 @@ const prismaMock = {
     update: jest.fn(),
     delete: jest.fn(),
   },
-  category: { findUnique: jest.fn() },
   auditLog: { createMany: jest.fn() },
   $transaction: jest.fn(),
 };
@@ -27,7 +26,6 @@ const baseDto = {
   priceCents: 20000,
   discountCents: 2000,
   stock: 1,
-  categoryId: 'cat-1',
 };
 
 describe('LotService', () => {
@@ -44,8 +42,7 @@ describe('LotService', () => {
     service = moduleRef.get(LotService);
   });
 
-  it('crea el lote cuando la categoría existe', async () => {
-    prismaMock.category.findUnique.mockResolvedValue({ id: 'cat-1' });
+  it('crea el lote con los campos del DTO', async () => {
     prismaMock.lot.create.mockResolvedValue({ id: 'l1' });
 
     await service.create(baseDto);
@@ -57,19 +54,9 @@ describe('LotService', () => {
         priceCents: 20000,
         discountCents: 2000,
         stock: 1,
-        categoryId: 'cat-1',
         photos: [],
       },
     });
-  });
-
-  it('rechaza con 400 si la categoría no existe', async () => {
-    prismaMock.category.findUnique.mockResolvedValue(null);
-
-    await expect(service.create(baseDto)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
-    expect(prismaMock.lot.create).not.toHaveBeenCalled();
   });
 
   it('rechaza con 400 si el descuento del PATCH supera el precio persistido', async () => {

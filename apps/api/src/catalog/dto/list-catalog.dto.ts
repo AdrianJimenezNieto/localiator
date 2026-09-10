@@ -43,10 +43,6 @@ export class ListCatalogDto {
   q?: string;
 
   @IsOptional()
-  @IsString()
-  categoryId?: string;
-
-  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)

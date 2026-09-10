@@ -62,7 +62,6 @@ export interface CatalogItem {
   discountCents: number;
   // Primera foto (portada) o null si el artículo no tiene fotos aún.
   photo: string | null;
-  category: { id: string; name: string };
 }
 
 // Lo justo que necesita una TARJETA del listado público de subastas (tarea 12).
@@ -98,7 +97,6 @@ export interface CatalogDetail {
   discountCents: number;
   available: boolean;
   photos: string[];
-  category: { id: string; name: string };
 }
 
 // --- SEO / URLs amigables (Fase 4, tarea 06) ---

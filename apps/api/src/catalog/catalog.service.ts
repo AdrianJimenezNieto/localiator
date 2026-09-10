@@ -16,7 +16,6 @@ const CARD_SELECT = {
   priceCents: true,
   discountCents: true,
   photos: true,
-  category: { select: { id: true, name: true } },
 } as const;
 
 // Forma de una fila devuelta con CARD_SELECT (producto o lote: misma forma).
@@ -26,7 +25,6 @@ interface CardRow {
   priceCents: number;
   discountCents: number;
   photos: string[];
-  category: { id: string; name: string };
 }
 
 // Campos visibles de la FICHA (más que la tarjeta, pero sigue siendo un select
@@ -39,7 +37,6 @@ const DETAIL_SELECT = {
   discountCents: true,
   stock: true,
   photos: true,
-  category: { select: { id: true, name: true } },
 } as const;
 
 interface DetailRow extends CardRow {
@@ -57,7 +54,6 @@ function toCatalogDetail(row: DetailRow, kind: ItemKind): CatalogDetail {
     discountCents: row.discountCents,
     available: row.stock > 0, // no exponemos el stock exacto, solo disponibilidad.
     photos: row.photos,
-    category: row.category,
   };
 }
 
@@ -69,7 +65,6 @@ function toCatalogItem(row: CardRow, kind: ItemKind): CatalogItem {
     priceCents: row.priceCents,
     discountCents: row.discountCents,
     photo: row.photos[0] ?? null, // portada = primera foto (o null si no hay).
-    category: row.category,
   };
 }
 
@@ -163,7 +158,6 @@ export class CatalogService {
     // público. Criterio documentado; cuando en Fase 3 haya soft-delete se ampliará.
     const where: {
       stock: { gt: number };
-      categoryId?: string;
       priceCents?: { gte?: number; lte?: number };
       OR?: Array<
         | { name: { contains: string; mode: 'insensitive' } }
@@ -177,10 +171,6 @@ export class CatalogService {
         { name: { contains: dto.q, mode: 'insensitive' } },
         { description: { contains: dto.q, mode: 'insensitive' } },
       ];
-    }
-
-    if (dto.categoryId) {
-      where.categoryId = dto.categoryId;
     }
 
     if (dto.minPriceCents !== undefined || dto.maxPriceCents !== undefined) {

@@ -182,7 +182,7 @@ function Hero() {
 const STEPS = [
   {
     title: 'Elige tu artículo',
-    body: 'Producto suelto o lote completo. Filtra por categoría y precio, y mira las fotos reales antes de decidir.',
+    body: 'Producto suelto o lote completo. Busca por nombre, filtra por precio y mira las fotos reales antes de decidir.',
   },
   {
     title: 'Págalo online',

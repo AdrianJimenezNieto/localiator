@@ -1,6 +1,6 @@
 // Normaliza un texto a slug kebab-case apto para URLs (SEO): sin acentos, en
-// minúsculas y con guiones. Se usa para autogenerar el slug de una categoría a
-// partir de su nombre cuando el admin no lo indica a mano.
+// minúsculas y con guiones. Lo usa el SEO para construir las URLs amigables de
+// las fichas (/productos/:id/:slug) a partir del nombre del artículo.
 export function slugify(input: string): string {
   return input
     .normalize('NFD') // separa cada letra de su tilde (á → "a" + acento combinable).

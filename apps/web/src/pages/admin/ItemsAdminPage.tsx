@@ -61,7 +61,6 @@ export function ItemsAdminPage({ kind }: { kind: ItemKind }) {
             <thead className="border-b border-ink-200 text-ink-500">
               <tr>
                 <th className="p-3 font-medium">Nombre</th>
-                <th className="p-3 font-medium">Categoría</th>
                 <th className="p-3 font-medium">Precio</th>
                 <th className="p-3 font-medium">Stock</th>
                 <th className="p-3" />
@@ -71,7 +70,6 @@ export function ItemsAdminPage({ kind }: { kind: ItemKind }) {
               {data.map((item) => (
                 <tr key={item.id}>
                   <td className="p-3 font-medium">{item.name}</td>
-                  <td className="p-3 text-ink-600">{item.category?.name ?? '—'}</td>
                   <td className="p-3">{formatPrice(item.priceCents)}</td>
                   <td className="p-3">{item.stock}</td>
                   <td className="p-3">

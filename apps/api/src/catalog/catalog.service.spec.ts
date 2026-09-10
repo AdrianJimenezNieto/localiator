@@ -19,7 +19,6 @@ const row = {
   priceCents: 5000,
   discountCents: 500,
   photos: ['http://x/a.jpg', 'http://x/b.jpg'],
-  category: { id: 'c1', name: 'Herramientas' },
 };
 
 describe('CatalogService', () => {
@@ -54,7 +53,6 @@ describe('CatalogService', () => {
           priceCents: 5000,
           discountCents: 500,
           photo: 'http://x/a.jpg',
-          category: { id: 'c1', name: 'Herramientas' },
         },
       ],
       total: 1,
@@ -127,11 +125,6 @@ describe('CatalogService', () => {
       });
     });
 
-    it('filtra por categoría', async () => {
-      await service.listProducts({ categoryId: 'c1' });
-      expect(whereOfLastFindMany()).toMatchObject({ categoryId: 'c1' });
-    });
-
     it('filtra por rango de precio (gte/lte)', async () => {
       await service.listProducts({ minPriceCents: 1000, maxPriceCents: 5000 });
       expect(whereOfLastFindMany()).toMatchObject({
@@ -155,7 +148,6 @@ describe('CatalogService', () => {
         discountCents: 500,
         stock: 4,
         photos: ['http://x/a.jpg'],
-        category: { id: 'c1', name: 'Herramientas' },
       });
 
       const detail = await service.getProduct('p1');
@@ -169,7 +161,6 @@ describe('CatalogService', () => {
         discountCents: 500,
         available: true,
         photos: ['http://x/a.jpg'],
-        category: { id: 'c1', name: 'Herramientas' },
       });
       // La consulta ya filtra por visibilidad (stock > 0).
       expect(prismaMock.product.findFirst).toHaveBeenCalledWith(

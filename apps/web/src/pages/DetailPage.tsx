@@ -64,17 +64,7 @@ export function DetailPage({ kind }: { kind: ItemKind }) {
         <Gallery photos={data.photos} name={data.name} />
 
         <div className="flex flex-col gap-4">
-          <div>
-            <Link
-              to={`/?categoryId=${data.category.id}`}
-              className="text-sm text-ink-500 underline hover:text-ink-900"
-            >
-              {data.category.name}
-            </Link>
-            <h1 className="mt-1 text-2xl font-bold text-ink-900">
-              {data.name}
-            </h1>
-          </div>
+          <h1 className="text-2xl font-bold text-ink-900">{data.name}</h1>
 
           <div className="flex flex-wrap items-center gap-3">
             <span
