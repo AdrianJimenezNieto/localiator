@@ -46,7 +46,13 @@ export function useReveal<T extends HTMLElement = HTMLDivElement>(
     const root = ref.current;
     if (!root) return;
 
-    const items = Array.from(root.querySelectorAll<HTMLElement>('.reveal'));
+    // `:not(.reveal-in)` deja fuera lo que ya apareció. Importa cuando la lista
+    // crece sin recargarse (el scroll infinito del catálogo): al volver a
+    // ejecutarse este efecto, sin ese filtro se volverían a ocultar y a animar
+    // tarjetas que el usuario ya está mirando.
+    const items = Array.from(
+      root.querySelectorAll<HTMLElement>('.reveal:not(.reveal-in)'),
+    );
     if (items.length === 0) return;
 
     // Quien haya pedido menos movimiento en su sistema ve el contenido ya puesto.
