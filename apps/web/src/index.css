@@ -104,6 +104,19 @@
   --font-heading: 'Rubik Variable', ui-sans-serif, system-ui, sans-serif;
   --font-sans: 'Nunito Sans Variable', ui-sans-serif, system-ui, sans-serif;
 
+  /* --- Medidas de la interfaz ---
+         Referencia de alto de la cabecera pegajosa, para colocar justo debajo lo
+         que también se queda pegado (los filtros del catálogo). Va como token
+         del tema, y no como un número suelto en cada clase, para tocarlo en un
+         sitio si la cabecera cambia de alto. Con el prefijo `--spacing-`,
+         Tailwind genera además las utilidades: `top-header`.
+
+         Es un pelín MENOS que el alto real (69px): lo que se pega se mete unos
+         píxeles por debajo de la cabecera, que va por encima (z-40) y lo tapa.
+         Si se quedara por debajo del borde quedaría una rendija por la que se
+         verían pasar las tarjetas. */
+  --spacing-header: 4rem;
+
   /* --- Sombras suaves y cálidas, no el negro puro de Tailwind por defecto --- */
   --shadow-card: 0 1px 2px rgb(33 32 28 / 0.04), 0 4px 12px rgb(33 32 28 / 0.06);
   --shadow-card-hover: 0 2px 4px rgb(33 32 28 / 0.06), 0 12px 28px rgb(33 32 28 / 0.1);
