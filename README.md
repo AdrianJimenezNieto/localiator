@@ -94,6 +94,40 @@ en `ADMIN_PASSWORD`. Si el email ya existe, el script no toca nada salvo que se 
 pidas: `--promote` le cambia el rol a `ADMIN` y `--set-password` le fija una
 contraseña nueva.
 
+## Importar un catálogo desde CSV
+
+`apps/api/src/scripts/import-catalog.ts` da de alta en bloque los artículos comprados
+en subasta a partir de un CSV (separador `;`, UTF-8) y una carpeta de fotos.
+
+```bash
+# desarrollo, desde apps/api
+pnpm catalog:import -- --csv ../../datos/listado.csv --photos ../../datos/fotos-web --dry-run
+
+# producción, dentro del contenedor de la API
+docker compose exec api node dist/src/scripts/import-catalog.js   --csv /tmp/import/listado.csv --photos /tmp/import/fotos-web
+```
+
+Es **idempotente**: el `id` de cada ficha se deriva de la columna `carpeta` del CSV,
+así que relanzarlo actualiza los artículos ya creados en vez de duplicarlos. Con
+`--dry-run` calcula e imprime el resultado sin escribir nada. Al terminar deja un
+`resultado-subida.csv` (configurable con `--out`) con una fila por ficha: id, tipo,
+nombre, precio, stock, estado (`creado` / `actualizado` / `error`), ruta y error.
+
+Reglas de negocio que aplica, todas cubiertas por `import-catalog.spec.ts`:
+
+- Una fila con `unidades > 1` se publica **dos veces**: como lote entero (stock 1) y
+  como artículo suelto. Ojo: son el mismo stock físico en dos fichas y nada las
+  enlaza, así que al vender una hay que retirar la otra a mano desde el panel.
+- El suelto solo se publica si su precio llega a **10 €** (por debajo no compensa el
+  viaje al almacén) y si el lote es homogéneo: los que dicen «que incluye» o «varias
+  marcas» son un revoltijo y se venden solo enteros.
+- Precio del suelto = precio del lote / unidades × **1,4**, para que comprar el lote
+  siga saliendo más barato por unidad.
+- Los sueltos del mismo artículo que vienen en lotes distintos se agrupan en **una**
+  ficha con el stock sumado.
+- El precio de venta es el del CSV tal cual, **sin descuento**. El PVP del fabricante,
+  si consta, va como texto en la descripción — nunca como precio tachado.
+
 ## Scripts (raíz)
 - `pnpm dev` — arranca api y web en paralelo
 - `pnpm build` — compila ambas apps
